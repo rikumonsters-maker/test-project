@@ -9,38 +9,120 @@
       :root { --ink:#172018; --muted:#657066; --line:#dce5dc; --surface:#fff; --ground:#f3f7f3; --green:#166534; --green-light:#dcfce7; --yellow:#a16207; --yellow-light:#fef9c3; --red:#b42318; --red-light:#fee4e2; --shadow:0 10px 30px rgba(25,45,28,.08); }
       * { box-sizing:border-box; }
       body { margin:0; min-width:320px; color:var(--ink); background:var(--ground); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif; }
-      .page { width:min(100% - 32px,860px); margin:0 auto; padding:40px 0 56px; }
+      .page { width:min(calc(100% - 32px),1240px); margin:0 auto; padding:32px 0 48px; }
       header { margin-bottom:24px; }
       .eyebrow { margin:0 0 8px; color:var(--green); font-size:.78rem; font-weight:800; letter-spacing:.08em; }
       h1 { margin:0; font-size:clamp(1.7rem,5vw,2.35rem); letter-spacing:-.04em; }
       .lead { margin:10px 0 0; color:var(--muted); line-height:1.7; }
       .grid { display:grid; gap:18px; }
-      .overview,.details { grid-template-columns:repeat(2,minmax(0,1fr)); }
-      .details { align-items:start; }
-      .card { padding:24px; border:1px solid var(--line); border-radius:20px; background:var(--surface); box-shadow:var(--shadow); }
+      .card { min-width:0; padding:24px; border:1px solid var(--line); border-radius:16px; background:var(--surface); box-shadow:var(--shadow); }
       .card h2 { margin:0 0 4px; font-size:1.1rem; }
       .card-description { margin:0 0 20px; color:var(--muted); font-size:.9rem; line-height:1.6; }
-      .result-card { min-height:160px; display:flex; flex-direction:column; justify-content:space-between; }
+      .overview { display:grid; grid-template-columns:1fr; gap:12px; }
+      .result-card { min-height:112px; display:flex; flex-direction:column; justify-content:space-between; padding:18px 20px; }
       .result-label { color:var(--muted); font-size:.88rem; font-weight:700; }
-      .amount { margin:9px 0 0; font-size:clamp(1.75rem,5vw,2.55rem); font-weight:800; letter-spacing:-.05em; }
+      .amount { margin:7px 0 0; font-size:clamp(1.8rem,4vw,2.4rem); font-weight:800; letter-spacing:-.04em; line-height:1.15; overflow-wrap:anywhere; }
       .amount small { margin-left:4px; font-size:.95rem; letter-spacing:0; }
       .waiting { color:var(--muted); font-size:.88rem; }
+      .dashboard { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(320px,.9fr); gap:24px; align-items:start; }
+      .calendar-card { min-width:0; }
+      .month-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; }
+      .month-title { margin:0; font-size:1.2rem; font-weight:800; }
+      .month-nav { display:flex; align-items:center; gap:8px; }
+      button { font:inherit; }
+      .icon-button { display:grid; width:44px; height:44px; place-items:center; border:1px solid var(--line); border-radius:10px; color:var(--ink); background:#fff; cursor:pointer; font-size:1.3rem; }
+      .icon-button:hover { border-color:var(--green); color:var(--green); }
+      .icon-button:focus-visible,.day:focus-visible,.mode-button:focus-visible,.action-button:focus-visible { outline:3px solid rgba(22,101,52,.3); outline-offset:2px; }
+      .calendar { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); border-top:1px solid var(--line); border-left:1px solid var(--line); }
+      .weekday { padding:9px 3px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); color:var(--muted); background:#f7faf7; text-align:center; font-size:.77rem; font-weight:800; }
+      .weekday:first-child { color:#a33d35; }
+      .weekday:last-child { color:#426a9b; }
+      .day { display:flex; min-width:0; min-height:104px; flex-direction:column; align-items:stretch; gap:6px; padding:8px 7px; border:0; border-right:1px solid var(--line); border-bottom:1px solid var(--line); color:var(--ink); background:#fff; cursor:pointer; text-align:left; touch-action:manipulation; }
+      .day:hover { background:#f4faf5; }
+      .day.outside { color:#9aa49b; background:#fafbfa; }
+      .day.has-shift { background:#f0f8f1; }
+      .day.selected { position:relative; z-index:1; outline:3px solid var(--green); outline-offset:-3px; background:#e5f4e7; }
+      .day.today .day-number { display:grid; width:25px; height:25px; place-items:center; border-radius:50%; color:#fff; background:var(--green); }
+      .day-number { align-self:flex-start; min-height:25px; padding:3px 4px; font-size:.82rem; font-weight:700; }
+      .shift-time { display:block; width:100%; overflow:hidden; padding:5px 4px; border-radius:5px; color:var(--green); background:#e2f3e5; font-size:.72rem; font-weight:800; line-height:1.3; text-overflow:clip; white-space:normal; }
+      .calendar-note { margin:12px 0 0; color:var(--muted); font-size:.8rem; }
+      .side-stack { display:grid; gap:18px; }
+      .summary-list { display:grid; gap:14px; margin:0; }
+      .summary-row { display:flex; justify-content:space-between; gap:14px; align-items:baseline; }
+      .summary-row dt { color:var(--muted); font-size:.88rem; }
+      .summary-row dd { margin:0; font-size:1.05rem; font-weight:800; text-align:right; }
+      .summary-row.total dd { color:var(--green); font-size:1.35rem; }
+      .divider { height:1px; margin:15px 0; background:var(--line); }
       .form-grid { display:grid; gap:14px; }
       label { display:grid; gap:7px; color:#3b463c; font-size:.88rem; font-weight:700; }
       .input-wrap { position:relative; }
-      input { width:100%; padding:13px 38px 13px 13px; border:1px solid #becabd; border-radius:11px; outline:none; color:var(--ink); background:#fff; font:inherit; font-size:1rem; }
+      input { width:100%; min-width:0; min-height:44px; padding:10px 38px 10px 12px; border:1px solid #becabd; border-radius:9px; outline:none; color:var(--ink); background:#fff; font:inherit; font-size:1rem; }
       input:focus { border-color:var(--green); box-shadow:0 0 0 3px rgba(22,101,52,.12); }
-      .unit { position:absolute; right:13px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:.87rem; pointer-events:none; }
-      .status { display:flex; gap:11px; align-items:flex-start; margin-top:18px; padding:15px; border-radius:14px; background:#f1f5f1; color:#445044; }
-      .status-icon { flex:0 0 auto; font-size:1.2rem; line-height:1.35; }
-      .status strong { display:block; margin-bottom:2px; font-size:.9rem; }
-      .status p { margin:0; font-size:.87rem; line-height:1.5; }
+      input:disabled { color:#59645a; background:#f1f5f1; opacity:1; }
+      input[type="time"],input[type="number"] { appearance:none; }
+      .unit { position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:.84rem; pointer-events:none; }
+      .time-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+      .time-entry { display:grid; grid-template-columns:minmax(0,1fr) 46px; gap:6px; }
+      .time-entry input { min-width:0; min-height:48px; padding:10px 8px; }
+      .time-entry input[type="time"] { padding:7px 4px; }
+      .status { display:flex; gap:10px; align-items:flex-start; margin-top:16px; padding:13px; border-radius:10px; background:#f1f5f1; color:#445044; }
+      .status-icon { flex:0 0 auto; font-size:1.1rem; line-height:1.35; }
+      .status strong { display:block; margin-bottom:2px; font-size:.88rem; }
+      .status p { margin:0; font-size:.83rem; line-height:1.5; }
       .status.safe { background:var(--green-light); color:var(--green); }
       .status.caution { background:var(--yellow-light); color:var(--yellow); }
       .status.danger,.status.error { background:var(--red-light); color:var(--red); }
-      .api-note { margin:18px 0 0; color:var(--muted); font-size:.78rem; line-height:1.6; }
-      .wide { margin-top:18px; }
-      @media (max-width:620px) { .page { width:min(100% - 24px,860px); padding-top:28px; } .overview,.details { grid-template-columns:1fr; } .card { padding:20px; border-radius:16px; } .result-card { min-height:132px; } }
+      .actions { display:flex; gap:9px; margin-top:14px; }
+      .action-button { min-height:48px; padding:10px 15px; border:1px solid var(--line); border-radius:9px; color:var(--ink); background:#fff; cursor:pointer; font-size:.95rem; font-weight:700; touch-action:manipulation; }
+      .action-button.primary { border-color:var(--green); color:#fff; background:var(--green); }
+      .action-button.danger { margin-left:auto; color:var(--red); }
+      .action-button:hover { filter:brightness(.97); }
+      .error-text { min-height:1.2em; margin:8px 0 0; color:var(--red); font-size:.82rem; }
+      .mode-switch { display:grid; grid-template-columns:1fr 1fr; gap:3px; padding:3px; border:1px solid var(--line); border-radius:9px; background:#f3f7f3; }
+      .mode-button { min-height:44px; border:0; border-radius:6px; color:var(--muted); background:transparent; cursor:pointer; font-size:.9rem; font-weight:700; touch-action:manipulation; }
+      .mode-button[aria-pressed="true"] { color:var(--green); background:#fff; box-shadow:0 1px 3px rgba(25,45,28,.12); }
+      .api-note { margin:14px 0 0; color:var(--muted); font-size:.77rem; line-height:1.6; }
+      .empty-hint { color:var(--muted); font-size:.88rem; }
+      @media (max-width:899px) {
+        .page { width:min(calc(100% - 24px),680px); padding-top:24px; }
+        .dashboard { grid-template-columns:1fr; gap:14px; }
+        .overview { grid-template-columns:repeat(2,minmax(0,1fr)); }
+        .day { min-height:84px; padding:7px 5px; }
+      }
+      @media (max-width:520px) {
+        .page { width:calc(100% - 16px); padding:18px 0 32px; }
+        header { margin:0 4px 16px; }
+        .lead { margin-top:7px; font-size:.94rem; }
+        .dashboard { gap:12px; }
+        .card { padding:16px; border-radius:13px; }
+        .calendar-card { padding:12px 8px; }
+        .card h2 { font-size:1.05rem; }
+        .card-description { margin-bottom:16px; font-size:.92rem; }
+        .overview { grid-template-columns:1fr; gap:10px; }
+        .result-card { min-height:100px; padding:14px 16px; }
+        .amount { font-size:2rem; }
+        .month-bar { margin-bottom:12px; }
+        .month-title { font-size:1.08rem; }
+        .calendar { width:100%; }
+        .weekday { padding:8px 1px; font-size:.78rem; }
+        .day { min-height:72px; gap:4px; padding:5px 3px; }
+        .day-number { min-height:24px; padding:3px 2px; font-size:.82rem; }
+        .shift-time { padding:4px 2px; font-size:.63rem; line-height:1.25; overflow-wrap:normal; }
+        .calendar-note { margin:9px 2px 0; font-size:.78rem; }
+        .time-grid { grid-template-columns:1fr; gap:12px; }
+        .time-entry { grid-template-columns:minmax(0,1fr) 52px; gap:8px; }
+        .time-entry input { min-height:52px; padding:11px 12px; font-size:1.05rem; }
+        .time-entry input[type="time"] { padding:8px 6px; }
+        #shift-break { min-height:48px; font-size:1.05rem; }
+        .actions { gap:10px; margin-top:12px; }
+        .action-button { min-height:50px; flex:1; }
+        .action-button.danger { margin-left:0; }
+        .mode-button { min-height:46px; }
+        .summary-list { gap:12px; }
+        .summary-row dt { font-size:.94rem; }
+        .summary-row dd { font-size:1.08rem; }
+        .summary-row.total dd { font-size:1.45rem; }
+      }
     </style>
   </head>
   <body>
@@ -48,48 +130,149 @@
       <header>
         <p class="eyebrow">MONTHLY MONEY PLAN</p>
         <h1>今月のお金を、見える化。</h1>
-        <p class="lead">入力すると、Cloudflare上の計算APIから今月の予算とバイト代の目安を受け取ります。</p>
+        <p class="lead">支出とシフトをまとめて管理して、今月の予算と収入見込みを確認できます。</p>
       </header>
 
-      <section class="grid overview" aria-label="今月の計算結果">
-        <article class="card result-card"><div><div class="result-label">今月あと使える金額</div><p class="amount" id="remaining">—<small>円</small></p></div><span class="waiting" id="budget-state">金額を入力してください</span></article>
-        <article class="card result-card"><div><div class="result-label">1日平均使用可能額</div><p class="amount" id="daily">—<small>円</small></p></div><span class="waiting">Cloudflare APIの計算結果</span></article>
-      </section>
-
-      <section class="grid details wide">
-        <article class="card">
-          <h2>今月の家計簿</h2><p class="card-description">4つの金額を入力すると、予算の残りを自動で確認できます。</p>
-          <form class="form-grid" id="budget-form">
-            <label>今月の収入見込み<span class="input-wrap"><input id="income" type="number" min="0" inputmode="numeric" placeholder="例：80000" required /><span class="unit">円</span></span></label>
-            <label>固定費<span class="input-wrap"><input id="fixed" type="number" min="0" inputmode="numeric" placeholder="例：20000" required /><span class="unit">円</span></span></label>
-            <label>目標貯金額<span class="input-wrap"><input id="saving" type="number" min="0" inputmode="numeric" placeholder="例：10000" required /><span class="unit">円</span></span></label>
-            <label>現在までの支出<span class="input-wrap"><input id="spent" type="number" min="0" inputmode="numeric" placeholder="例：15000" required /><span class="unit">円</span></span></label>
-          </form>
-          <div class="status" id="budget-status" aria-live="polite"><span class="status-icon">ℹ️</span><div><strong>予算を計算できます</strong><p>すべての項目を入力すると、状態とメッセージを表示します。</p></div></div>
-          <p class="api-note">計算はブラウザ内では行わず、Cloudflare Workers の <code>POST /api/budget</code> を呼び出します。</p>
+      <section class="dashboard" aria-label="シフトカレンダーと家計簿">
+        <article class="card calendar-card">
+          <div class="month-bar">
+            <h2 class="month-title" id="month-title"></h2>
+            <nav class="month-nav" aria-label="月の移動">
+              <button class="icon-button" id="previous-month" type="button" aria-label="前月">‹</button>
+              <button class="icon-button" id="next-month" type="button" aria-label="次月">›</button>
+            </nav>
+          </div>
+          <div class="calendar" id="calendar" role="grid" aria-label="月間シフトカレンダー">
+            <div class="weekday" role="columnheader">日</div><div class="weekday" role="columnheader">月</div><div class="weekday" role="columnheader">火</div><div class="weekday" role="columnheader">水</div><div class="weekday" role="columnheader">木</div><div class="weekday" role="columnheader">金</div><div class="weekday" role="columnheader">土</div>
+          </div>
+          <p class="calendar-note">日付を選択してシフトを登録・編集できます。</p>
         </article>
-        <article class="card">
-          <h2>バイト代の目安</h2><p class="card-description">時給と勤務時間から、予想バイト代を確認できます。</p>
-          <form class="form-grid" id="wage-form">
-            <label>時給<span class="input-wrap"><input id="hourly" type="number" min="0" inputmode="numeric" placeholder="例：1200" required /><span class="unit">円</span></span></label>
-            <label>勤務時間<span class="input-wrap"><input id="hours" type="number" min="0" step="0.5" inputmode="decimal" placeholder="例：30" required /><span class="unit">時間</span></span></label>
-          </form>
-          <div class="status" id="wage-status" aria-live="polite"><span class="status-icon">💡</span><div><strong>バイト代を計算できます</strong><p>時給と勤務時間を入力してください。</p></div></div>
-          <div class="wide"><div class="result-label">予想バイト代</div><p class="amount" id="wage">—<small>円</small></p></div>
-          <p class="api-note">計算は Cloudflare Workers の <code>POST /api/wage</code> へ依頼します。</p>
+
+        <aside class="side-stack">
+          <section class="overview" aria-label="今月の計算結果">
+            <article class="card result-card"><div><div class="result-label">今月あと使える金額</div><p class="amount"><span id="remaining">—</span><small>円</small></p></div><span class="waiting" id="budget-state">金額を入力してください</span></article>
+            <article class="card result-card"><div><div class="result-label">1日平均使用可能額</div><p class="amount"><span id="daily">—</span><small>円</small></p></div><span class="waiting">計算結果</span></article>
+          </section>
+
+          <article class="card">
+            <h2 id="summary-heading">今月の勤務と給料</h2>
+            <p class="card-description">登録したシフトから自動で集計します。</p>
+            <dl class="summary-list">
+              <div class="summary-row"><dt>合計実働時間</dt><dd id="monthly-hours">0時間</dd></div>
+              <div class="summary-row total"><dt>月の予想給料</dt><dd id="monthly-wage">—</dd></div>
+              <div class="summary-row"><dt id="selected-date-label">選択日の給料</dt><dd id="daily-wage">—</dd></div>
+            </dl>
+          </article>
+
+          <article class="card">
+            <h2>シフト登録</h2>
+            <p class="card-description" id="shift-form-date"></p>
+            <form id="shift-form">
+              <div class="form-grid">
+                <div class="time-grid">
+                  <label>出勤時間<span class="time-entry"><input id="shift-start" type="text" inputmode="numeric" autocomplete="off" placeholder="17:30" pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]" maxlength="5" title="HH:MM形式で入力してください（例：17:30）" required /><input id="shift-start-picker" type="time" aria-label="出勤時間を選択" /></span></label>
+                  <label>退勤時間<span class="time-entry"><input id="shift-end" type="text" inputmode="numeric" autocomplete="off" placeholder="22:00" pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]" maxlength="5" title="HH:MM形式で入力してください（例：22:00）" required /><input id="shift-end-picker" type="time" aria-label="退勤時間を選択" /></span></label>
+                </div>
+                <label>休憩時間<span class="input-wrap"><input id="shift-break" type="number" min="0" step="1" inputmode="numeric" value="0" required /><span class="unit">分</span></span></label>
+              </div>
+              <p class="error-text" id="shift-error" aria-live="polite"></p>
+              <div class="actions">
+                <button class="action-button primary" id="save-shift" type="submit">シフトを登録</button>
+                <button class="action-button danger" id="delete-shift" type="button" hidden>削除</button>
+              </div>
+            </form>
+            <article class="card">
+              <h2>時給</h2>
+              <p class="card-description">時給を設定すると、月間シフトから予想給料を計算します。</p>
+              <form class="form-grid" id="wage-form">
+                <label>時給<span class="input-wrap"><input id="hourly" type="number" min="0" step="1" inputmode="numeric" placeholder="例：1200" /><span class="unit">円</span></span></label>
+              </form>
+              <div class="status" id="wage-status" aria-live="polite"><span class="status-icon">💡</span><div><strong>時給を入力してください</strong><p>勤務時間はシフトカレンダーから集計します。</p></div></div>
+            </article>
+
+            <article class="card">
+              <h2>今月の家計簿</h2>
+              <p class="card-description">収入見込みと3つの金額から、予算の残りを確認できます。</p>
+              <form class="form-grid" id="budget-form">
+                <label>今月の収入見込み
+                  <div class="mode-switch" role="group" aria-label="収入見込みの入力方法">
+                    <button class="mode-button" id="auto-income-mode" type="button" aria-pressed="true">シフトから自動</button>
+                    <button class="mode-button" id="manual-income-mode" type="button" aria-pressed="false">手動入力</button>
+                  </div>
+                  <span class="input-wrap"><input id="income" type="number" min="0" step="1" inputmode="numeric" placeholder="例：80000" /><span class="unit">円</span></span>
+                </label>
+                <label>固定費<span class="input-wrap"><input id="fixed" type="number" min="0" inputmode="numeric" placeholder="例：20000" required /><span class="unit">円</span></span></label>
+                <label>目標貯金額<span class="input-wrap"><input id="saving" type="number" min="0" inputmode="numeric" placeholder="例：10000" required /><span class="unit">円</span></span></label>
+                <label>現在までの支出<span class="input-wrap"><input id="spent" type="number" min="0" inputmode="numeric" placeholder="例：15000" required /><span class="unit">円</span></span></label>
+              </form>
+              <div class="status" id="budget-status" aria-live="polite"><span class="status-icon">ℹ️</span><div><strong>予算を計算できます</strong><p>固定費・貯金額・支出を入力してください。</p></div></div>
+            </article>
         </article>
       </section>
     </main>
 
     <script>
       const API_BASE = "https://cloudflare-api.rikumonsters-api.workers.dev";
-      const yen = new Intl.NumberFormat("ja-JP", { maximumFractionDigits: 0 });
-      let budgetTimer;
-      let wageTimer;
-      const getNumber = (id) => Number(document.getElementById(id).value);
-      const hasValues = (ids) => ids.every((id) => document.getElementById(id).value !== "");
-      const formatYen = (value) => `${yen.format(value)}円`;
+      const STORAGE_KEY = "money-app-v2";
+      const yen = new Intl.NumberFormat("ja-JP", { maximumFractionDigits:0 });
+      const monthFormatter = new Intl.DateTimeFormat("ja-JP", { year:"numeric", month:"long" });
+      const dateFormatter = new Intl.DateTimeFormat("ja-JP", { year:"numeric", month:"long", day:"numeric", weekday:"short" });
+      const blankBudget = { fixed:"", saving:"", spent:"" };
 
+      function loadState() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+          return {
+            shifts:saved.shifts && typeof saved.shifts === "object" ? saved.shifts : {},
+            hourly:saved.hourly ?? "",
+            manualIncome:saved.manualIncome ?? "",
+            incomeMode:saved.incomeMode === "manual" ? "manual" : "auto",
+            budget:{ ...blankBudget, ...(saved.budget || {}) },
+          };
+        } catch {
+          return { shifts:{}, hourly:"", manualIncome:"", incomeMode:"auto", budget:{ ...blankBudget } };
+        }
+      }
+
+      const state = loadState();
+      const today = new Date();
+      let currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      let selectedDate = dateKey(today);
+      let wageEstimate = null;
+      let wageTimer;
+      let budgetTimer;
+      let wageRequestId = 0;
+      let budgetRequestId = 0;
+
+      function dateKey(date) {
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+      }
+      function dateFromKey(key) {
+        const [year, month, day] = key.split("-").map(Number);
+        return new Date(year, month - 1, day);
+      }
+      function formatYen(value) {
+        return `${yen.format(Math.round(value))}円`;
+      }
+      function formatHours(minutes) {
+        const hours = (minutes / 60).toFixed(2).replace(/\.0+$|(?<=\.[0-9])0$/, "");
+        return `${hours}時間`;
+      }
+      function saveState() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      }
+      function shiftMinutes(shift) {
+        const [startHour, startMinute] = shift.start.split(":").map(Number);
+        const [endHour, endMinute] = shift.end.split(":").map(Number);
+        const start = startHour * 60 + startMinute;
+        let end = endHour * 60 + endMinute;
+        if (end <= start) end += 24 * 60;
+        return Math.max(0, end - start - Number(shift.breakMinutes || 0));
+      }
+      function monthShifts() {
+        const prefix = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2,"0")}-`;
+        return Object.entries(state.shifts).filter(([key]) => key.startsWith(prefix));
+      }
       function setStatus(element, type, icon, title, message) {
         element.className = `status ${type}`;
         const iconElement = document.createElement("span");
@@ -108,49 +291,232 @@
         if (!response.ok) throw new Error(`APIエラー: ${response.status}`);
         return response.json();
       }
-      async function calculateBudget() {
-        const ids = ["income", "fixed", "saving", "spent"];
-        if (!hasValues(ids)) {
-          document.getElementById("remaining").innerHTML = "—<small>円</small>";
-          document.getElementById("daily").innerHTML = "—<small>円</small>";
-          document.getElementById("budget-state").textContent = "金額を入力してください";
-          setStatus(document.getElementById("budget-status"), "", "ℹ️", "予算を計算できます", "すべての項目を入力すると、状態とメッセージを表示します。");
-          return;
-        }
-        document.getElementById("budget-state").textContent = "計算中…";
-        try {
-          const result = await postJson("/api/budget", { income:getNumber("income"), fixed:getNumber("fixed"), saving:getNumber("saving"), spent:getNumber("spent") });
-          document.getElementById("remaining").innerHTML = `${formatYen(result.remaining)}<small></small>`;
-          document.getElementById("daily").innerHTML = `${formatYen(result.daily)}<small></small>`;
-          document.getElementById("budget-state").textContent = "Cloudflare APIの計算結果";
-          const labels = { safe:["✅","余裕があります"], caution:["⚠️","少し注意が必要です"], danger:["🚨","使いすぎに注意してください"] };
-          const [icon, title] = labels[result.status] || ["ℹ️", "計算結果"];
-          setStatus(document.getElementById("budget-status"), result.status, icon, title, result.message || "予算を確認してください。");
-        } catch (error) {
-          document.getElementById("budget-state").textContent = "取得できませんでした";
-          setStatus(document.getElementById("budget-status"), "error", "⚠️", "計算結果を取得できません", "通信状況を確認して、もう一度入力してください。");
-          console.error("Budget API request failed:", error);
+
+      function renderCalendar() {
+        const calendar = document.getElementById("calendar");
+        calendar.querySelectorAll(".day").forEach((cell) => cell.remove());
+        document.getElementById("month-title").textContent = monthFormatter.format(currentMonth);
+        document.getElementById("summary-heading").textContent = `${currentMonth.getMonth() + 1}月の勤務と給料`;
+        const firstDay = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+        const startOffset = firstDay.getDay();
+        const daysInMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
+        const cellCount = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+        for (let index = 0; index < cellCount; index += 1) {
+          const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), index - startOffset + 1);
+          const key = dateKey(date);
+          const shift = state.shifts[key];
+          const button = document.createElement("button");
+          const dayNumber = document.createElement("span");
+          button.type = "button";
+          button.className = "day";
+          button.setAttribute("role", "gridcell");
+          button.setAttribute("aria-pressed", String(key === selectedDate));
+          button.setAttribute("aria-label", `${dateFormatter.format(date)}${shift ? `、${shift.start}-${shift.end}のシフト` : ""}`);
+          if (date.getMonth() !== currentMonth.getMonth()) button.classList.add("outside");
+          if (shift) button.classList.add("has-shift");
+          if (key === selectedDate) button.classList.add("selected");
+          if (key === dateKey(today)) button.classList.add("today");
+          dayNumber.className = "day-number";
+          dayNumber.textContent = String(date.getDate());
+          button.append(dayNumber);
+          if (shift) {
+            const time = document.createElement("span");
+            time.className = "shift-time";
+            time.textContent = `${shift.start}-${shift.end}`;
+            button.append(time);
+          }
+          button.addEventListener("click", () => {
+            selectedDate = key;
+            if (date.getMonth() !== currentMonth.getMonth()) currentMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+            renderCalendar();
+            renderShiftForm();
+            renderSummary();
+          });
+          calendar.append(button);
         }
       }
+
+      function renderShiftForm() {
+        const shift = state.shifts[selectedDate];
+        document.getElementById("shift-form-date").textContent = dateFormatter.format(dateFromKey(selectedDate));
+        document.getElementById("shift-start").value = shift?.start || "";
+        document.getElementById("shift-end").value = shift?.end || "";
+        document.getElementById("shift-start-picker").value = shift?.start || "";
+        document.getElementById("shift-end-picker").value = shift?.end || "";
+        document.getElementById("shift-break").value = shift?.breakMinutes ?? 0;
+        document.getElementById("save-shift").textContent = shift ? "変更を保存" : "シフトを登録";
+        document.getElementById("delete-shift").hidden = !shift;
+        document.getElementById("shift-error").textContent = "";
+      }
+
+      function renderSummary() {
+        const totalMinutes = monthShifts().reduce((total, [, shift]) => total + shiftMinutes(shift), 0);
+        const dailyShift = state.shifts[selectedDate];
+        document.getElementById("monthly-hours").textContent = formatHours(totalMinutes);
+        document.getElementById("selected-date-label").textContent = `${dateFromKey(selectedDate).getDate()}日の給料`;
+        document.getElementById("daily-wage").textContent = dailyShift && state.hourly !== ""
+          ? formatYen(shiftMinutes(dailyShift) / 60 * Number(state.hourly))
+          : "—";
+        document.getElementById("monthly-wage").textContent = wageEstimate === null ? "—" : formatYen(wageEstimate);
+      }
+
+      function updateIncomeField() {
+        const income = document.getElementById("income");
+        const isManual = state.incomeMode === "manual";
+        income.disabled = !isManual;
+        income.value = isManual ? state.manualIncome : wageEstimate === null ? "" : String(Math.round(wageEstimate));
+        document.getElementById("auto-income-mode").setAttribute("aria-pressed", String(!isManual));
+        document.getElementById("manual-income-mode").setAttribute("aria-pressed", String(isManual));
+      }
+
       async function calculateWage() {
-        const ids = ["hourly", "hours"];
-        if (!hasValues(ids)) {
-          document.getElementById("wage").innerHTML = "—<small>円</small>";
-          setStatus(document.getElementById("wage-status"), "", "💡", "バイト代を計算できます", "時給と勤務時間を入力してください。");
+        const requestId = ++wageRequestId;
+        const hourly = document.getElementById("hourly").value;
+        const totalMinutes = monthShifts().reduce((total, [, shift]) => total + shiftMinutes(shift), 0);
+        if (hourly === "") {
+          wageEstimate = null;
+          document.getElementById("monthly-wage").textContent = "—";
+          updateIncomeField();
+          renderSummary();
+          setStatus(document.getElementById("wage-status"), "", "💡", "時給を入力してください", "勤務時間はシフトカレンダーから集計します。");
+          scheduleBudget();
           return;
         }
-        setStatus(document.getElementById("wage-status"), "", "⏳", "計算中です", "Cloudflare APIに計算を依頼しています。");
+        setStatus(document.getElementById("wage-status"), "", "⏳", "計算中です", "勤務時間と時給から計算しています。");
         try {
-          const result = await postJson("/api/wage", { hourly:getNumber("hourly"), hours:getNumber("hours") });
-          document.getElementById("wage").innerHTML = `${formatYen(result.wage)}<small></small>`;
-          setStatus(document.getElementById("wage-status"), "safe", "✅", "予想バイト代を取得しました", "Cloudflare APIの計算結果です。");
+          const result = await postJson("/api/wage", { hourly:Number(hourly), hours:totalMinutes / 60 });
+          if (requestId !== wageRequestId) return;
+          wageEstimate = Number(result.wage);
+          updateIncomeField();
+          renderSummary();
+          setStatus(document.getElementById("wage-status"), "safe", "✅", "予想給料を計算しました", "今月のシフト合計を反映しています。");
+          scheduleBudget();
         } catch (error) {
-          setStatus(document.getElementById("wage-status"), "error", "⚠️", "バイト代を取得できません", "通信状況を確認して、もう一度入力してください。");
+          if (requestId !== wageRequestId) return;
+          setStatus(document.getElementById("wage-status"), "error", "⚠️", "給料を取得できません", "通信状況を確認して、もう一度お試しください。");
           console.error("Wage API request failed:", error);
         }
       }
-      document.getElementById("budget-form").addEventListener("input", () => { clearTimeout(budgetTimer); budgetTimer = setTimeout(calculateBudget, 450); });
-      document.getElementById("wage-form").addEventListener("input", () => { clearTimeout(wageTimer); wageTimer = setTimeout(calculateWage, 450); });
+
+      function scheduleWage() {
+        clearTimeout(wageTimer);
+        wageTimer = setTimeout(calculateWage, 350);
+      }
+
+      function budgetInputsReady() {
+        const income = state.incomeMode === "manual" ? state.manualIncome : wageEstimate;
+        return income !== "" && income !== null && ["fixed", "saving", "spent"].every((key) => document.getElementById(key).value !== "");
+      }
+
+      async function calculateBudget() {
+        const requestId = ++budgetRequestId;
+        const status = document.getElementById("budget-status");
+        if (!budgetInputsReady()) {
+          document.getElementById("remaining").textContent = "—";
+          document.getElementById("daily").textContent = "—";
+          document.getElementById("budget-state").textContent = "金額を入力してください";
+          setStatus(status, "", "ℹ️", "予算を計算できます", "収入見込みと固定費・貯金額・支出を入力してください。");
+          return;
+        }
+        const income = state.incomeMode === "manual" ? Number(state.manualIncome) : Number(wageEstimate);
+        document.getElementById("budget-state").textContent = "計算中…";
+        try {
+          const result = await postJson("/api/budget", { income, fixed:Number(document.getElementById("fixed").value), saving:Number(document.getElementById("saving").value), spent:Number(document.getElementById("spent").value) });
+          if (requestId !== budgetRequestId) return;
+          document.getElementById("remaining").textContent = yen.format(result.remaining);
+          document.getElementById("daily").textContent = yen.format(result.daily);
+          document.getElementById("budget-state").textContent = "計算結果";
+          const labels = { safe:["✅","余裕があります"], caution:["⚠️","少し注意が必要です"], danger:["🚨","使いすぎに注意してください"] };
+          const [icon, title] = labels[result.status] || ["ℹ️","計算結果"];
+          setStatus(status, result.status, icon, title, result.message || "予算を確認してください。");
+        } catch (error) {
+          if (requestId !== budgetRequestId) return;
+          document.getElementById("budget-state").textContent = "取得できませんでした";
+          setStatus(status, "error", "⚠️", "計算結果を取得できません", "通信状況を確認して、もう一度入力してください。");
+          console.error("Budget API request failed:", error);
+        }
+      }
+
+      function scheduleBudget() {
+        clearTimeout(budgetTimer);
+        budgetTimer = setTimeout(calculateBudget, 350);
+      }
+
+      document.getElementById("previous-month").addEventListener("click", () => {
+        currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+        selectedDate = dateKey(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1));
+        renderCalendar(); renderShiftForm(); renderSummary(); scheduleWage();
+      });
+      document.getElementById("next-month").addEventListener("click", () => {
+        currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+        selectedDate = dateKey(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1));
+        renderCalendar(); renderShiftForm(); renderSummary(); scheduleWage();
+      });
+      document.getElementById("shift-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const start = document.getElementById("shift-start").value;
+        const end = document.getElementById("shift-end").value;
+        const breakMinutes = Number(document.getElementById("shift-break").value);
+        const shift = { start, end, breakMinutes };
+        const duration = shiftMinutes(shift);
+        const validTime = (value) => /^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(value);
+        if (!validTime(start) || !validTime(end) || !Number.isInteger(breakMinutes) || breakMinutes < 0 || duration <= 0) {
+          document.getElementById("shift-error").textContent = "出勤・退勤時間と、勤務時間内の休憩時間を入力してください。";
+          return;
+        }
+        state.shifts[selectedDate] = shift;
+        saveState();
+        renderCalendar(); renderShiftForm(); renderSummary(); scheduleWage();
+      });
+      document.getElementById("delete-shift").addEventListener("click", () => {
+        delete state.shifts[selectedDate];
+        saveState();
+        renderCalendar(); renderShiftForm(); renderSummary(); scheduleWage();
+      });
+      for (const [fieldId, pickerId] of [["shift-start", "shift-start-picker"], ["shift-end", "shift-end-picker"]]) {
+        const field = document.getElementById(fieldId);
+        const picker = document.getElementById(pickerId);
+        field.addEventListener("input", () => {
+          const digits = field.value.replace(/\D/g, "").slice(0, 4);
+          if (digits.length > 2) field.value = `${digits.slice(0, 2)}:${digits.slice(2)}`;
+          if (/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(field.value)) picker.value = field.value;
+        });
+        picker.addEventListener("input", () => { field.value = picker.value; });
+        picker.addEventListener("change", () => { field.value = picker.value; });
+      }
+      document.getElementById("hourly").addEventListener("input", (event) => {
+        state.hourly = event.target.value;
+        saveState();
+        renderSummary();
+        scheduleWage();
+      });
+      document.getElementById("auto-income-mode").addEventListener("click", () => {
+        state.incomeMode = "auto";
+        updateIncomeField();
+        saveState();
+        scheduleBudget();
+      });
+      document.getElementById("manual-income-mode").addEventListener("click", () => {
+        state.incomeMode = "manual";
+        updateIncomeField();
+        saveState();
+        scheduleBudget();
+      });
+      document.getElementById("budget-form").addEventListener("input", (event) => {
+        const id = event.target.id;
+        if (id === "income" && state.incomeMode === "manual") state.manualIncome = event.target.value;
+        if (Object.hasOwn(state.budget, id)) state.budget[id] = event.target.value;
+        saveState();
+        scheduleBudget();
+      });
+
+      document.getElementById("hourly").value = state.hourly;
+      for (const key of Object.keys(blankBudget)) document.getElementById(key).value = state.budget[key];
+      updateIncomeField();
+      renderCalendar();
+      renderShiftForm();
+      renderSummary();
+      calculateWage();
     </script>
   </body>
 </html>
