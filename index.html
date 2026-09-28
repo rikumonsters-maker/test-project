@@ -159,10 +159,36 @@
               <div class="weekday" role="columnheader">日</div><div class="weekday" role="columnheader">月</div><div class="weekday" role="columnheader">火</div><div class="weekday" role="columnheader">水</div><div class="weekday" role="columnheader">木</div><div class="weekday" role="columnheader">金</div><div class="weekday" role="columnheader">土</div>
             </div>
           </article>
-          <article class="card">
-            <h3 id="agenda-date"></h3>
-            <div class="expense-list" id="agenda-events"></div>
-          </article>
+          <div class="side-stack">
+            <article class="card">
+              <h3 id="agenda-date"></h3>
+              <h4 class="agenda-list-title">シフト</h4>
+              <div class="expense-list" id="agenda-shifts"></div>
+              <h4 class="agenda-list-title">個人予定</h4>
+              <div class="expense-list" id="agenda-events"></div>
+            </article>
+
+            <article class="card">
+              <h3 id="event-form-title">個人予定を追加</h3>
+              <form id="event-form" class="form-stack">
+                <label>タイトル<input id="event-title" type="text" maxlength="80" placeholder="例：飲み会" required /></label>
+                <label>日付<input id="event-date" type="date" required /></label>
+                <label class="checkbox-label"><span>終日予定</span><input id="event-all-day" type="checkbox" /></label>
+                <div id="event-time-fields" class="form-stack">
+                  <div class="time-pair">
+                    <label>開始時間<span class="time-input-row"><input id="event-start" type="text" inputmode="numeric" autocomplete="off" placeholder="19:00" pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]" maxlength="5" title="HH:MM形式で入力（例：19:00）" /><input id="event-start-picker" type="time" aria-label="開始時間を選択" /></span></label>
+                    <label>終了時間<span class="time-input-row"><input id="event-end" type="text" inputmode="numeric" autocomplete="off" placeholder="22:00" pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]" maxlength="5" title="HH:MM形式で入力（例：22:00）" /><input id="event-end-picker" type="time" aria-label="終了時間を選択" /></span></label>
+                  </div>
+                </div>
+                <label>メモ<input id="event-note" type="text" maxlength="160" placeholder="例：新宿" /></label>
+                <p class="status error" id="event-error" hidden aria-live="polite"></p>
+                <div class="actions">
+                  <button class="action-button primary" id="save-event" type="submit">予定を追加</button>
+                  <button class="action-button" id="cancel-event-edit" type="button" hidden>編集をやめる</button>
+                </div>
+              </form>
+            </article>
+          </div>
         </div>
       </section>
     </main>

@@ -13,6 +13,7 @@ function loadState() {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
     return {
       shifts:saved.shifts && typeof saved.shifts === "object" ? saved.shifts : {},
+      events:saved.events && typeof saved.events === "object" ? saved.events : {},
       expenses:saved.expenses && typeof saved.expenses === "object" ? saved.expenses : {},
       hourly:saved.hourly ?? "",
       manualIncome:saved.manualIncome ?? "",
@@ -20,7 +21,7 @@ function loadState() {
       budget:{ ...emptyBudget, ...(saved.budget || {}) },
     };
   } catch {
-    return { shifts:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", budget:{ ...emptyBudget } };
+    return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", budget:{ ...emptyBudget } };
   }
 }
 
@@ -35,6 +36,8 @@ const view = {
   expenseDate:dateKey(today),
   agendaDate:dateKey(today),
   editingExpenseId:null,
+  editingEventId:null,
+  editingEventDate:null,
   wageEstimate:null,
   wageTimer:null,
   budgetTimer:null,
@@ -132,15 +135,24 @@ function renderMonthCalendar({ calendarId, month, selectedDate, mode, onSelect }
     number.textContent = String(date.getDate());
     cell.append(number);
 
-    const value = calendarValue(mode, key, date);
-    if (value) {
+    const value = calendarValue(mode, key);
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const detail = document.createElement("span");
+        detail.className = `day-value ${entry.type === "shift" ? "calendar-shift" : "calendar-event"}`;
+        detail.textContent = entry.label;
+        cell.append(detail);
+      }
+      if (value.length) cell.classList.add("has-entry");
+    } else if (value) {
       cell.classList.add("has-entry");
       const detail = document.createElement("span");
       detail.className = "day-value";
       detail.textContent = value;
       cell.append(detail);
     }
-    cell.setAttribute("aria-label", `${dateLabel.format(date)}${value ? `、${value}` : ""}`);
+    const accessibleValue = Array.isArray(value) ? value.map((entry) => entry.label).join("、") : value;
+    cell.setAttribute("aria-label", `${dateLabel.format(date)}${accessibleValue ? `、${accessibleValue}` : ""}`);
     cell.addEventListener("click", () => onSelect(key, date));
     calendar.append(cell);
   }
@@ -151,8 +163,23 @@ function calendarValue(mode, key) {
     const total = expenseTotal(items);
     return total ? formatMoney(total) : "";
   }
+  if (mode === "agenda") return agendaEntries(key);
   const shift = state.shifts[key];
   return shift ? `${shift.start}-${shift.end}` : "";
+}
+function agendaEntries(key) {
+  const entries = [];
+  const shift = state.shifts[key];
+  if (shift) entries.push({ type:"shift", time:shift.start, label:`${shift.start}-${shift.end} バイト` });
+  const events = Array.isArray(state.events[key]) ? state.events[key] : [];
+  for (const event of events) {
+    entries.push({
+      type:"event",
+      time:event.allDay ? "" : event.start,
+      label:event.allDay ? `終日 ${event.title}` : `${event.start} ${event.title}`,
+    });
+  }
+  return entries.sort((left, right) => left.time.localeCompare(right.time));
 }
 function renderShiftCalendar() {
   renderMonthCalendar({
@@ -391,37 +418,158 @@ function renderAgenda() {
     calendarId:"agenda-calendar",
     month:view.agendaMonth,
     selectedDate:view.agendaDate,
-    mode:"shift",
+    mode:"agenda",
     onSelect:(key, date) => {
       view.agendaDate = key;
-      if (date.getMonth() !== view.agendaMonth.getMonth()) view.agendaMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+      if (date.getMonth() !== view.agendaMonth.getMonth() || date.getFullYear() !== view.agendaMonth.getFullYear()) {
+        view.agendaMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+      }
+      resetEventForm();
       renderAgenda();
     },
   });
-  const date = view.agendaDate;
-  const events = (state.shifts[date] ? [{ type:"shift", ...state.shifts[date] }] : []);
-  $("agenda-date").textContent = dateLabel.format(parseDate(date));
-  const list = $("agenda-events");
-  list.replaceChildren();
-  if (!events.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = "この日の予定はありません。";
-    list.append(empty);
+  const selectedDate = view.agendaDate;
+  $("agenda-date").textContent = dateLabel.format(parseDate(selectedDate));
+
+  const shiftList = $("agenda-shifts");
+  shiftList.replaceChildren();
+  const shift = state.shifts[selectedDate];
+  if (shift) {
+    const item = document.createElement("div");
+    item.className = "agenda-item agenda-shift";
+    const title = document.createElement("strong");
+    title.textContent = "バイト";
+    const time = document.createElement("span");
+    time.textContent = `${shift.start}-${shift.end}`;
+    item.append(title, time);
+    shiftList.append(item);
+  } else {
+    appendEmptyState(shiftList, "この日のシフトはありません。");
+  }
+
+  const eventList = $("agenda-events");
+  eventList.replaceChildren();
+  const events = Array.isArray(state.events[selectedDate]) ? state.events[selectedDate] : [];
+  if (!events.length) appendEmptyState(eventList, "個人予定はありません。");
+  for (const event of events) {
+    const item = document.createElement("div");
+    item.className = "agenda-item agenda-personal";
+    const details = document.createElement("div");
+    details.className = "agenda-event-details";
+    const title = document.createElement("strong");
+    title.textContent = event.title;
+    const time = document.createElement("span");
+    time.textContent = event.allDay ? "終日" : `${event.start}-${event.end}`;
+    details.append(title, time);
+    if (event.note) {
+      const note = document.createElement("span");
+      note.className = "agenda-event-note";
+      note.textContent = event.note;
+      details.append(note);
+    }
+    const actions = document.createElement("div");
+    actions.className = "agenda-actions";
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "action-button";
+    edit.textContent = "編集";
+    edit.addEventListener("click", () => editPersonalEvent(selectedDate, event));
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "action-button danger";
+    remove.textContent = "削除";
+    remove.addEventListener("click", () => deletePersonalEvent(selectedDate, event.id));
+    actions.append(edit, remove);
+    item.append(details, actions);
+    eventList.append(item);
+  }
+}
+function appendEmptyState(container, text) {
+  const empty = document.createElement("p");
+  empty.className = "empty-state";
+  empty.textContent = text;
+  container.append(empty);
+}
+function syncEventTimeFields() {
+  const allDay = $("event-all-day").checked;
+  $("event-time-fields").hidden = allDay;
+  $("event-start").required = !allDay;
+  $("event-end").required = !allDay;
+}
+function resetEventForm() {
+  view.editingEventId = null;
+  view.editingEventDate = null;
+  $("event-form").reset();
+  $("event-date").value = view.agendaDate;
+  $("event-form-title").textContent = "個人予定を追加";
+  $("save-event").textContent = "予定を追加";
+  $("cancel-event-edit").hidden = true;
+  $("event-error").hidden = true;
+  $("event-error").textContent = "";
+  syncEventTimeFields();
+}
+function editPersonalEvent(date, event) {
+  view.editingEventId = event.id;
+  view.editingEventDate = date;
+  $("event-title").value = event.title;
+  $("event-date").value = date;
+  $("event-all-day").checked = Boolean(event.allDay);
+  $("event-start").value = event.start || "";
+  $("event-end").value = event.end || "";
+  $("event-start-picker").value = event.start || "";
+  $("event-end-picker").value = event.end || "";
+  $("event-note").value = event.note || "";
+  $("event-form-title").textContent = "個人予定を編集";
+  $("save-event").textContent = "変更を保存";
+  $("cancel-event-edit").hidden = false;
+  $("event-error").hidden = true;
+  syncEventTimeFields();
+  $("event-title").focus();
+}
+function addOrUpdatePersonalEvent(event) {
+  event.preventDefault();
+  const title = $("event-title").value.trim();
+  const date = $("event-date").value;
+  const allDay = $("event-all-day").checked;
+  const start = allDay ? "" : $("event-start").value;
+  const end = allDay ? "" : $("event-end").value;
+  const validTime = (value) => /^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(value);
+  if (!title || !date || (!allDay && (!validTime(start) || !validTime(end) || end <= start))) {
+    $("event-error").textContent = allDay
+      ? "タイトルと日付を入力してください。"
+      : "タイトル・日付と、開始時間より後の終了時間を入力してください。";
+    $("event-error").hidden = false;
     return;
   }
-  for (const event of events) {
-    const item = document.createElement("article");
-    item.className = "expense-item";
-    const kind = document.createElement("span");
-    kind.className = "expense-category";
-    kind.textContent = event.type === "shift" ? "シフト" : "予定";
-    const time = document.createElement("strong");
-    time.className = "expense-amount";
-    time.textContent = `${event.start}〜${event.end}`;
-    item.append(kind, time);
-    list.append(item);
+  const record = {
+    id:view.editingEventId || makeId(),
+    title,
+    start,
+    end,
+    allDay,
+    note:$("event-note").value.trim(),
+  };
+  if (view.editingEventId && view.editingEventDate) {
+    const previous = (state.events[view.editingEventDate] || []).filter((item) => item.id !== view.editingEventId);
+    if (previous.length) state.events[view.editingEventDate] = previous;
+    else delete state.events[view.editingEventDate];
   }
+  const destination = Array.isArray(state.events[date]) ? state.events[date] : [];
+  destination.push(record);
+  state.events[date] = destination;
+  view.agendaDate = date;
+  view.agendaMonth = new Date(parseDate(date).getFullYear(), parseDate(date).getMonth(), 1);
+  saveState();
+  renderAgenda();
+  resetEventForm();
+}
+function deletePersonalEvent(date, id) {
+  const remaining = (state.events[date] || []).filter((event) => event.id !== id);
+  if (remaining.length) state.events[date] = remaining;
+  else delete state.events[date];
+  if (view.editingEventId === id) resetEventForm();
+  saveState();
+  renderAgenda();
 }
 function setActivePage(pageName) {
   document.querySelectorAll(".page-panel").forEach((panel) => {
@@ -440,7 +588,12 @@ function setActivePage(pageName) {
   window.scrollTo({ top:0, behavior:"instant" });
 }
 
-for (const [fieldId, pickerId] of [["shift-start", "shift-start-picker"], ["shift-end", "shift-end-picker"]]) {
+for (const [fieldId, pickerId] of [
+  ["shift-start", "shift-start-picker"],
+  ["shift-end", "shift-end-picker"],
+  ["event-start", "event-start-picker"],
+  ["event-end", "event-end-picker"],
+]) {
   const field = $(fieldId);
   const picker = $(pickerId);
   field.addEventListener("input", () => {
@@ -505,15 +658,20 @@ $("expense-next").addEventListener("click", () => {
 $("agenda-previous").addEventListener("click", () => {
   view.agendaMonth = changeMonth(view.agendaMonth, -1);
   view.agendaDate = dateKey(view.agendaMonth);
+  resetEventForm();
   renderAgenda();
 });
 $("agenda-next").addEventListener("click", () => {
   view.agendaMonth = changeMonth(view.agendaMonth, 1);
   view.agendaDate = dateKey(view.agendaMonth);
+  resetEventForm();
   renderAgenda();
 });
 $("expense-form").addEventListener("submit", addOrUpdateExpense);
 $("cancel-expense-edit").addEventListener("click", resetExpenseForm);
+$("event-form").addEventListener("submit", addOrUpdatePersonalEvent);
+$("cancel-event-edit").addEventListener("click", resetEventForm);
+$("event-all-day").addEventListener("change", syncEventTimeFields);
 $("budget-form").addEventListener("submit", (event) => event.preventDefault());
 $("hourly").addEventListener("input", (event) => {
   state.hourly = event.target.value;
@@ -564,4 +722,5 @@ renderShiftSummary();
 renderBudgetCalendar();
 renderExpenseDay();
 renderAgenda();
+resetEventForm();
 calculateWage();
