@@ -210,6 +210,20 @@ app.shared = shared;
 const calendar = initCalendar(app);
 app.scheduleBudget = budget.schedule;
 
+let activeMyView = "calendar";
+
+function setMyView(viewName) {
+  activeMyView = viewName;
+  document.querySelectorAll("[data-my-view]").forEach((button) => {
+    const isActive = button.dataset.myView === viewName;
+    button.setAttribute("aria-selected", String(isActive));
+  });
+  $("page-calendar").hidden = viewName !== "calendar";
+  $("page-budget").hidden = viewName !== "budget";
+  if (viewName === "calendar") calendar.render();
+  if (viewName === "budget") budget.refresh();
+}
+
 function setActivePage(pageName) {
   document.querySelectorAll(".page-panel").forEach((panel) => {
     panel.hidden = panel.id !== `page-${pageName}`;
@@ -218,16 +232,17 @@ function setActivePage(pageName) {
     if (button.dataset.page === pageName) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
-  if (pageName === "calendar") {
-    calendar.render();
-  }
+  if (pageName === "my") setMyView(activeMyView);
   if (pageName === "group") shared.showHome();
-  if (pageName === "budget") budget.refresh();
   window.scrollTo({ top:0, behavior:"instant" });
 }
 
 document.querySelectorAll(".nav-button").forEach((button) => {
   button.addEventListener("click", () => setActivePage(button.dataset.page));
+});
+
+document.querySelectorAll("[data-my-view]").forEach((button) => {
+  button.addEventListener("click", () => setMyView(button.dataset.myView));
 });
 
 shift.init();

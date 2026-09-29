@@ -45,16 +45,18 @@ export function initShared(app) {
   function groupCard(group) {
     const card = document.createElement("article");
     card.className = "card";
-    const name = document.createElement("h3");
+    const heading = document.createElement("h3");
+    heading.className = "group-name";
+    const name = document.createElement("button");
+    name.type = "button";
+    name.className = "group-name-button";
     name.textContent = group.groupName;
+    name.setAttribute("aria-label", `${group.groupName}の共有カレンダーを表示`);
+    name.addEventListener("click", () => openCalendar(group.groupId));
+    heading.append(name);
     const member = document.createElement("p");
     member.className = "group-member";
     member.textContent = `${group.memberName} として参加中`;
-    const open = document.createElement("button");
-    open.type = "button";
-    open.className = "action-button primary group-open-button";
-    open.textContent = "共有カレンダーを開く";
-    open.addEventListener("click", () => openCalendar(group.groupId));
     const label = document.createElement("label");
     label.textContent = "招待コード";
     const copyField = document.createElement("span");
@@ -86,7 +88,7 @@ export function initShared(app) {
     leave.textContent = "グループから退出";
     leave.addEventListener("click", () => void leaveGroup(group));
     actions.append(leave);
-    card.append(name, member, open, label, actions);
+    card.append(heading, member, label, actions);
     return card;
   }
   function renderGroups() {
@@ -134,6 +136,29 @@ export function initShared(app) {
       if (generation === loadGeneration) {
         loadingMonths.delete(key);
         renderSelectedDate();
+      }
+    }
+  }
+  async function loadGroupMembers(group) {
+    const container = $("group-members");
+    const generation = loadGeneration;
+    container.replaceChildren();
+    appendEmptyState(container, "メンバーを読み込んでいます…");
+    setError("", "group-members-error");
+    try {
+      const data = await requestJson("/api/groups/members/list", { payload:credentials(group) });
+      if (generation !== loadGeneration || activeGroupId !== group.groupId) return;
+      container.replaceChildren();
+      for (const member of data.members || []) {
+        const item = document.createElement("li");
+        item.textContent = `${member.memberName}${member.memberId === group.memberId ? "（あなた）" : ""}`;
+        container.append(item);
+      }
+      if (!container.childElementCount) appendEmptyState(container, "メンバー情報がありません。");
+    } catch (error) {
+      if (generation === loadGeneration && activeGroupId === group.groupId) {
+        container.replaceChildren();
+        setError(error.message || "メンバー情報を読み込めませんでした。", "group-members-error");
       }
     }
   }
@@ -202,6 +227,7 @@ export function initShared(app) {
     $("group-calendar-view").hidden = false;
     setError("", "group-calendar-error");
     renderCalendar();
+    void loadGroupMembers(group);
     window.scrollTo({ top:0, behavior:"instant" });
   }
   function monthsWithData() {

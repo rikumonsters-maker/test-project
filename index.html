@@ -80,7 +80,17 @@
         </div>
       </section>
 
-      <section class="page-panel" id="page-budget" aria-labelledby="budget-page-title" hidden>
+      <section class="page-panel" id="page-my" aria-labelledby="my-page-title" hidden>
+        <div class="page-heading">
+          <h2 id="my-page-title">マイ</h2>
+          <p>個人予定と家計簿</p>
+        </div>
+        <nav class="segmented my-view-tabs" role="tablist" aria-label="マイの表示">
+          <button id="my-tab-calendar" type="button" role="tab" aria-selected="true" aria-controls="page-calendar" data-my-view="calendar">予定</button>
+          <button id="my-tab-budget" type="button" role="tab" aria-selected="false" aria-controls="page-budget" data-my-view="budget">家計簿</button>
+        </nav>
+
+      <section class="my-panel" id="page-budget" role="tabpanel" aria-labelledby="my-tab-budget" hidden>
         <div class="page-heading">
           <h2 id="budget-page-title">家計簿</h2>
           <p>支出と予算の状況</p>
@@ -146,9 +156,9 @@
         </div>
       </section>
 
-      <section class="page-panel" id="page-calendar" aria-labelledby="agenda-page-title" hidden>
+      <section class="my-panel" id="page-calendar" role="tabpanel" aria-labelledby="my-tab-calendar" hidden>
         <div class="page-heading">
-          <h2 id="agenda-page-title">カレンダー</h2>
+          <h2 id="agenda-page-title">予定</h2>
           <p>シフトと個人予定を表示</p>
         </div>
         <div class="layout-two">
@@ -196,10 +206,11 @@
           </div>
         </div>
       </section>
+      </section>
 
       <section class="page-panel" id="page-group" aria-labelledby="group-page-title" hidden>
         <div class="page-heading">
-          <h2 id="group-page-title">グループ</h2>
+          <h2 id="group-page-title">共有</h2>
           <p>メンバーと共有予定</p>
         </div>
         <div id="group-home" class="group-home">
@@ -246,6 +257,11 @@
             </article>
             <div class="side-stack">
               <article class="card">
+                <h3>メンバー</h3>
+                <ul class="group-member-list" id="group-members" aria-live="polite"></ul>
+                <p class="status error" id="group-members-error" hidden aria-live="polite"></p>
+              </article>
+              <article class="card">
                 <h3 id="group-date"></h3>
                 <div class="expense-list" id="group-shared-events"></div>
               </article>
@@ -257,9 +273,8 @@
 
     <nav class="page-nav" aria-label="メインナビゲーション">
       <button class="nav-button" type="button" data-page="shift" aria-current="page"><span class="nav-symbol" aria-hidden="true">◷</span><span>シフト</span></button>
-      <button class="nav-button" type="button" data-page="budget"><span class="nav-symbol" aria-hidden="true">¥</span><span>家計簿</span></button>
-      <button class="nav-button" type="button" data-page="calendar"><span class="nav-symbol" aria-hidden="true">▦</span><span>カレンダー</span></button>
-      <button class="nav-button" type="button" data-page="group"><span class="nav-symbol" aria-hidden="true">♧</span><span>グループ</span></button>
+      <button class="nav-button" type="button" data-page="my"><span class="nav-symbol" aria-hidden="true">⌂</span><span>マイ</span></button>
+      <button class="nav-button" type="button" data-page="group"><span class="nav-symbol" aria-hidden="true">♧</span><span>共有</span></button>
     </nav>
   </body>
 </html>
