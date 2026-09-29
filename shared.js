@@ -1,6 +1,7 @@
 export function initShared(app) {
   const { $, state, view, parseDate, requestJson, saveState, renderMonthCalendar, changeMonth, dateLabel } = app;
   let activeGroupId = null;
+  let selectedGroupId = null;
   let eventsByDate = {};
   let loadedMonths = new Set();
   let loadingMonths = new Set();
@@ -52,6 +53,7 @@ export function initShared(app) {
     name.className = "group-name-button";
     name.textContent = group.groupName;
     name.setAttribute("aria-label", `${group.groupName}の共有カレンダーを表示`);
+    name.setAttribute("aria-pressed", String(group.groupId === selectedGroupId));
     name.addEventListener("click", () => openCalendar(group.groupId));
     heading.append(name);
     const member = document.createElement("p");
@@ -221,6 +223,7 @@ export function initShared(app) {
     const group = memberships().find((item) => item.groupId === groupId);
     if (!group) return;
     activeGroupId = groupId;
+    selectedGroupId = groupId;
     resetCache();
     $("group-calendar-name").textContent = `${group.groupName}の共有カレンダー`;
     $("group-home").hidden = true;

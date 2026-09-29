@@ -17,7 +17,6 @@
     <main class="page">
       <header class="site-header">
         <p class="eyebrow">MONTHLY MONEY PLAN</p>
-        <h1>今月のお金を、見える化。</h1>
         <p class="lead">シフトと支出をまとめて管理して、毎月の見通しを確認できます。</p>
       </header>
 
@@ -221,12 +220,12 @@
             <div class="card-stack">
               <form id="create-group-form" class="form-stack">
                 <label>グループ名<input id="group-name" type="text" maxlength="60" placeholder="例：家族" required /></label>
-                <label>あなたの表示名<input id="group-member-name" type="text" maxlength="40" placeholder="例：りく" required /></label>
+                <label>あなたの表示名<input id="group-member-name" type="text" maxlength="40" placeholder="予定　太郎" required /></label>
                 <button class="action-button primary" type="submit">グループを作成</button>
               </form>
               <form id="join-group-form" class="form-stack group-join-form">
                 <label>招待コード<input id="group-invite-code" type="text" autocomplete="off" maxlength="40" placeholder="MP-..." required /></label>
-                <label>あなたの表示名<input id="join-member-name" type="text" maxlength="40" placeholder="例：りく" required /></label>
+                <label>あなたの表示名<input id="join-member-name" type="text" maxlength="40" placeholder="予定　太郎" required /></label>
                 <button class="action-button" type="submit">グループに参加</button>
               </form>
             </div>
@@ -273,7 +272,7 @@
 
     <nav class="page-nav" aria-label="メインナビゲーション">
       <button class="nav-button" type="button" data-page="shift" aria-current="page"><span class="nav-symbol" aria-hidden="true">◷</span><span>シフト</span></button>
-      <button class="nav-button" type="button" data-page="my"><span class="nav-symbol" aria-hidden="true">⌂</span><span>マイ</span></button>
+      <button class="nav-button" type="button" data-page="my"><span class="nav-symbol" aria-hidden="true">⌂</span><span>カレンダー</span></button>
       <button class="nav-button" type="button" data-page="group"><span class="nav-symbol" aria-hidden="true">♧</span><span>共有</span></button>
     </nav>
   </body>

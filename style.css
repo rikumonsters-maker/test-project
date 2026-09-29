@@ -26,9 +26,8 @@ body {
 button,input,select { font:inherit; }
 button { touch-action:manipulation; }
 .page { width:min(calc(100% - 32px),1240px); margin:0 auto; padding:30px 0 40px; }
-.site-header { margin:0 0 22px; }
+.site-header { margin:0 0 14px; }
 .eyebrow { margin:0 0 7px; color:var(--green); font-size:.76rem; font-weight:800; letter-spacing:.08em; }
-h1 { margin:0; font-size:clamp(1.6rem,4vw,2.2rem); }
 .lead { margin:8px 0 0; color:var(--muted); line-height:1.6; }
 .page-panel { min-width:0; }
 .page-panel[hidden] { display:none; }
@@ -41,8 +40,13 @@ h1 { margin:0; font-size:clamp(1.6rem,4vw,2.2rem); }
 .card-stack { display:grid; gap:14px; }
 .group-join-form { padding-top:14px; border-top:1px solid var(--line); }
 .group-name { margin:0 0 4px; color:var(--green); font-size:1.05rem; font-weight:850; }
-.group-name-button { display:flex; width:100%; min-height:52px; align-items:center; padding:0 10px; border:1px solid transparent; border-radius:8px; color:inherit; background:transparent; cursor:pointer; font-size:inherit; font-weight:inherit; text-align:left; }
-.group-name-button:hover { background:#edf7ef; }
+.group-name-button { display:flex; width:100%; min-height:54px; align-items:center; justify-content:space-between; gap:12px; padding:0 14px; border:1px solid #cfe2d2; border-radius:9px; color:var(--green); background:#fff; cursor:pointer; font-size:inherit; font-weight:inherit; text-align:left; }
+.group-name-button::after { content:"›"; flex:0 0 auto; color:#58795e; font-size:1.35rem; line-height:1; }
+.group-name-button[aria-pressed="true"] { border-color:#8fbd96; background:#edf7ef; }
+@media (hover:hover) and (pointer:fine) {
+  .group-name-button:hover { background:#f2f8f3; }
+  .group-name-button[aria-pressed="true"]:hover { background:#e4f2e7; }
+}
 .group-member { margin:4px 0 14px; color:var(--muted); font-size:.88rem; }
 .group-home { max-width:680px; }
 .group-list { display:grid; gap:14px; margin-bottom:14px; }
@@ -155,7 +159,7 @@ input:focus,select:focus { border-color:var(--green); outline:none; box-shadow:0
 }
 @media (max-width:520px) {
   .page { width:calc(100% - 16px); padding:18px 0 24px; }
-  .site-header { margin:0 4px 16px; }
+  .site-header { margin:0 4px 12px; }
   .lead { font-size:.94rem; }
   .page-heading { align-items:flex-start; flex-direction:column; gap:4px; }
   .card { padding:16px; border-radius:12px; }
