@@ -39,6 +39,11 @@ h1 { margin:0; font-size:clamp(1.6rem,4vw,2.2rem); }
 .card h3 { margin:0 0 4px; font-size:1.05rem; }
 .card-description { margin:0 0 16px; color:var(--muted); font-size:.9rem; line-height:1.55; }
 .card-stack { display:grid; gap:14px; }
+.group-join-form { padding-top:14px; border-top:1px solid var(--line); }
+.group-name { margin:0; color:var(--green); font-size:1.05rem; font-weight:850; }
+.group-member { margin:4px 0 14px; color:var(--muted); font-size:.88rem; }
+.copy-field { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+.copy-field .action-button { min-height:46px; }
 .layout-two { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(320px,.9fr); gap:20px; align-items:start; }
 .side-stack { display:grid; gap:14px; min-width:0; }
 .month-bar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 14px; }
@@ -112,6 +117,7 @@ input:focus,select:focus { border-color:var(--green); outline:none; box-shadow:0
 .agenda-item { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:10px; padding:11px 12px; border-radius:9px; }
 .agenda-shift { color:var(--green); background:#eaf6ec; }
 .agenda-personal { border:1px solid var(--line); background:#f7f9f7; }
+.agenda-shared { border:1px solid #b9d8f5; background:#eff7ff; }
 .agenda-event-details { display:grid; min-width:0; gap:3px; }
 .agenda-event-details strong { overflow-wrap:anywhere; }
 .agenda-event-details > span { color:var(--muted); font-size:.86rem; }

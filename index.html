@@ -144,7 +144,7 @@
       <section class="page-panel" id="page-calendar" aria-labelledby="agenda-page-title" hidden>
         <div class="page-heading">
           <h2 id="agenda-page-title">カレンダー</h2>
-          <p>シフトを予定として表示</p>
+          <p>個人予定とグループの予定をまとめて表示</p>
         </div>
         <div class="layout-two">
           <article class="card calendar-card">
@@ -160,12 +160,60 @@
             </div>
           </article>
           <div class="side-stack">
+            <article class="card" id="group-card">
+              <h3>共有グループ</h3>
+              <p class="card-description">招待コードで参加すると、グループの予定を同じカレンダーで共有できます。</p>
+              <div id="group-setup" class="card-stack">
+                <form id="create-group-form" class="form-stack">
+                  <label>グループ名<input id="group-name" type="text" maxlength="60" placeholder="例：家族" required /></label>
+                  <label>あなたの表示名<input id="group-member-name" type="text" maxlength="40" placeholder="例：りく" required /></label>
+                  <button class="action-button primary" type="submit">グループを作成</button>
+                </form>
+                <form id="join-group-form" class="form-stack group-join-form">
+                  <label>招待コード<input id="group-invite-code" type="text" autocomplete="off" maxlength="40" placeholder="MP-..." required /></label>
+                  <label>あなたの表示名<input id="join-member-name" type="text" maxlength="40" placeholder="例：りく" required /></label>
+                  <button class="action-button" type="submit">グループに参加</button>
+                </form>
+              </div>
+              <div id="group-active" hidden>
+                <p class="group-name" id="active-group-name"></p>
+                <p class="group-member" id="active-group-member"></p>
+                <label>招待コード<span class="copy-field"><input id="active-group-code" type="text" readonly /><button class="action-button" id="copy-group-code" type="button">コピー</button></span></label>
+                <div class="actions"><button class="action-button" id="refresh-group-events" type="button">共有予定を更新</button><button class="action-button danger" id="leave-group" type="button">この端末から退出</button></div>
+              </div>
+              <p class="status error" id="group-error" hidden aria-live="polite"></p>
+              <p class="status" id="group-status" aria-live="polite">グループを作成するか、招待コードで参加してください。</p>
+            </article>
+
             <article class="card">
               <h3 id="agenda-date"></h3>
               <h4 class="agenda-list-title">シフト</h4>
               <div class="expense-list" id="agenda-shifts"></div>
               <h4 class="agenda-list-title">個人予定</h4>
               <div class="expense-list" id="agenda-events"></div>
+              <h4 class="agenda-list-title">共有予定</h4>
+              <div class="expense-list" id="agenda-shared-events"></div>
+            </article>
+
+            <article class="card" id="shared-event-card" hidden>
+              <h3 id="shared-event-form-title">共有予定を追加</h3>
+              <form id="shared-event-form" class="form-stack">
+                <label>タイトル<input id="shared-event-title" type="text" maxlength="80" placeholder="例：家族で夕食" required /></label>
+                <label>日付<input id="shared-event-date" type="date" required /></label>
+                <label class="checkbox-label"><span>終日予定</span><input id="shared-event-all-day" type="checkbox" /></label>
+                <div id="shared-event-time-fields" class="form-stack">
+                  <div class="time-pair">
+                    <label>開始時間<span class="time-input-row"><input id="shared-event-start" type="text" inputmode="numeric" autocomplete="off" placeholder="19:00" maxlength="5" /><input id="shared-event-start-picker" type="time" aria-label="共有予定の開始時間を選択" /></span></label>
+                    <label>終了時間<span class="time-input-row"><input id="shared-event-end" type="text" inputmode="numeric" autocomplete="off" placeholder="22:00" maxlength="5" /><input id="shared-event-end-picker" type="time" aria-label="共有予定の終了時間を選択" /></span></label>
+                  </div>
+                </div>
+                <label>メモ<input id="shared-event-note" type="text" maxlength="160" placeholder="例：お店はあとで決める" /></label>
+                <p class="status error" id="shared-event-error" hidden aria-live="polite"></p>
+                <div class="actions">
+                  <button class="action-button primary" id="save-shared-event" type="submit">共有予定を追加</button>
+                  <button class="action-button" id="cancel-shared-event-edit" type="button" hidden>編集をやめる</button>
+                </div>
+              </form>
             </article>
 
             <article class="card">

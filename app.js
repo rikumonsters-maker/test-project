@@ -1,6 +1,7 @@
 import { initShift } from "./shift.js";
 import { initBudget } from "./budget.js";
 import { initCalendar } from "./calendar.js";
+import { initShared } from "./shared.js";
 
 const STORAGE_KEY = "money-app-v2";
 const API_BASE = "https://cloudflare-api.rikumonsters-api.workers.dev";
@@ -22,9 +23,10 @@ function loadState() {
       manualIncome:saved.manualIncome ?? "",
       incomeMode:saved.incomeMode === "manual" ? "manual" : "auto",
       budget:{ ...emptyBudget, ...(saved.budget || {}) },
+      shared:saved.shared && typeof saved.shared === "object" ? saved.shared : null,
     };
   } catch {
-    return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", budget:{ ...emptyBudget } };
+    return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", budget:{ ...emptyBudget }, shared:null };
   }
 }
 
@@ -82,14 +84,18 @@ function status(element, type, icon, headingText, message) {
   content.append(heading, text);
   element.replaceChildren(iconNode, content);
 }
-async function postJson(path, payload) {
+async function requestJson(path, { method = "POST", payload } = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
-    method:"POST",
+    method,
     headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify(payload),
+    body:payload === undefined ? undefined : JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-  return response.json();
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `通信に失敗しました（${response.status}）`);
+  return data;
+}
+async function postJson(path, payload) {
+  return requestJson(path, { payload });
 }
 function makeId() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -177,6 +183,7 @@ const app = {
   changeMonth,
   monthPrefix,
   status,
+  requestJson,
   postJson,
   makeId,
   bindTimeInput,
@@ -185,6 +192,8 @@ const app = {
 
 const shift = initShift(app);
 const budget = initBudget(app);
+const shared = initShared(app);
+app.shared = shared;
 const calendar = initCalendar(app);
 app.refreshAgenda = calendar.render;
 app.scheduleBudget = budget.schedule;
@@ -197,7 +206,10 @@ function setActivePage(pageName) {
     if (button.dataset.page === pageName) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
-  if (pageName === "calendar") calendar.render();
+  if (pageName === "calendar") {
+    void shared.refreshMonth();
+    calendar.render();
+  }
   if (pageName === "budget") budget.refresh();
   window.scrollTo({ top:0, behavior:"instant" });
 }
@@ -208,5 +220,6 @@ document.querySelectorAll(".nav-button").forEach((button) => {
 
 shift.init();
 budget.init();
+shared.init();
 calendar.init();
 shift.calculateWage();
