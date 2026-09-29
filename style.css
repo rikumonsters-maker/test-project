@@ -18,7 +18,7 @@
 body {
   min-width:320px;
   margin:0;
-  padding-bottom:92px;
+  padding-bottom:calc(88px + env(safe-area-inset-bottom));
   color:var(--ink);
   background:var(--ground);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;
@@ -125,13 +125,12 @@ input:focus,select:focus { border-color:var(--green); outline:none; box-shadow:0
 .selected-date-title { margin:0 0 12px; font-size:1.05rem; }
 .daily-total { display:flex; justify-content:space-between; gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid var(--line); font-weight:800; }
 .daily-total strong { color:var(--green); }
-.page-nav { position:fixed; z-index:20; right:0; bottom:0; left:0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); padding:8px max(12px,calc((100vw - 540px)/2)) max(8px,env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:rgba(255,255,255,.97); box-shadow:0 -5px 18px rgba(25,45,28,.07); }
-.nav-button { display:grid; min-height:54px; place-items:center; gap:1px; border:0; border-radius:9px; color:var(--muted); background:transparent; cursor:pointer; font-size:.83rem; font-weight:750; }
+.page-nav { position:fixed; z-index:1000; right:0; bottom:0; left:0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); padding:8px max(12px,calc((100% - 860px)/2)) calc(8px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:rgba(255,255,255,.97); box-shadow:0 -5px 18px rgba(25,45,28,.07); }
+.nav-button { display:grid; min-width:0; min-height:56px; place-items:center; gap:1px; border:0; border-radius:9px; color:var(--muted); background:transparent; cursor:pointer; font-size:.83rem; font-weight:750; }
 .nav-button[aria-current="page"] { color:var(--green); background:#edf7ef; }
 .nav-symbol { font-size:1.1rem; line-height:1.15; }
 @media (min-width:900px) {
   .page { padding-top:36px; }
-  .page-nav { position:static; width:min(100% - 32px,540px); margin:0 auto 22px; padding:7px; border:1px solid var(--line); border-radius:12px; box-shadow:none; }
 }
 @media (max-width:899px) {
   .page { width:min(calc(100% - 24px),680px); padding-top:24px; }
@@ -139,7 +138,6 @@ input:focus,select:focus { border-color:var(--green); outline:none; box-shadow:0
   .day { min-height:78px; }
 }
 @media (max-width:520px) {
-  body { padding-bottom:84px; }
   .page { width:calc(100% - 16px); padding:18px 0 24px; }
   .site-header { margin:0 4px 16px; }
   .lead { font-size:.94rem; }
