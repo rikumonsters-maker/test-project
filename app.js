@@ -4,7 +4,9 @@ import { initCalendar } from "./calendar.js";
 import { initShared } from "./shared.js";
 
 const STORAGE_KEY = "money-app-v2";
-const API_BASE = "https://cloudflare-api.rikumonsters-api.workers.dev";
+const API_BASE = ["localhost", "127.0.0.1"].includes(location.hostname)
+  ? "http://127.0.0.1:8787"
+  : "https://cloudflare-api.rikumonsters-api.workers.dev";
 const CATEGORIES = ["食費", "交通", "娯楽", "買い物", "交際費", "固定費", "その他"];
 const money = new Intl.NumberFormat("ja-JP", { maximumFractionDigits:0 });
 const monthLabel = new Intl.DateTimeFormat("ja-JP", { year:"numeric", month:"long" });
@@ -15,6 +17,14 @@ const emptyBudget = { fixed:"", saving:"", spent:"" };
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    const groups = Array.isArray(saved.groups) ? saved.groups : (saved.shared && typeof saved.shared === "object" ? [saved.shared] : []);
+    const pendingGroupMonths = saved.pendingGroupMonths && typeof saved.pendingGroupMonths === "object" ? saved.pendingGroupMonths : {};
+    if (!Array.isArray(saved.groups) && saved.shared?.groupId) {
+      const pending = (pendingGroupMonths[saved.shared.groupId] ||= {});
+      for (const key of [...Object.keys(saved.shifts || {}), ...Object.keys(saved.events || {})]) {
+        if (/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(key)) pending[key.slice(0, 7)] = 1;
+      }
+    }
     return {
       shifts:saved.shifts && typeof saved.shifts === "object" ? saved.shifts : {},
       events:saved.events && typeof saved.events === "object" ? saved.events : {},
@@ -23,10 +33,11 @@ function loadState() {
       manualIncome:saved.manualIncome ?? "",
       incomeMode:saved.incomeMode === "manual" ? "manual" : "auto",
       budget:{ ...emptyBudget, ...(saved.budget || {}) },
-      shared:saved.shared && typeof saved.shared === "object" ? saved.shared : null,
+      groups,
+      pendingGroupMonths,
     };
   } catch {
-    return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", budget:{ ...emptyBudget }, shared:null };
+    return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", budget:{ ...emptyBudget }, groups:[], pendingGroupMonths:{} };
   }
 }
 
@@ -37,9 +48,11 @@ const view = {
   shiftMonth:new Date(firstOfMonth),
   budgetMonth:new Date(firstOfMonth),
   agendaMonth:new Date(firstOfMonth),
+  groupMonth:new Date(firstOfMonth),
   shiftDate:dateKey(today),
   expenseDate:dateKey(today),
   agendaDate:dateKey(today),
+  groupDate:dateKey(today),
   editingExpenseId:null,
   editingEventId:null,
   editingEventDate:null,
@@ -195,7 +208,6 @@ const budget = initBudget(app);
 const shared = initShared(app);
 app.shared = shared;
 const calendar = initCalendar(app);
-app.refreshAgenda = calendar.render;
 app.scheduleBudget = budget.schedule;
 
 function setActivePage(pageName) {
@@ -207,9 +219,9 @@ function setActivePage(pageName) {
     else button.removeAttribute("aria-current");
   });
   if (pageName === "calendar") {
-    void shared.refreshMonth();
     calendar.render();
   }
+  if (pageName === "group") shared.showHome();
   if (pageName === "budget") budget.refresh();
   window.scrollTo({ top:0, behavior:"instant" });
 }

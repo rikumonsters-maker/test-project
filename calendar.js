@@ -13,14 +13,6 @@ export function initCalendar(app) {
         label:event.allDay ? `終日 ${event.title}` : `${event.start} ${event.title}`,
       });
     }
-    const sharedEvents = app.shared?.eventsForDate(key) || [];
-    for (const event of sharedEvents) {
-      entries.push({
-        type:"shared",
-        time:event.allDay ? "" : event.start,
-        label:event.allDay ? `共有 終日 ${event.title}` : `共有 ${event.start} ${event.title}`,
-      });
-    }
     return entries.sort((left, right) => left.time.localeCompare(right.time));
   }
   function appendEmptyState(container, text) {
@@ -30,7 +22,6 @@ export function initCalendar(app) {
     container.append(empty);
   }
   function render() {
-    app.shared?.ensureMonth(view.agendaMonth);
     renderMonthCalendar({
       calendarId:"agenda-calendar",
       month:view.agendaMonth,
@@ -97,7 +88,6 @@ export function initCalendar(app) {
       item.append(details, actions);
       eventList.append(item);
     }
-    app.shared?.renderSelectedDate();
   }
   function syncTimeFields() {
     const allDay = $("event-all-day").checked;
@@ -116,7 +106,6 @@ export function initCalendar(app) {
     $("event-error").hidden = true;
     $("event-error").textContent = "";
     syncTimeFields();
-    app.shared?.resetEventForm();
   }
   function editEvent(date, event) {
     view.editingEventId = event.id;
@@ -170,14 +159,17 @@ export function initCalendar(app) {
     view.agendaDate = date;
     const selectedDate = parseDate(date);
     view.agendaMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-    saveState(); render(); resetForm();
+    saveState();
+    app.shared?.markDirty(date.slice(0, 7));
+    if (view.editingEventDate && view.editingEventDate !== date) app.shared?.markDirty(view.editingEventDate.slice(0, 7));
+    render(); resetForm();
   }
   function deleteEvent(date, id) {
     const remaining = (state.events[date] || []).filter((event) => event.id !== id);
     if (remaining.length) state.events[date] = remaining;
     else delete state.events[date];
     if (view.editingEventId === id) resetForm();
-    saveState(); render();
+    saveState(); app.shared?.markDirty(date.slice(0, 7)); render();
   }
   function init() {
     bindTimeInput("event-start", "event-start-picker");
