@@ -1,7 +1,10 @@
 export function initShared(app) {
-  const { $, state, view, parseDate, requestJson, saveState, renderMonthCalendar, changeMonth, dateLabel } = app;
+  const { $, state, view, parseDate, requestJson, saveState, renderMonthCalendar, changeMonth, dateLabel, QrScanner, qrcode } = app;
   let activeGroupId = null;
   let selectedGroupId = null;
+  let inviteScanner = null;
+  let inviteScanHandled = false;
+  let scannerGeneration = 0;
   let eventsByDate = {};
   let loadedMonths = new Set();
   let loadingMonths = new Set();
@@ -9,13 +12,13 @@ export function initShared(app) {
   let syncing = false;
 
   function memberships() {
-    return state.groups.filter((group) => group && group.groupId && group.memberId && group.memberToken);
+    return state.groups.filter((group) => group && group.groupId && group.memberId);
   }
   function activeGroup() {
     return memberships().find((group) => group.groupId === activeGroupId) || null;
   }
   function credentials(group) {
-    return { groupId:group.groupId, memberId:group.memberId, memberToken:group.memberToken };
+    return { groupId:group.groupId };
   }
   function monthKey(month) {
     return `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}`;
@@ -82,6 +85,12 @@ export function initShared(app) {
     });
     copyField.append(code, copy);
     label.append(copyField);
+    const showQr = document.createElement("button");
+    showQr.type = "button";
+    showQr.className = "action-button qr-show-button";
+    showQr.textContent = "QRコードを表示";
+    showQr.disabled = !group.inviteCode;
+    showQr.addEventListener("click", () => showInviteQr(group));
     const actions = document.createElement("div");
     actions.className = "actions";
     const leave = document.createElement("button");
@@ -90,8 +99,98 @@ export function initShared(app) {
     leave.textContent = "グループから退出";
     leave.addEventListener("click", () => void leaveGroup(group));
     actions.append(leave);
-    card.append(heading, member, label, actions);
+    card.append(heading, member, label, showQr, actions);
     return card;
+  }
+  function showInviteQr(group) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("invite", group.inviteCode);
+    const qr = qrcode(0, "M");
+    qr.addData(url.href);
+    qr.make();
+    $("group-invite-qr-name").textContent = group.groupName;
+    $("group-invite-qr-image").src = qr.createDataURL(6, 8);
+    $("group-invite-qr-url").textContent = url.href;
+    const dialog = $("group-invite-qr-dialog");
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }
+  function closeInviteQr() {
+    const dialog = $("group-invite-qr-dialog");
+    if (typeof dialog.close === "function" && dialog.open) dialog.close();
+    else dialog.removeAttribute("open");
+  }
+  function inviteCodeFromQr(value) {
+    try {
+      const url = new URL(value, window.location.origin);
+      return url.searchParams.get("invite")?.trim().slice(0, 40) || null;
+    } catch {
+      return null;
+    }
+  }
+  function stopInviteScanner(hidePanel = true) {
+    scannerGeneration += 1;
+    if (inviteScanner) {
+      inviteScanner.destroy();
+      inviteScanner = null;
+    }
+    const video = $("invite-qr-video");
+    if (video.srcObject) {
+      video.srcObject.getTracks().forEach((track) => track.stop());
+      video.srcObject = null;
+    }
+    $("open-invite-qr-scanner").disabled = false;
+    if (hidePanel) $("invite-qr-scanner").hidden = true;
+  }
+  function scannerErrorMessage(error) {
+    const detail = `${error.name || ""} ${error.message || ""}`;
+    if (/NotAllowedError|PermissionDeniedError|permission denied/i.test(detail)) return "カメラへのアクセスが許可されませんでした。ブラウザーの設定を確認してください。";
+    if (/NotFoundError|camera not found|no camera/i.test(detail)) return "利用できるカメラが見つかりません。招待コードを入力してください。";
+    if (!window.isSecureContext) return "QR読み取りにはHTTPS接続が必要です。招待コードを入力してください。";
+    return error.message || "カメラを起動できませんでした。招待コードを入力してください。";
+  }
+  async function startInviteScanner() {
+    const generation = ++scannerGeneration;
+    const panel = $("invite-qr-scanner");
+    const error = $("invite-qr-error");
+    const video = $("invite-qr-video");
+    $("open-invite-qr-scanner").disabled = true;
+    panel.hidden = false;
+    error.hidden = true;
+    error.textContent = "";
+    inviteScanHandled = false;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      error.textContent = "この環境ではカメラを利用できません。招待コードを入力してください。";
+      error.hidden = false;
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio:false, video:{ facingMode:{ ideal:"environment" } } });
+      if (generation !== scannerGeneration) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      video.srcObject = stream;
+      inviteScanner = new QrScanner(video, (result) => {
+        if (inviteScanHandled) return;
+        const inviteCode = inviteCodeFromQr(result.data);
+        if (!inviteCode) {
+          error.textContent = "招待コードを含むQRコードを読み取ってください。";
+          error.hidden = false;
+          return;
+        }
+        inviteScanHandled = true;
+        $("group-invite-code").value = inviteCode;
+        stopInviteScanner();
+        if (window.confirm("このグループに参加しますか？")) $("join-group-form").requestSubmit();
+      }, { returnDetailedScanResult:true, maxScansPerSecond:12 });
+      await inviteScanner.start();
+    } catch (cameraError) {
+      if (generation !== scannerGeneration) return;
+      stopInviteScanner(false);
+      error.textContent = scannerErrorMessage(cameraError);
+      error.hidden = false;
+    }
   }
   function renderGroups() {
     const list = $("group-list");
@@ -331,8 +430,14 @@ export function initShared(app) {
     $("group-previous").addEventListener("click", () => { view.groupMonth = changeMonth(view.groupMonth, -1); view.groupDate = app.dateKey(view.groupMonth); renderCalendar(); });
     $("group-next").addEventListener("click", () => { view.groupMonth = changeMonth(view.groupMonth, 1); view.groupDate = app.dateKey(view.groupMonth); renderCalendar(); });
     $("refresh-group-events").addEventListener("click", () => void refreshCurrentMonth());
+    $("open-invite-qr-scanner").addEventListener("click", () => void startInviteScanner());
+    $("close-invite-qr-scanner").addEventListener("click", () => stopInviteScanner());
+    $("close-group-invite-qr").addEventListener("click", closeInviteQr);
+    $("group-invite-qr-dialog").addEventListener("click", (event) => {
+      if (event.target === $("group-invite-qr-dialog")) closeInviteQr();
+    });
     showHome();
     void flushPending();
   }
-  return { init, showHome, markDirty };
+  return { init, showHome, openCalendar, markDirty };
 }

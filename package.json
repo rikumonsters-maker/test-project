@@ -1,0 +1,8 @@
+{
+  "name": "money-app-frontend",
+  "private": true,
+  "dependencies": {
+    "qrcode-generator": "2.0.4",
+    "qr-scanner": "1.4.2"
+  }
+}

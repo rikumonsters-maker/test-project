@@ -6,19 +6,48 @@
     <meta name="theme-color" content="#166534" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <title>今月のお金を見える化</title>
+    <title>DaySync</title>
     <link rel="icon" type="image/png" href="./icons/favicon.png" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.json" />
     <link rel="stylesheet" href="style.css" />
     <script type="module" src="app.js"></script>
   </head>
-  <body>
-    <main class="page">
+  <body class="auth-mode">
+    <section class="auth-shell" id="auth-shell" aria-live="polite">
+      <div class="auth-card">
+        <div class="auth-brand"><h1>DaySync</h1><p>毎日を、ひとつに。</p></div>
+        <p id="auth-loading">読み込み中...</p>
+        <form class="form-stack" id="login-form" hidden>
+          <label>メールアドレス<input id="login-email" type="email" autocomplete="email" maxlength="254" required /></label>
+          <label>パスワード<input id="login-password" type="password" autocomplete="current-password" required /></label>
+          <button class="action-button auth-primary" type="submit">ログイン</button>
+          <p class="auth-switch">アカウントをお持ちでない方</p>
+          <button class="action-button" id="show-register" type="button">新規登録</button>
+        </form>
+        <form class="form-stack" id="register-form" hidden>
+          <label>表示名<input id="register-name" type="text" autocomplete="name" maxlength="40" placeholder="予定　太郎" required /></label>
+          <label>メールアドレス<input id="register-email" type="email" autocomplete="email" maxlength="254" required /></label>
+          <label>パスワード<input id="register-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
+          <label>パスワード確認<input id="register-confirm" type="password" autocomplete="new-password" required /></label>
+          <button class="action-button auth-primary" type="submit">アカウントを作成</button>
+          <button class="action-button" id="show-login" type="button">ログインに戻る</button>
+        </form>
+        <p class="status error" id="auth-error" hidden role="alert"></p>
+      </div>
+    </section>
+
+    <main class="page" id="app-root" hidden>
       <header class="site-header">
-        <p class="eyebrow">MONTHLY MONEY PLAN</p>
-        <p class="lead">シフトと支出をまとめて管理して、毎月の見通しを確認できます。</p>
+        <h1 class="site-title">DaySync — 毎日を、ひとつに。</h1>
+        <div class="account-row"><button class="account-link" id="account-open" type="button"><span id="account-name"></span>のプロフィール ›</button></div>
       </header>
+      <div class="legacy-import card" id="legacy-import" hidden>
+        <p>この端末に以前の保存データがあります。現在のアカウントへ引き継ぎますか？ 元データは残します。</p>
+        <button class="action-button" id="import-legacy" type="button">このアカウントに引き継ぐ</button>
+        <button class="action-button" id="dismiss-legacy" type="button">今はしない</button>
+        <p class="status error" id="legacy-error" hidden role="alert"></p>
+      </div>
 
       <section class="page-panel" id="page-shift" aria-labelledby="shift-page-title">
         <div class="page-heading">
@@ -227,6 +256,13 @@
                 <label>招待コード<input id="group-invite-code" type="text" autocomplete="off" maxlength="40" placeholder="MP-..." required /></label>
                 <label>あなたの表示名<input id="join-member-name" type="text" maxlength="40" placeholder="予定　太郎" required /></label>
                 <button class="action-button" type="submit">グループに参加</button>
+                <div class="qr-divider" aria-hidden="true"><span>または</span></div>
+                <button class="action-button qr-scan-button" id="open-invite-qr-scanner" type="button">QRコードを読み取る</button>
+                <div class="qr-scan-panel" id="invite-qr-scanner" hidden>
+                  <video id="invite-qr-video" muted playsinline aria-label="招待QRコードを映すカメラ"></video>
+                  <p class="status error" id="invite-qr-error" hidden aria-live="polite"></p>
+                  <button class="action-button" id="close-invite-qr-scanner" type="button">読み取りを閉じる</button>
+                </div>
               </form>
             </div>
             <p class="status error" id="group-error" hidden aria-live="polite"></p>
@@ -267,13 +303,53 @@
             </div>
           </div>
         </div>
+
+        <dialog class="qr-dialog" id="group-invite-qr-dialog" aria-labelledby="group-invite-qr-title">
+          <button class="action-button qr-dialog-close" id="close-group-invite-qr" type="button">閉じる</button>
+          <h3 id="group-invite-qr-title">グループに招待</h3>
+          <p id="group-invite-qr-name" class="card-description"></p>
+          <img id="group-invite-qr-image" class="qr-image" alt="グループ参加用QRコード" />
+          <p id="group-invite-qr-url" class="qr-link"></p>
+        </dialog>
+      </section>
+
+      <section class="page-panel" id="page-profile" aria-labelledby="profile-page-title" hidden>
+        <div class="page-heading"><h2 id="profile-page-title">プロフィール</h2><p>アカウントと通知の設定</p></div>
+        <div class="profile-layout">
+          <article class="card profile-card">
+            <div class="profile-avatar" id="profile-icon" aria-hidden="true">🌿</div>
+            <h3 id="profile-name"></h3>
+            <p class="profile-bio" id="profile-bio"></p>
+            <button class="action-button" id="edit-profile" type="button">プロフィールを編集</button>
+            <form class="form-stack profile-edit" id="profile-form" hidden>
+              <label>アイコン<select id="profile-icon-input"><option>🌿</option><option>🌸</option><option>☀️</option><option>🌙</option><option>⭐</option><option>🐱</option><option>🐶</option><option>📅</option></select></label>
+              <label>名前<input id="profile-name-input" type="text" maxlength="40" required /></label>
+              <label>一言<textarea id="profile-bio-input" maxlength="50" rows="2" placeholder="今月もがんばる"></textarea></label>
+              <div class="actions"><button class="action-button primary" type="submit">保存</button><button class="action-button" id="cancel-profile" type="button">キャンセル</button></div>
+            </form>
+            <p class="status error" id="profile-error" hidden role="alert"></p>
+          </article>
+          <article class="card">
+            <h3>アカウント</h3>
+            <p class="profile-account-name" id="profile-account-name"></p>
+            <p class="profile-email" id="profile-email"></p>
+            <button class="action-button danger" id="logout-button" type="button">ログアウト</button>
+          </article>
+          <article class="card">
+            <h3>通知</h3>
+            <p class="card-description">この端末へのグループ予定・参加通知を設定します。</p>
+            <button class="action-button" id="push-toggle" type="button">通知を受け取る</button>
+            <p class="status" id="push-status" hidden role="status"></p>
+          </article>
+        </div>
       </section>
     </main>
 
-    <nav class="page-nav" aria-label="メインナビゲーション">
+    <nav class="page-nav" aria-label="メインナビゲーション" hidden>
       <button class="nav-button" type="button" data-page="shift" aria-current="page"><span class="nav-symbol" aria-hidden="true">◷</span><span>シフト</span></button>
       <button class="nav-button" type="button" data-page="my"><span class="nav-symbol" aria-hidden="true">⌂</span><span>カレンダー</span></button>
       <button class="nav-button" type="button" data-page="group"><span class="nav-symbol" aria-hidden="true">♧</span><span>共有</span></button>
+      <button class="nav-button" type="button" data-page="profile"><span class="nav-symbol" aria-hidden="true">◯</span><span>プロフィール</span></button>
     </nav>
   </body>
 </html>

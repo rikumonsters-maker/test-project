@@ -1,6 +1,7 @@
 {
-  "name": "Money Shift",
-  "short_name": "Money Shift",
+  "name": "DaySync",
+  "short_name": "DaySync",
+  "id": "/",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#f3f7f3",

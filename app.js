@@ -2,11 +2,14 @@ import { initShift } from "./shift.js";
 import { initBudget } from "./budget.js";
 import { initCalendar } from "./calendar.js";
 import { initShared } from "./shared.js";
+import { initProfile } from "./profile.js";
+import QrScanner from "./vendor/qr-scanner.min.js";
+import qrcode from "./vendor/qrcode-generator.js";
+import { LEGACY_STORAGE_KEY, userStorageKey, readStoredState, savePersonalState } from "./storage.mjs";
 
-const STORAGE_KEY = "money-app-v2";
 const API_BASE = ["localhost", "127.0.0.1"].includes(location.hostname)
-  ? "http://127.0.0.1:8787"
-  : "https://cloudflare-api.rikumonsters-api.workers.dev";
+  ? `http://${location.hostname}:8787`
+  : "";
 const CATEGORIES = ["食費", "交通", "娯楽", "買い物", "交際費", "固定費", "その他"];
 const money = new Intl.NumberFormat("ja-JP", { maximumFractionDigits:0 });
 const monthLabel = new Intl.DateTimeFormat("ja-JP", { year:"numeric", month:"long" });
@@ -14,12 +17,16 @@ const dateLabel = new Intl.DateTimeFormat("ja-JP", { year:"numeric", month:"long
 const $ = (id) => document.getElementById(id);
 const emptyBudget = { fixed:"", saving:"", spent:"" };
 
-function loadState() {
+let activeStorageKey = null;
+let currentUser = null;
+function emptyState() {
+  return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", budget:{ ...emptyBudget }, groups:[], pendingGroupMonths:{} };
+}
+function loadState(key) {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-    const groups = Array.isArray(saved.groups) ? saved.groups : (saved.shared && typeof saved.shared === "object" ? [saved.shared] : []);
+    const saved = readStoredState(localStorage, key);
     const pendingGroupMonths = saved.pendingGroupMonths && typeof saved.pendingGroupMonths === "object" ? saved.pendingGroupMonths : {};
-    if (!Array.isArray(saved.groups) && saved.shared?.groupId) {
+    if (key === LEGACY_STORAGE_KEY && !Array.isArray(saved.groups) && saved.shared?.groupId) {
       const pending = (pendingGroupMonths[saved.shared.groupId] ||= {});
       for (const key of [...Object.keys(saved.shifts || {}), ...Object.keys(saved.events || {})]) {
         if (/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(key)) pending[key.slice(0, 7)] = 1;
@@ -33,15 +40,15 @@ function loadState() {
       manualIncome:saved.manualIncome ?? "",
       incomeMode:saved.incomeMode === "manual" ? "manual" : "auto",
       budget:{ ...emptyBudget, ...(saved.budget || {}) },
-      groups,
+      groups:[],
       pendingGroupMonths,
     };
   } catch {
-    return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", budget:{ ...emptyBudget }, groups:[], pendingGroupMonths:{} };
+    return emptyState();
   }
 }
 
-const state = loadState();
+const state = emptyState();
 const today = new Date();
 const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 const view = {
@@ -77,7 +84,8 @@ function formatHours(minutes) {
   return `${(minutes / 60).toFixed(2).replace(/\.0+$|(?<=\.[0-9])0$/, "")}時間`;
 }
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (!activeStorageKey) return;
+  savePersonalState(localStorage, activeStorageKey, state);
 }
 function changeMonth(month, offset) {
   return new Date(month.getFullYear(), month.getMonth() + offset, 1);
@@ -100,11 +108,17 @@ function status(element, type, icon, headingText, message) {
 async function requestJson(path, { method = "POST", payload } = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     method,
+    credentials:"include",
     headers:{ "Content-Type":"application/json" },
     body:payload === undefined ? undefined : JSON.stringify(payload),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `通信に失敗しました（${response.status}）`);
+  if (response.status === 401 && !path.startsWith("/api/auth/")) void confirmSession();
+  if (!response.ok) {
+    const error = new Error(data.error || `通信に失敗しました（${response.status}）`);
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 async function postJson(path, payload) {
@@ -198,6 +212,8 @@ const app = {
   status,
   requestJson,
   postJson,
+  QrScanner,
+  qrcode,
   makeId,
   bindTimeInput,
   renderMonthCalendar,
@@ -209,6 +225,7 @@ const shared = initShared(app);
 app.shared = shared;
 const calendar = initCalendar(app);
 app.scheduleBudget = budget.schedule;
+let profile = null;
 
 let activeMyView = "calendar";
 
@@ -234,19 +251,147 @@ function setActivePage(pageName) {
   });
   if (pageName === "my") setMyView(activeMyView);
   if (pageName === "group") shared.showHome();
+  if (pageName === "profile") void profile?.refresh();
   window.scrollTo({ top:0, behavior:"instant" });
 }
 
-document.querySelectorAll(".nav-button").forEach((button) => {
-  button.addEventListener("click", () => setActivePage(button.dataset.page));
-});
+function authError(message = "") {
+  $("auth-error").textContent = message;
+  $("auth-error").hidden = !message;
+}
+function showAuth(mode = "login") {
+  document.body.classList.add("auth-mode");
+  $("auth-shell").hidden = false;
+  $("app-root").hidden = true;
+  document.querySelector(".page-nav").hidden = true;
+  $("auth-loading").hidden = true;
+  $("login-form").hidden = mode !== "login";
+  $("register-form").hidden = mode !== "register";
+  authError();
+}
+function showExpiredSession() {
+  currentUser = null;
+  activeStorageKey = null;
+  showAuth();
+  authError("ログインの有効期限が切れました。再度ログインしてください。");
+}
+async function confirmSession() {
+  try {
+    await requestJson("/api/auth/me", { method:"GET" });
+  } catch (error) {
+    if (error.status === 401) showExpiredSession();
+  }
+}
 
-document.querySelectorAll("[data-my-view]").forEach((button) => {
-  button.addEventListener("click", () => setMyView(button.dataset.myView));
-});
+async function importLegacy() {
+  const error = $("legacy-error");
+  error.hidden = true;
+  try {
+    const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (!raw) throw new Error("引き継ぐデータが見つかりません。");
+    const legacy = JSON.parse(raw);
+    const groups = Array.isArray(legacy.groups) ? legacy.groups : (legacy.shared?.groupId ? [legacy.shared] : []);
+    for (const group of groups) {
+      if (group.groupId && group.memberId && group.memberToken) {
+        await requestJson("/api/groups/claim", { payload:{ groupId:group.groupId, memberId:group.memberId, memberToken:group.memberToken } });
+      }
+    }
+    Object.assign(state, loadState(LEGACY_STORAGE_KEY));
+    state.groups = (await requestJson("/api/groups/mine", { payload:{} })).groups || [];
+    saveState();
+    for (const group of groups) delete group.memberToken;
+    if (legacy.shared) delete legacy.shared.memberToken;
+    localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(legacy));
+    location.reload();
+  } catch (importError) {
+    error.textContent = `引き継ぎできませんでした。${importError.message}`;
+    error.hidden = false;
+  }
+}
 
-shift.init();
-budget.init();
-shared.init();
-calendar.init();
-shift.calculateWage();
+async function startApp(user) {
+  currentUser = user;
+  activeStorageKey = userStorageKey(user.id);
+  const alreadySaved = localStorage.getItem(activeStorageKey) !== null;
+  Object.assign(state, loadState(activeStorageKey));
+  state.groups = (await requestJson("/api/groups/mine", { payload:{} })).groups || [];
+  $("account-name").textContent = user.displayName;
+  document.body.classList.remove("auth-mode");
+  $("auth-shell").hidden = true;
+  $("app-root").hidden = false;
+  document.querySelector(".page-nav").hidden = false;
+  document.querySelectorAll(".nav-button").forEach((button) => {
+    button.addEventListener("click", () => setActivePage(button.dataset.page));
+  });
+  document.querySelectorAll("[data-my-view]").forEach((button) => {
+    button.addEventListener("click", () => setMyView(button.dataset.myView));
+  });
+  shift.init();
+  budget.init();
+  shared.init();
+  calendar.init();
+  if (!profile) profile = initProfile({
+    requestJson,
+    onNameChange:(name) => { currentUser.displayName = name; $("account-name").textContent = name; },
+    onLogout:() => {
+      currentUser = null;
+      activeStorageKey = null;
+      Object.assign(state, emptyState());
+      $("app-root").hidden = true;
+      document.querySelector(".page-nav").hidden = true;
+      location.reload();
+    },
+  });
+  shift.calculateWage();
+  const dismissKey = `daysync-legacy-dismissed-${user.id}`;
+  $("legacy-import").hidden = alreadySaved || !localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(dismissKey) === "1";
+  $("import-legacy").addEventListener("click", () => void importLegacy());
+  $("dismiss-legacy").addEventListener("click", () => { localStorage.setItem(dismissKey, "1"); $("legacy-import").hidden = true; });
+  const inviteFromUrl = new URLSearchParams(window.location.search).get("invite");
+  if (inviteFromUrl?.trim()) {
+    $("group-invite-code").value = inviteFromUrl.trim().slice(0, 40);
+    setActivePage("group");
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.searchParams.delete("invite");
+    window.history.replaceState(window.history.state, "", cleanUrl);
+    $("group-invite-code").focus({ preventScroll:true });
+  } else {
+    const groupFromUrl = new URLSearchParams(window.location.search).get("group");
+    if (groupFromUrl && state.groups.some((group) => group.groupId === groupFromUrl)) {
+      setActivePage("group");
+      shared.openCalendar(groupFromUrl);
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("group");
+      window.history.replaceState(window.history.state, "", cleanUrl);
+    }
+  }
+}
+
+$("account-open").addEventListener("click", () => setActivePage("profile"));
+
+$("show-register").addEventListener("click", () => showAuth("register"));
+$("show-login").addEventListener("click", () => showAuth("login"));
+$("login-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  authError();
+  const button = $("login-form").querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    await requestJson("/api/auth/login", { payload:{ email:$("login-email").value, password:$("login-password").value } });
+    location.reload();
+  } catch (error) { authError(error.message); button.disabled = false; }
+});
+$("register-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  authError();
+  if ($("register-password").value !== $("register-confirm").value) return authError("確認用パスワードが一致しません。");
+  const button = $("register-form").querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    await requestJson("/api/auth/register", { payload:{ displayName:$("register-name").value, email:$("register-email").value, password:$("register-password").value, passwordConfirm:$("register-confirm").value } });
+    location.reload();
+  } catch (error) { authError(error.message); button.disabled = false; }
+});
+requestJson("/api/auth/me", { method:"GET" })
+  .then(({ user }) => startApp(user))
+  .catch((error) => { showAuth(); if (error.status !== 401) authError(`ログイン状態を確認できませんでした。${error.message}`); });
