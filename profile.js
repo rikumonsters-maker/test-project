@@ -12,6 +12,13 @@ function profileError(message = '') {
   $('profile-error').hidden = !message;
 }
 
+function statusResult(message = '', kind = '') {
+  const element = $('profile-status-result');
+  element.textContent = message;
+  element.className = `status ${kind}`.trim();
+  element.hidden = !message;
+}
+
 function supportsPush() {
   return window.isSecureContext && Boolean(navigator.serviceWorker?.register) &&
     typeof window.PushManager === 'function' && typeof window.Notification?.requestPermission === 'function';
@@ -40,6 +47,7 @@ export function initProfile({ requestJson, onLogout, onNameChange }) {
   let registrationPromise = null;
   let enabled = false;
   let publicKey = null;
+  let statusExpiryTimer = null;
 
   async function registration() {
     if (!registrationPromise) registrationPromise = navigator.serviceWorker.register('/sw.js', { scope:'/' });
@@ -48,15 +56,26 @@ export function initProfile({ requestJson, onLogout, onNameChange }) {
 
   function showProfile(profile) {
     currentProfile = profile;
+    if (statusExpiryTimer) clearTimeout(statusExpiryTimer);
+    statusExpiryTimer = null;
+    const expiresAt = Date.parse(profile.statusExpiresAt || '');
+    const activeStatus = profile.statusMessage && expiresAt > Date.now() ? profile.statusMessage : '';
     $('profile-icon').textContent = profile.profileIcon;
     $('profile-name').textContent = profile.displayName;
-    $('profile-bio').textContent = profile.bio || '一言はまだありません';
+    $('profile-status-message').textContent = activeStatus;
+    $('profile-current-status').hidden = !activeStatus;
     $('profile-account-name').textContent = profile.displayName;
     $('profile-email').textContent = profile.email;
     $('profile-icon-input').value = profile.profileIcon;
     $('profile-name-input').value = profile.displayName;
-    $('profile-bio-input').value = profile.bio;
-    onNameChange(profile.displayName);
+    $('profile-status-input').value = activeStatus;
+    if (activeStatus) statusExpiryTimer = setTimeout(() => {
+      $('profile-status-message').textContent = '';
+      $('profile-current-status').hidden = true;
+      if ($('profile-status-input').value === activeStatus) $('profile-status-input').value = '';
+      statusExpiryTimer = null;
+    }, Math.max(1, expiresAt - Date.now() + 20));
+    onNameChange(profile.displayName, profile.profileIcon);
   }
 
   function updateToggle() {
@@ -147,12 +166,23 @@ export function initProfile({ requestJson, onLogout, onNameChange }) {
       const { profile } = await requestJson('/api/profile/update', { payload:{
         profileIcon:$('profile-icon-input').value,
         displayName:$('profile-name-input').value,
-        bio:$('profile-bio-input').value,
       } });
       showProfile(profile);
       $('profile-form').hidden = true;
       $('edit-profile').hidden = false;
     } catch (error) { profileError(error.message); }
+    finally { button.disabled = false; }
+  });
+  $('profile-status-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const button = $('profile-status-form').querySelector('[type=submit]');
+    button.disabled = true;
+    statusResult();
+    try {
+      const { profile } = await requestJson('/api/profile/status', { payload:{ statusMessage:$('profile-status-input').value } });
+      showProfile(profile);
+      statusResult(profile.statusMessage ? '更新しました。7日後に自動で消えます。' : '今やりたいことを削除しました。', 'safe');
+    } catch (error) { statusResult(error.message, 'error'); }
     finally { button.disabled = false; }
   });
   $('push-toggle').addEventListener('click', async () => {

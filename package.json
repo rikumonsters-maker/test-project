@@ -1,6 +1,7 @@
 {
   "name": "money-app-frontend",
   "private": true,
+  "scripts": { "dev": "node dev-server.mjs" },
   "dependencies": {
     "qrcode-generator": "2.0.4",
     "qr-scanner": "1.4.2"

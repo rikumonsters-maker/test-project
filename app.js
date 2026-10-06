@@ -6,10 +6,8 @@ import { initProfile } from "./profile.js";
 import QrScanner from "./vendor/qr-scanner.min.js";
 import qrcode from "./vendor/qrcode-generator.js";
 import { LEGACY_STORAGE_KEY, userStorageKey, readStoredState, savePersonalState } from "./storage.mjs";
+import { API_BASE } from "./config.mjs";
 
-const API_BASE = ["localhost", "127.0.0.1"].includes(location.hostname)
-  ? `http://${location.hostname}:8787`
-  : "";
 const CATEGORIES = ["食費", "交通", "娯楽", "買い物", "交際費", "固定費", "その他"];
 const money = new Intl.NumberFormat("ja-JP", { maximumFractionDigits:0 });
 const monthLabel = new Intl.DateTimeFormat("ja-JP", { year:"numeric", month:"long" });
@@ -138,7 +136,7 @@ function bindTimeInput(fieldId, pickerId) {
   picker.addEventListener("input", () => { field.value = picker.value; });
   picker.addEventListener("change", () => { field.value = picker.value; });
 }
-function renderMonthCalendar({ calendarId, month, selectedDate, mode, onSelect, getEntries }) {
+function renderMonthCalendar({ calendarId, month, selectedDate, mode, onSelect, getEntries, maxEntries = Infinity }) {
   const calendar = $(calendarId);
   calendar.querySelectorAll(".calendar-day").forEach((cell) => cell.remove());
   $(calendar.dataset.monthLabel).textContent = monthLabel.format(month);
@@ -164,11 +162,18 @@ function renderMonthCalendar({ calendarId, month, selectedDate, mode, onSelect, 
 
     const value = getEntries ? getEntries(key) : calendarValue(mode, key);
     if (Array.isArray(value)) {
-      for (const entry of value) {
+      for (const entry of value.slice(0, maxEntries)) {
         const detail = document.createElement("span");
-        detail.className = `day-value ${entry.type === "shift" ? "calendar-shift" : "calendar-event"}`;
+        detail.className = `day-value ${entry.type === "busy" ? "calendar-busy" : entry.type === "wish" ? "calendar-wish" : entry.type === "tentative" ? "calendar-tentative" : entry.type === "shift" ? "calendar-shift" : "calendar-event"}`;
         detail.textContent = entry.label;
+        if (entry.ariaLabel) detail.title = entry.ariaLabel;
         cell.append(detail);
+      }
+      if (value.length > maxEntries) {
+        const more = document.createElement("span");
+        more.className = "calendar-more";
+        more.textContent = `ほか${value.length - maxEntries}件`;
+        cell.append(more);
       }
       if (value.length) cell.classList.add("has-entry");
     } else if (value) {
@@ -178,7 +183,7 @@ function renderMonthCalendar({ calendarId, month, selectedDate, mode, onSelect, 
       detail.textContent = value;
       cell.append(detail);
     }
-    const accessibleValue = Array.isArray(value) ? value.map((entry) => entry.label).join("、") : value;
+    const accessibleValue = Array.isArray(value) ? value.map((entry) => entry.ariaLabel || entry.label).join("、") : value;
     cell.setAttribute("aria-label", `${dateLabel.format(date)}${accessibleValue ? `、${accessibleValue}` : ""}`);
     cell.addEventListener("click", () => onSelect(key, date));
     calendar.append(cell);
@@ -316,6 +321,11 @@ async function startApp(user) {
   Object.assign(state, loadState(activeStorageKey));
   state.groups = (await requestJson("/api/groups/mine", { payload:{} })).groups || [];
   $("account-name").textContent = user.displayName;
+  $("account-icon").textContent = "🌿";
+  try {
+    const { profile:headerProfile } = await requestJson("/api/profile", { method:"GET" });
+    $("account-icon").textContent = headerProfile.profileIcon || "🌿";
+  } catch { /* The account button remains available if profile loading fails. */ }
   document.body.classList.remove("auth-mode");
   $("auth-shell").hidden = true;
   $("app-root").hidden = false;
@@ -332,7 +342,11 @@ async function startApp(user) {
   calendar.init();
   if (!profile) profile = initProfile({
     requestJson,
-    onNameChange:(name) => { currentUser.displayName = name; $("account-name").textContent = name; },
+    onNameChange:(name, icon) => {
+      currentUser.displayName = name;
+      $("account-name").textContent = name;
+      $("account-icon").textContent = icon || "🌿";
+    },
     onLogout:() => {
       currentUser = null;
       activeStorageKey = null;
