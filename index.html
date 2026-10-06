@@ -108,9 +108,8 @@
         </div>
       </section>
 
-      <section class="page-panel" id="page-my" aria-labelledby="my-page-title" hidden>
-        <div class="page-heading">
-          <h2 id="my-page-title">マイ</h2>
+      <section class="page-panel" id="page-my" aria-label="カレンダー" hidden>
+        <div class="page-heading my-heading">
           <p>個人予定と家計簿</p>
         </div>
         <nav class="segmented my-view-tabs" role="tablist" aria-label="マイの表示">
@@ -346,10 +345,35 @@
     </main>
 
     <nav class="page-nav" aria-label="メインナビゲーション" hidden>
-      <button class="nav-button" type="button" data-page="shift" aria-current="page"><span class="nav-symbol" aria-hidden="true">◷</span><span>シフト</span></button>
-      <button class="nav-button" type="button" data-page="my"><span class="nav-symbol" aria-hidden="true">⌂</span><span>カレンダー</span></button>
-      <button class="nav-button" type="button" data-page="group"><span class="nav-symbol" aria-hidden="true">♧</span><span>共有</span></button>
-      <button class="nav-button" type="button" data-page="profile"><span class="nav-symbol" aria-hidden="true">◯</span><span>プロフィール</span></button>
+      <button class="nav-button" type="button" data-page="shift" aria-current="page">
+        <span class="nav-symbol" aria-hidden="true">
+          <svg viewBox="0 0 32 32" focusable="false">
+            <rect class="nav-icon-fill" x="4" y="8" width="20" height="18" rx="4" />
+            <path d="M10 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M4 14h17M11 14v3h5v-3" />
+            <circle class="nav-icon-face" cx="23" cy="23" r="7" />
+            <path d="M23 19v4l2.5 1.5" />
+          </svg>
+        </span><span>シフト</span>
+      </button>
+      <button class="nav-button" type="button" data-page="my">
+        <span class="nav-symbol" aria-hidden="true">
+          <svg viewBox="0 0 32 32" focusable="false">
+            <rect class="nav-icon-fill" x="5" y="6" width="22" height="23" rx="4" />
+            <path d="M5 13h22M11 3v6M21 3v6M10 18h2M20 18h2M10 24h2" />
+            <path d="m18 23 2 2 4-4" />
+          </svg>
+        </span><span>カレンダー</span>
+      </button>
+      <button class="nav-button" type="button" data-page="group">
+        <span class="nav-symbol" aria-hidden="true">
+          <svg viewBox="0 0 32 32" focusable="false">
+            <path class="nav-icon-fill" d="M3 24v-2a5 5 0 0 1 8-4M29 24v-2a5 5 0 0 0-8-4" />
+            <circle cx="7" cy="11" r="3" /><circle cx="25" cy="11" r="3" />
+            <circle class="nav-icon-fill" cx="16" cy="9" r="4" />
+            <path class="nav-icon-fill" d="M9 27v-3a7 7 0 0 1 14 0v3Z" />
+          </svg>
+        </span><span>共有</span>
+      </button>
     </nav>
   </body>
 </html>
