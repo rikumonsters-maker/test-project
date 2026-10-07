@@ -4,6 +4,7 @@ export function initShared(app) {
   const { $, state, view, parseDate, requestJson, saveState, renderMonthCalendar, changeMonth, dateLabel, QrScanner, qrcode } = app;
   let activeGroupId = null;
   let selectedGroupId = null;
+  let managedGroupId = null;
   let inviteScanner = null;
   let inviteScanHandled = false;
   let scannerGeneration = 0;
@@ -52,6 +53,7 @@ export function initShared(app) {
     memberExpiryTimer = null;
   }
   function showHome() {
+    closeGroupManagement();
     closeStatusInvite();
     closeWishEditor();
     $("group-home").hidden = false;
@@ -70,13 +72,24 @@ export function initShared(app) {
     const name = document.createElement("button");
     name.type = "button";
     name.className = "group-name-button";
-    name.textContent = group.groupName;
+    const nameText = document.createElement("span");
+    nameText.className = "group-name-text";
+    nameText.textContent = group.groupName;
+    name.append(nameText);
     name.setAttribute("aria-label", `${group.groupName}の共有カレンダーを表示`);
     name.setAttribute("aria-pressed", String(group.groupId === selectedGroupId));
     name.addEventListener("click", () => openCalendar(group.groupId));
     const avatar = groupImage(group, "group-card-image");
     name.prepend(avatar);
-    heading.append(name);
+    const manage = document.createElement("button");
+    manage.type = "button";
+    manage.className = "group-manage-button";
+    manage.dataset.groupId = group.groupId;
+    manage.textContent = "⋯";
+    manage.setAttribute("aria-label", `${group.groupName}の管理`);
+    manage.setAttribute("aria-haspopup", "dialog");
+    manage.addEventListener("click", () => openGroupManagement(group));
+    heading.append(name, manage);
     const member = document.createElement("p");
     member.className = "group-member";
     member.textContent = `${group.memberName} として参加中`;
@@ -109,16 +122,24 @@ export function initShared(app) {
     showQr.textContent = "QRコードを表示";
     showQr.disabled = !group.inviteCode;
     showQr.addEventListener("click", () => showInviteQr(group));
-    const actions = document.createElement("div");
-    actions.className = "actions";
-    const leave = document.createElement("button");
-    leave.type = "button";
-    leave.className = "action-button danger";
-    leave.textContent = "グループから退出";
-    leave.addEventListener("click", () => void leaveGroup(group));
-    actions.append(leave);
-    card.append(heading, member, label, showQr, actions);
+    card.append(heading, member, label, showQr);
     return card;
+  }
+  function openGroupManagement(group) {
+    managedGroupId = group.groupId;
+    $("group-manage-name").textContent = group.groupName;
+    $("group-image-delete").hidden = !group.hasImage;
+    setError("", "group-image-error");
+    $("group-image-status").hidden = true;
+    setImageBusy(false);
+    $("group-manage-dialog").showModal();
+  }
+  function closeGroupManagement() {
+    const dialog = $("group-manage-dialog");
+    if (dialog.open) dialog.close();
+  }
+  function setImageBusy(busy) {
+    ["group-image-change", "group-image-delete", "group-manage-leave"].forEach(id => { $(id).disabled = busy; });
   }
   function groupImage(group, className = "") {
     if (!group.hasImage) {
@@ -136,7 +157,6 @@ export function initShared(app) {
   }
   function updateGroupImage(group) {
     $("group-calendar-image").replaceWith(Object.assign(groupImage(group), { id:"group-calendar-image" }));
-    $("group-image-delete").hidden = !group.hasImage;
   }
   async function prepareGroupImage(file) {
     if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("JPEG、PNG、WebP画像を選択してください。");
@@ -155,48 +175,54 @@ export function initShared(app) {
     } finally { bitmap.close(); }
   }
   async function changeGroupImage(file) {
-    const group = activeGroup();
+    const group = memberships().find(item => item.groupId === managedGroupId);
     if (!group) return;
     setError("", "group-image-error");
+    $("group-image-status").hidden = true;
+    setImageBusy(true);
     try {
       const blob = await prepareGroupImage(file);
-      const preview = URL.createObjectURL(blob);
-      const original = $("group-calendar-image");
-      const image = document.createElement("img");
-      image.id = "group-calendar-image";
-      image.className = "group-image";
-      image.alt = "";
-      image.src = preview;
-      original.replaceWith(image);
       const response = await fetch(`${API_BASE}/api/groups/image?groupId=${encodeURIComponent(group.groupId)}`, {
         method:"POST", credentials:"include", headers:{ "Content-Type":"image/webp" }, body:blob,
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "画像を保存できませんでした。");
+      if (!response.ok) throw new Error([404, 503].includes(response.status) ? "画像機能は準備中です。" : data.error || "画像を保存できませんでした。");
       group.hasImage = true;
       group.imageVersion = data.avatarUpdatedAt;
       saveState();
       renderGroups();
-      updateGroupImage(group);
-      URL.revokeObjectURL(preview);
+      if (activeGroupId === group.groupId) updateGroupImage(group);
+      if (managedGroupId === group.groupId) {
+        $("group-image-delete").hidden = false;
+        $("group-image-status").textContent = "グループ画像を変更しました。";
+        $("group-image-status").hidden = false;
+      }
     } catch (error) {
-      updateGroupImage(group);
-      setError(error.message || "画像を保存できませんでした。", "group-image-error");
-    }
+      if (managedGroupId === group.groupId) setError(error.message || "画像を保存できませんでした。", "group-image-error");
+    } finally { if (managedGroupId === group.groupId) setImageBusy(false); }
   }
   async function deleteGroupImage() {
-    const group = activeGroup();
+    const group = memberships().find(item => item.groupId === managedGroupId);
     if (!group || !window.confirm("グループ画像を削除しますか？")) return;
+    setError("", "group-image-error");
+    $("group-image-status").hidden = true;
+    setImageBusy(true);
     try {
       const response = await fetch(`${API_BASE}/api/groups/image?groupId=${encodeURIComponent(group.groupId)}`, { method:"DELETE", credentials:"include" });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "画像を削除できませんでした。");
+      if (!response.ok) throw new Error([404, 503].includes(response.status) ? "画像機能は準備中です。" : data.error || "画像を削除できませんでした。");
       group.hasImage = false;
       group.imageVersion = null;
       saveState();
       renderGroups();
-      updateGroupImage(group);
-    } catch (error) { setError(error.message || "画像を削除できませんでした。", "group-image-error"); }
+      if (activeGroupId === group.groupId) updateGroupImage(group);
+      if (managedGroupId === group.groupId) {
+        $("group-image-delete").hidden = true;
+        $("group-image-status").textContent = "グループ画像を削除しました。";
+        $("group-image-status").hidden = false;
+      }
+    } catch (error) { if (managedGroupId === group.groupId) setError(error.message || "画像を削除できませんでした。", "group-image-error"); }
+    finally { if (managedGroupId === group.groupId) setImageBusy(false); }
   }
   function showInviteQr(group) {
     const url = new URL(window.location.href);
@@ -860,16 +886,19 @@ export function initShared(app) {
   }
   async function leaveGroup(group) {
     if (!window.confirm(`${group.groupName}から退出しますか？共有済みのあなたの予定もグループから削除されます。`)) return;
+    setError("", "group-image-error");
+    setImageBusy(true);
     try {
       await requestJson("/api/groups/leave", { payload:credentials(group) });
       state.groups = state.groups.filter((item) => item.groupId !== group.groupId);
       delete state.pendingGroupMonths[group.groupId];
       saveState();
+      closeGroupManagement();
       renderGroups();
       setStatus(`${group.groupName}から退出しました。`, "safe");
     } catch (error) {
-      setError(error.message || "グループから退出できませんでした。");
-    }
+      setError(error.message || "グループから退出できませんでした。", managedGroupId === group.groupId ? "group-image-error" : "group-error");
+    } finally { if (managedGroupId === group.groupId) setImageBusy(false); }
   }
   function init() {
     $("create-group-form").addEventListener("submit", (event) => void submitGroup(event, "/api/groups/create", () => ({ name:$("group-name").value.trim(), memberName:$("group-member-name").value.trim() })));
@@ -887,13 +916,21 @@ export function initShared(app) {
       if (file) void changeGroupImage(file);
       event.target.value = "";
     });
-    document.querySelector(".group-image-label").addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        $("group-image-file").click();
-      }
-    });
+    $("group-image-change").addEventListener("click", () => $("group-image-file").click());
     $("group-image-delete").addEventListener("click", () => void deleteGroupImage());
+    $("close-group-manage").addEventListener("click", closeGroupManagement);
+    $("group-manage-dialog").addEventListener("click", (event) => {
+      if (event.target === $("group-manage-dialog")) closeGroupManagement();
+    });
+    $("group-manage-dialog").addEventListener("close", () => {
+      const opener = [...document.querySelectorAll(".group-manage-button")].find(button => button.dataset.groupId === managedGroupId);
+      managedGroupId = null;
+      opener?.focus({ preventScroll:true });
+    });
+    $("group-manage-leave").addEventListener("click", () => {
+      const group = memberships().find(item => item.groupId === managedGroupId);
+      if (group) void leaveGroup(group);
+    });
     $("group-wish-all-day").addEventListener("change", updateWishTimeState);
     $("group-wish-cancel").addEventListener("click", closeWishEditor);
     $("group-wish-dialog").addEventListener("click", (event) => {

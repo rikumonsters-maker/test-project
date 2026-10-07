@@ -7,6 +7,7 @@ import QrScanner from "./vendor/qr-scanner.min.js";
 import qrcode from "./vendor/qrcode-generator.js";
 import { LEGACY_STORAGE_KEY, userStorageKey, readStoredState, savePersonalState } from "./storage.mjs";
 import { API_BASE } from "./config.mjs";
+import { initTheme, normalizeTheme, setTheme } from "./theme.mjs";
 
 const CATEGORIES = ["食費", "交通", "娯楽", "買い物", "交際費", "固定費", "その他"];
 const money = new Intl.NumberFormat("ja-JP", { maximumFractionDigits:0 });
@@ -18,7 +19,7 @@ const emptyBudget = { fixed:"", saving:"", spent:"" };
 let activeStorageKey = null;
 let currentUser = null;
 function emptyState() {
-  return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", budget:{ ...emptyBudget }, groups:[], pendingGroupMonths:{} };
+  return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", theme:"system", budget:{ ...emptyBudget }, groups:[], pendingGroupMonths:{} };
 }
 function loadState(key) {
   try {
@@ -37,6 +38,7 @@ function loadState(key) {
       hourly:saved.hourly ?? "",
       manualIncome:saved.manualIncome ?? "",
       incomeMode:saved.incomeMode === "manual" ? "manual" : "auto",
+      theme:normalizeTheme(saved.theme),
       budget:{ ...emptyBudget, ...(saved.budget || {}) },
       groups:[],
       pendingGroupMonths,
@@ -277,6 +279,7 @@ function showAuth(mode = "login") {
 function showExpiredSession() {
   currentUser = null;
   activeStorageKey = null;
+  setTheme("system");
   showAuth();
   authError("ログインの有効期限が切れました。再度ログインしてください。");
 }
@@ -319,6 +322,7 @@ async function startApp(user) {
   activeStorageKey = userStorageKey(user.id);
   const alreadySaved = localStorage.getItem(activeStorageKey) !== null;
   Object.assign(state, loadState(activeStorageKey));
+  setTheme(state.theme);
   state.groups = (await requestJson("/api/groups/mine", { payload:{} })).groups || [];
   $("account-name").textContent = user.displayName;
   $("account-icon").textContent = "🌿";
@@ -350,6 +354,7 @@ async function startApp(user) {
     onLogout:() => {
       currentUser = null;
       activeStorageKey = null;
+      setTheme("system");
       Object.assign(state, emptyState());
       $("app-root").hidden = true;
       document.querySelector(".page-nav").hidden = true;
@@ -382,6 +387,11 @@ async function startApp(user) {
 }
 
 $("account-open").addEventListener("click", () => setActivePage("profile"));
+initTheme((theme) => {
+  if (!activeStorageKey) return;
+  state.theme = theme;
+  saveState();
+});
 
 $("show-register").addEventListener("click", () => showAuth("register"));
 $("show-login").addEventListener("click", () => showAuth("login"));

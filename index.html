@@ -241,6 +241,7 @@
           <p>メンバーと共有予定</p>
         </div>
         <div id="group-home" class="group-home">
+          <h3 class="group-list-title">参加中のグループ</h3>
           <div id="group-list" class="group-list" aria-label="参加中のグループ"></div>
           <article class="card" id="group-card">
             <h3>グループを追加</h3>
@@ -273,12 +274,6 @@
           <header class="card group-header-block">
             <button class="group-back-link" id="back-to-groups" type="button">← グループ一覧</button>
             <div class="group-calendar-heading"><span id="group-calendar-image" class="group-image-placeholder" aria-hidden="true">🌿</span><div><h3 class="group-calendar-name" id="group-calendar-name"></h3><p>共有カレンダー</p></div></div>
-          <div class="group-image-actions">
-            <label class="action-button group-image-label" for="group-image-file" tabindex="0" role="button">画像変更</label>
-            <input id="group-image-file" type="file" accept="image/jpeg,image/png,image/webp" hidden />
-            <button class="action-button" id="group-image-delete" type="button">画像を削除</button>
-          </div>
-          <p class="status error" id="group-image-error" hidden role="alert"></p>
           </header>
           <section class="group-action-block" aria-labelledby="group-actions-title">
             <div><h3 id="group-actions-title" class="group-block-title">アクション</h3><p>遊びたい日から、共有予定へ。</p></div>
@@ -334,6 +329,19 @@
           </section>
         </div>
 
+        <dialog class="qr-dialog group-manage-dialog" id="group-manage-dialog" aria-labelledby="group-manage-title">
+          <button class="action-button qr-dialog-close" id="close-group-manage" type="button">閉じる</button>
+          <h3 id="group-manage-title">グループ管理</h3>
+          <p id="group-manage-name" class="card-description"></p>
+          <div class="form-stack">
+            <button class="action-button" id="group-image-change" type="button">グループ画像を変更</button>
+            <input id="group-image-file" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+            <button class="action-button" id="group-image-delete" type="button">グループ画像を削除</button>
+            <button class="action-button danger" id="group-manage-leave" type="button">グループから退出</button>
+          </div>
+          <p class="status error" id="group-image-error" hidden role="alert"></p>
+          <p class="status safe" id="group-image-status" hidden role="status"></p>
+        </dialog>
         <dialog class="qr-dialog" id="group-invite-qr-dialog" aria-labelledby="group-invite-qr-title">
           <button class="action-button qr-dialog-close" id="close-group-invite-qr" type="button">閉じる</button>
           <h3 id="group-invite-qr-title">グループに招待</h3>
@@ -417,6 +425,15 @@
             <p class="profile-account-name" id="profile-account-name"></p>
             <p class="profile-email" id="profile-email"></p>
             <button class="action-button danger" id="logout-button" type="button">ログアウト</button>
+          </article>
+          <article class="card">
+            <h3>表示設定</h3>
+            <p class="card-description" id="theme-label">テーマ</p>
+            <div class="segmented theme-choices" role="group" aria-labelledby="theme-label">
+              <button type="button" data-theme-choice="light" aria-pressed="false">ライト</button>
+              <button type="button" data-theme-choice="dark" aria-pressed="false">ダーク</button>
+              <button type="button" data-theme-choice="system" aria-pressed="true">端末設定</button>
+            </div>
           </article>
           <article class="card">
             <h3>通知</h3>
