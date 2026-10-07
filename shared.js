@@ -128,6 +128,7 @@ export function initShared(app) {
   function openGroupManagement(group) {
     managedGroupId = group.groupId;
     $("group-manage-name").textContent = group.groupName;
+    setRenameMode(false);
     $("group-image-delete").hidden = !group.hasImage;
     setError("", "group-image-error");
     $("group-image-status").hidden = true;
@@ -139,7 +140,7 @@ export function initShared(app) {
     if (dialog.open) dialog.close();
   }
   function setImageBusy(busy) {
-    ["group-image-change", "group-image-delete", "group-manage-leave"].forEach(id => { $(id).disabled = busy; });
+    ["group-rename-open", "group-rename-save", "group-rename-cancel", "group-image-change", "group-image-delete", "group-manage-leave"].forEach(id => { $(id).disabled = busy; });
   }
   function groupImage(group, className = "") {
     if (!group.hasImage) {
@@ -326,6 +327,38 @@ export function initShared(app) {
     } else {
       groups.forEach((group) => list.append(groupCard(group)));
     }
+  }
+  function setRenameMode(editing) {
+    $("group-manage-actions").hidden = editing;
+    $("group-rename-form").hidden = !editing;
+    setError("", "group-rename-error");
+    if (editing) {
+      const group = memberships().find(item => item.groupId === managedGroupId);
+      if (!group) return;
+      $("group-rename-input").value = group.groupName;
+      $("group-rename-input").focus({ preventScroll:true });
+    }
+  }
+  async function saveGroupName(event) {
+    event.preventDefault();
+    const group = memberships().find(item => item.groupId === managedGroupId);
+    if (!group) return;
+    const name = $("group-rename-input").value.trim();
+    if (!name) return setError("グループ名を入力してください。", "group-rename-error");
+    if (name.length > 60) return setError("グループ名は60文字以内で入力してください。", "group-rename-error");
+    setImageBusy(true);
+    try {
+      const result = await requestJson("/api/groups/rename", { payload:{ groupId:group.groupId, name } });
+      group.groupName = result.groupName || name;
+      renderGroups();
+      if (selectedGroupId === group.groupId) $("group-calendar-name").textContent = group.groupName;
+      $("group-manage-name").textContent = group.groupName;
+      setRenameMode(false);
+      $("group-image-status").textContent = "グループ名を変更しました。";
+      $("group-image-status").hidden = false;
+    } catch {
+      setError("グループ名を変更できませんでした。", "group-rename-error");
+    } finally { setImageBusy(false); }
   }
   function appendEmptyState(container, text) {
     const empty = document.createElement("p");
@@ -918,12 +951,16 @@ export function initShared(app) {
     });
     $("group-image-change").addEventListener("click", () => $("group-image-file").click());
     $("group-image-delete").addEventListener("click", () => void deleteGroupImage());
+    $("group-rename-open").addEventListener("click", () => setRenameMode(true));
+    $("group-rename-form").addEventListener("submit", event => void saveGroupName(event));
+    $("group-rename-cancel").addEventListener("click", () => setRenameMode(false));
     $("close-group-manage").addEventListener("click", closeGroupManagement);
     $("group-manage-dialog").addEventListener("click", (event) => {
       if (event.target === $("group-manage-dialog")) closeGroupManagement();
     });
     $("group-manage-dialog").addEventListener("close", () => {
       const opener = [...document.querySelectorAll(".group-manage-button")].find(button => button.dataset.groupId === managedGroupId);
+      setRenameMode(false);
       managedGroupId = null;
       opener?.focus({ preventScroll:true });
     });
