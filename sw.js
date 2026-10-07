@@ -1,9 +1,15 @@
+import { resolvePublicAppOrigin } from './config.mjs';
+
+const appOrigin = resolvePublicAppOrigin(self.location);
+
 function safeUrl(value) {
   try {
-    const destination = new URL(typeof value === 'string' ? value : '/', self.location.origin);
-    if (destination.origin === self.location.origin) return destination.href;
+    const destination = new URL(typeof value === 'string' ? value : '/', appOrigin);
+    if (destination.origin === appOrigin || destination.origin === self.location.origin) {
+      return new URL(destination.pathname + destination.search + destination.hash, appOrigin).href;
+    }
   } catch { /* Ignore malformed notification destinations. */ }
-  return new URL('/', self.location.origin).href;
+  return new URL('/', appOrigin).href;
 }
 
 self.addEventListener('push', (event) => {
@@ -24,7 +30,7 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
     for (const client of windows) {
-      if (new URL(client.url).origin !== self.location.origin) continue;
+      if (new URL(client.url).origin !== appOrigin) continue;
       try {
         const navigated = 'navigate' in client ? await client.navigate(url) : null;
         if (navigated) return navigated.focus();

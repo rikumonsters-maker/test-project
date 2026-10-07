@@ -1,5 +1,11 @@
 # DaySync frontend
 
+正式な公開URL: https://daysync-app.vercel.app/
+
+正式Originは `config.mjs` の `PUBLIC_APP_ORIGIN` に集約しています。QR招待と通知タップはこのURLを使用し、API・manifest・PWAアイコンは相対パスを維持します。
+
+旧URL https://test-project-nu-one-12.vercel.app/ も移行期間中は利用できます。Cookie・localStorage・Push購読・ホーム画面アプリはOriginごとに保存されるため、新URLでは一度ログインしてください。旧URLの個人データは削除されませんが、新URLへ自動コピーされません。既存の個人データを確認する際は旧URLを使用してください。
+
 ## ローカル認証の確認
 
 VS Codeでターミナルを2つ開き、次を実行します。PowerShellでは `npm.cmd` を使用できます。

@@ -1,3 +1,5 @@
+import { createInviteUrl } from './config.mjs';
+
 const GROUP_ICONS = [
   { id:"friends", label:"\u53cb\u9054", paths:["M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM16 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM2.5 20a5.5 5.5 0 0 1 11 0M10.5 20a5.5 5.5 0 0 1 11 0"] },
   { id:"university", label:"\u5927\u5b66", paths:["m3 9 9-5 9 5-9 5-9-5Z","M5 10.2V18M9.7 12.8V18M14.3 12.8V18M19 10.2V18M3 20h18M5 18h14"] },
@@ -279,8 +281,7 @@ export function initShared(app) {
     } finally { setImageBusy(false); }
   }
   function showInviteQr(group) {
-    const url = new URL(window.location.href);
-    url.searchParams.set("invite", group.inviteCode);
+    const url = createInviteUrl(group.inviteCode);
     const qr = qrcode(0, "M");
     qr.addData(url.href);
     qr.make();

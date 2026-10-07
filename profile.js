@@ -50,7 +50,7 @@ export function initProfile({ requestJson, onLogout, onNameChange }) {
   let statusExpiryTimer = null;
 
   async function registration() {
-    if (!registrationPromise) registrationPromise = navigator.serviceWorker.register('/sw.js', { scope:'/' });
+    if (!registrationPromise) registrationPromise = navigator.serviceWorker.register('/sw.js', { scope:'/', type:'module' });
     return registrationPromise;
   }
 
