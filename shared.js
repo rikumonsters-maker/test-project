@@ -1,10 +1,31 @@
-import { API_BASE } from './config.mjs';
+const GROUP_ICONS = [
+  { id:"friends", label:"\u53cb\u9054", paths:["M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM16 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM2.5 20a5.5 5.5 0 0 1 11 0M10.5 20a5.5 5.5 0 0 1 11 0"] },
+  { id:"university", label:"\u5927\u5b66", paths:["m3 9 9-5 9 5-9 5-9-5Z","M5 10.2V18M9.7 12.8V18M14.3 12.8V18M19 10.2V18M3 20h18M5 18h14"] },
+  { id:"work", label:"\u30d0\u30a4\u30c8", paths:["M3 8h18v12H3z","M8 8V5h8v3","M3 13h18M10 12v2h4v-2"] },
+  { id:"club", label:"\u30b5\u30fc\u30af\u30eb", paths:["M12 3 14.8 8.7 21 9.6l-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z"] },
+  { id:"game", label:"\u30b2\u30fc\u30e0", paths:["M7 9h10a4 4 0 0 1 3.8 2.8l1.1 3.7a2.5 2.5 0 0 1-4.1 2.5l-2.1-1.8h-3.4l-2.1 1.8a2.5 2.5 0 0 1-4.1-2.5l1.1-3.7A4 4 0 0 1 7 9Z","M8 12v4M6 14h4M16.5 13.2h.01M18.5 15.2h.01"] },
+  { id:"food", label:"\u3054\u98ef", paths:["M4 13h16a8 8 0 0 1-16 0Z","M6 13c0-3.3 2.7-6 6-6s6 2.7 6 6","M8 4v3M12 3v3M16 4v3"] },
+  { id:"karaoke", label:"\u30ab\u30e9\u30aa\u30b1", paths:["M12 3v11.5a3.5 3.5 0 1 1-2.2-3.3M12 6l7-2v3l-7 2","M16 19c1.2-.5 2-1.2 2-2.2 0-.9-.7-1.4-1.5-1.8"] },
+  { id:"bowling", label:"\u30dc\u30a6\u30ea\u30f3\u30b0", paths:["M7 3c-1 2-1 4 0 6l-1 4h4l-1-4c1-2 1-4 0-6ZM14 3c-1 2-1 4 0 6l-1 4h4l-1-4c1-2 1-4 0-6Z","M9 18a3 3 0 1 0 6 0 3 3 0 0 0-6 0ZM11 17.5h.01M13 18.5h.01"] },
+  { id:"travel", label:"\u65c5\u884c", paths:["m3 11 18-5-7 13-2.3-5.7L3 11Z","m11.7 13.3 3.8-3.8","M5 7 3.5 5.5M19 18.5l-1.5-1.5"] },
+  { id:"sports", label:"\u30b9\u30dd\u30fc\u30c4", paths:["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z","M5.6 5.6c4.6 2.2 7.1 6.2 7.8 12.8M18.4 5.6c-4.6 2.2-7.1 6.2-7.8 12.8M3 12h18"] },
+  { id:"study", label:"\u52c9\u5f37", paths:["M3.5 5.5A3.5 3.5 0 0 1 7 4h5v16H7a3.5 3.5 0 0 0-3.5 1V5.5ZM20.5 5.5A3.5 3.5 0 0 0 17 4h-5v16h5a3.5 3.5 0 0 1 3.5 1V5.5Z","M6 8h3M6 11h3M15 8h3M15 11h3"] },
+  { id:"other", label:"\u305d\u306e\u4ed6", paths:["M12 3.5 14.4 8.4 19.8 9.2l-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8L12 3.5Z","M12 8v4M12 15h.01"] },
+];
+
+const GROUP_ICON_COLORS = [
+  { id:"green", label:"\u7dd1" }, { id:"blue", label:"\u9752" }, { id:"lightblue", label:"\u6c34\u8272" },
+  { id:"purple", label:"\u7d2b" }, { id:"pink", label:"\u30d4\u30f3\u30af" }, { id:"orange", label:"\u30aa\u30ec\u30f3\u30b8" }, { id:"gray", label:"\u30b0\u30ec\u30fc" },
+];
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 export function initShared(app) {
   const { $, state, view, parseDate, requestJson, saveState, renderMonthCalendar, changeMonth, dateLabel, QrScanner, qrcode } = app;
   let activeGroupId = null;
   let selectedGroupId = null;
   let managedGroupId = null;
+  let selectedIconId = "friends";
+  let selectedIconColorId = "green"
   let inviteScanner = null;
   let inviteScanHandled = false;
   let scannerGeneration = 0;
@@ -79,7 +100,7 @@ export function initShared(app) {
     name.setAttribute("aria-label", `${group.groupName}の共有カレンダーを表示`);
     name.setAttribute("aria-pressed", String(group.groupId === selectedGroupId));
     name.addEventListener("click", () => openCalendar(group.groupId));
-    const avatar = groupImage(group, "group-card-image");
+    const avatar = groupIcon(group, "group-card-image");
     name.prepend(avatar);
     const manage = document.createElement("button");
     manage.type = "button";
@@ -129,9 +150,9 @@ export function initShared(app) {
     managedGroupId = group.groupId;
     $("group-manage-name").textContent = group.groupName;
     setRenameMode(false);
-    $("group-image-delete").hidden = !group.hasImage;
-    setError("", "group-image-error");
-    $("group-image-status").hidden = true;
+    closeIconPicker();
+    setError("", "group-icon-error");
+    $("group-icon-status").hidden = true;
     setImageBusy(false);
     $("group-manage-dialog").showModal();
   }
@@ -140,90 +161,122 @@ export function initShared(app) {
     if (dialog.open) dialog.close();
   }
   function setImageBusy(busy) {
-    ["group-rename-open", "group-rename-save", "group-rename-cancel", "group-image-change", "group-image-delete", "group-manage-leave"].forEach(id => { $(id).disabled = busy; });
+    ["group-rename-open", "group-rename-save", "group-rename-cancel", "group-icon-change", "group-icon-save", "group-icon-cancel", "group-manage-leave"].forEach(id => { $(id).disabled = busy; });
+    document.querySelectorAll("#group-icon-options button, #group-icon-colors button").forEach(button => { button.disabled = busy; });
   }
-  function groupImage(group, className = "") {
-    if (!group.hasImage) {
-      const icon = document.createElement("span");
-      icon.className = `group-image-placeholder ${className}`;
-      icon.textContent = "🌿";
-      icon.setAttribute("aria-hidden", "true");
-      return icon;
+  function createGroupIconSvg(iconId, className = "") {
+    const icon = GROUP_ICONS.find(item => item.id === iconId) || GROUP_ICONS.find(item => item.id === "friends");
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.7");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    if (className) svg.setAttribute("class", className);
+    for (const d of icon.paths) {
+      const path = document.createElementNS(SVG_NS, "path");
+      path.setAttribute("d", d);
+      svg.append(path);
     }
-    const image = document.createElement("img");
-    image.className = `group-image ${className}`;
-    image.alt = "";
-    image.src = `${API_BASE}/api/groups/image?groupId=${encodeURIComponent(group.groupId)}&v=${encodeURIComponent(group.imageVersion || "")}`;
-    return image;
+    return svg;
   }
-  function updateGroupImage(group) {
-    $("group-calendar-image").replaceWith(Object.assign(groupImage(group), { id:"group-calendar-image" }));
+  function groupIcon(group, className = "") {
+    const icon = document.createElement("span");
+    icon.className = "group-icon " + className;
+    icon.dataset.iconColor = group.groupIconColor || "green";
+    icon.dataset.iconId = group.groupIcon || "friends";
+    icon.setAttribute("aria-hidden", "true");
+    icon.append(createGroupIconSvg(group.groupIcon || "friends", "group-icon-svg"));
+    return icon;
   }
-  async function prepareGroupImage(file) {
-    if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) throw new Error("JPEG、PNG、WebP画像を選択してください。");
-    if (file.size > 5 * 1024 * 1024) throw new Error("画像は5MB以下にしてください。");
-    const bitmap = await createImageBitmap(file);
-    try {
-      const size = Math.min(bitmap.width, bitmap.height);
-      const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = Math.min(512, size);
-      const offsetX = (bitmap.width - size) / 2;
-      const offsetY = (bitmap.height - size) / 2;
-      canvas.getContext("2d").drawImage(bitmap, offsetX, offsetY, size, size, 0, 0, canvas.width, canvas.height);
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", 0.82));
-      if (!blob) throw new Error("画像を処理できませんでした。");
-      return blob;
-    } finally { bitmap.close(); }
+  function updateGroupIcon(group) {
+    $("group-calendar-icon").replaceWith(Object.assign(groupIcon(group), { id:"group-calendar-icon" }));
   }
-  async function changeGroupImage(file) {
+  function openIconPicker() {
     const group = memberships().find(item => item.groupId === managedGroupId);
     if (!group) return;
-    setError("", "group-image-error");
-    $("group-image-status").hidden = true;
-    setImageBusy(true);
-    try {
-      const blob = await prepareGroupImage(file);
-      const response = await fetch(`${API_BASE}/api/groups/image?groupId=${encodeURIComponent(group.groupId)}`, {
-        method:"POST", credentials:"include", headers:{ "Content-Type":"image/webp" }, body:blob,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error([404, 503].includes(response.status) ? "画像機能は準備中です。" : data.error || "画像を保存できませんでした。");
-      group.hasImage = true;
-      group.imageVersion = data.avatarUpdatedAt;
-      saveState();
-      renderGroups();
-      if (activeGroupId === group.groupId) updateGroupImage(group);
-      if (managedGroupId === group.groupId) {
-        $("group-image-delete").hidden = false;
-        $("group-image-status").textContent = "グループ画像を変更しました。";
-        $("group-image-status").hidden = false;
-      }
-    } catch (error) {
-      if (managedGroupId === group.groupId) setError(error.message || "画像を保存できませんでした。", "group-image-error");
-    } finally { if (managedGroupId === group.groupId) setImageBusy(false); }
+    selectedIconId = GROUP_ICONS.some(item => item.id === group.groupIcon) ? group.groupIcon : "friends";
+    selectedIconColorId = GROUP_ICON_COLORS.some(item => item.id === group.groupIconColor) ? group.groupIconColor : "green";
+    $("group-manage-actions").hidden = true;
+    $("group-icon-picker").hidden = false;
+    setError("", "group-icon-error");
+    $("group-icon-status").hidden = true;
+    renderIconPicker();
+    $("group-icon-options").querySelector(`[data-icon-id="${selectedIconId}"]`)?.focus({ preventScroll:true });
   }
-  async function deleteGroupImage() {
+  function closeIconPicker(restoreFocus = false) {
+    const picker = $("group-icon-picker");
+    if (!picker) return;
+    picker.hidden = true;
+    if ($("group-manage-actions")) $("group-manage-actions").hidden = false;
+    if (restoreFocus && $("group-manage-dialog").open) $("group-icon-change").focus({ preventScroll:true });
+  }
+  function renderIconPicker() {
+    const icons = $("group-icon-options");
+    icons.replaceChildren();
+    for (const item of GROUP_ICONS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "group-icon-option";
+      button.dataset.iconId = item.id;
+      button.setAttribute("aria-pressed", String(item.id === selectedIconId));
+      button.setAttribute("aria-label", item.label);
+      const preview = document.createElement("span");
+      preview.className = "group-icon group-icon-picker-preview";
+      preview.dataset.iconColor = selectedIconColorId;
+      preview.append(createGroupIconSvg(item.id, "group-icon-svg"));
+      const label = document.createElement("span");
+      label.textContent = item.label;
+      button.append(preview, label);
+      button.addEventListener("click", () => {
+        selectedIconId = item.id;
+        for (const option of icons.querySelectorAll("[data-icon-id]")) option.setAttribute("aria-pressed", String(option.dataset.iconId === selectedIconId));
+      });
+      icons.append(button);
+    }
+    const colors = $("group-icon-colors");
+    colors.replaceChildren();
+    for (const item of GROUP_ICON_COLORS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "group-icon-color-option";
+      button.dataset.iconColor = item.id;
+      button.setAttribute("aria-label", item.label);
+      button.setAttribute("aria-pressed", String(item.id === selectedIconColorId));
+      const swatch = document.createElement("span");
+      swatch.className = "group-icon-color-swatch";
+      swatch.dataset.iconColor = item.id;
+      swatch.setAttribute("aria-hidden", "true");
+      button.append(swatch);
+      button.addEventListener("click", () => {
+        selectedIconColorId = item.id;
+        for (const option of colors.querySelectorAll("button[data-icon-color]")) option.setAttribute("aria-pressed", String(option.dataset.iconColor === selectedIconColorId));
+        for (const preview of icons.querySelectorAll(".group-icon-picker-preview")) preview.dataset.iconColor = selectedIconColorId;
+      });
+      colors.append(button);
+    }
+  }
+  async function saveGroupIcon() {
     const group = memberships().find(item => item.groupId === managedGroupId);
-    if (!group || !window.confirm("グループ画像を削除しますか？")) return;
-    setError("", "group-image-error");
-    $("group-image-status").hidden = true;
+    if (!group) return;
+    setError("", "group-icon-error");
+    $("group-icon-status").hidden = true;
     setImageBusy(true);
     try {
-      const response = await fetch(`${API_BASE}/api/groups/image?groupId=${encodeURIComponent(group.groupId)}`, { method:"DELETE", credentials:"include" });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error([404, 503].includes(response.status) ? "画像機能は準備中です。" : data.error || "画像を削除できませんでした。");
-      group.hasImage = false;
-      group.imageVersion = null;
+      const result = await requestJson("/api/groups/icon", { payload:{ groupId:group.groupId, groupIcon:selectedIconId, groupIconColor:selectedIconColorId } });
+      group.groupIcon = result.groupIcon;
+      group.groupIconColor = result.groupIconColor;
       saveState();
       renderGroups();
-      if (activeGroupId === group.groupId) updateGroupImage(group);
-      if (managedGroupId === group.groupId) {
-        $("group-image-delete").hidden = true;
-        $("group-image-status").textContent = "グループ画像を削除しました。";
-        $("group-image-status").hidden = false;
-      }
-    } catch (error) { if (managedGroupId === group.groupId) setError(error.message || "画像を削除できませんでした。", "group-image-error"); }
-    finally { if (managedGroupId === group.groupId) setImageBusy(false); }
+      if (activeGroupId === group.groupId) updateGroupIcon(group);
+      closeIconPicker(true);
+      $("group-icon-status").textContent = "グループアイコンを保存しました。";
+      $("group-icon-status").hidden = false;
+    } catch (error) {
+      setError(error.message || "グループアイコンを保存できませんでした。", "group-icon-error");
+    } finally { setImageBusy(false); }
   }
   function showInviteQr(group) {
     const url = new URL(window.location.href);
@@ -354,8 +407,8 @@ export function initShared(app) {
       if (selectedGroupId === group.groupId) $("group-calendar-name").textContent = group.groupName;
       $("group-manage-name").textContent = group.groupName;
       setRenameMode(false);
-      $("group-image-status").textContent = "グループ名を変更しました。";
-      $("group-image-status").hidden = false;
+      $("group-icon-status").textContent = "グループ名を変更しました。";
+      $("group-icon-status").hidden = false;
     } catch {
       setError("グループ名を変更できませんでした。", "group-rename-error");
     } finally { setImageBusy(false); }
@@ -829,7 +882,7 @@ export function initShared(app) {
     wishes = [];
     renderWishes();
     $("group-calendar-name").textContent = group.groupName;
-    updateGroupImage(group);
+    updateGroupIcon(group);
     $("group-home").hidden = true;
     $("group-calendar-view").hidden = false;
     setError("", "group-calendar-error");
@@ -919,7 +972,7 @@ export function initShared(app) {
   }
   async function leaveGroup(group) {
     if (!window.confirm(`${group.groupName}から退出しますか？共有済みのあなたの予定もグループから削除されます。`)) return;
-    setError("", "group-image-error");
+    setError("", "group-icon-error");
     setImageBusy(true);
     try {
       await requestJson("/api/groups/leave", { payload:credentials(group) });
@@ -930,7 +983,7 @@ export function initShared(app) {
       renderGroups();
       setStatus(`${group.groupName}から退出しました。`, "safe");
     } catch (error) {
-      setError(error.message || "グループから退出できませんでした。", managedGroupId === group.groupId ? "group-image-error" : "group-error");
+      setError(error.message || "グループから退出できませんでした。", managedGroupId === group.groupId ? "group-icon-error" : "group-error");
     } finally { if (managedGroupId === group.groupId) setImageBusy(false); }
   }
   function init() {
@@ -944,13 +997,9 @@ export function initShared(app) {
       if (activeGroup()) { void loadGroupMembers(activeGroup()); void loadWishes(); }
     });
     $("add-group-wish").addEventListener("click", () => openWishEditor());
-    $("group-image-file").addEventListener("change", (event) => {
-      const file = event.target.files?.[0];
-      if (file) void changeGroupImage(file);
-      event.target.value = "";
-    });
-    $("group-image-change").addEventListener("click", () => $("group-image-file").click());
-    $("group-image-delete").addEventListener("click", () => void deleteGroupImage());
+    $("group-icon-change").addEventListener("click", openIconPicker);
+    $("group-icon-save").addEventListener("click", () => void saveGroupIcon());
+    $("group-icon-cancel").addEventListener("click", () => closeIconPicker(true));
     $("group-rename-open").addEventListener("click", () => setRenameMode(true));
     $("group-rename-form").addEventListener("submit", event => void saveGroupName(event));
     $("group-rename-cancel").addEventListener("click", () => setRenameMode(false));
@@ -961,6 +1010,7 @@ export function initShared(app) {
     $("group-manage-dialog").addEventListener("close", () => {
       const opener = [...document.querySelectorAll(".group-manage-button")].find(button => button.dataset.groupId === managedGroupId);
       setRenameMode(false);
+      closeIconPicker();
       managedGroupId = null;
       opener?.focus({ preventScroll:true });
     });

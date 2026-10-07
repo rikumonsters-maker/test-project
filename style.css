@@ -142,7 +142,7 @@ button { touch-action:manipulation; }
 .group-name-button { min-width:0; }
 .group-manage-button { width:44px; height:44px; flex:0 0 44px; padding:0; border:1px solid var(--line); border-radius:9px; color:var(--muted); background:var(--surface); cursor:pointer; font-size:1.5rem; }
 .group-manage-button:hover { color:var(--green); background:var(--surface-soft); }
-.group-manage-dialog { max-height:calc(100dvh - 32px); overflow:auto; }
+.group-manage-dialog { width:min(92vw,560px); max-width:calc(100vw - 24px); max-height:calc(100dvh - 32px); overflow:auto; }
 .group-manage-dialog .action-button { text-align:left; }
 .group-manage-dialog .qr-dialog-close { text-align:center; }
 .group-manage-dialog #group-manage-name { overflow-wrap:anywhere; }
@@ -150,10 +150,40 @@ button { touch-action:manipulation; }
 button:disabled { opacity:.6; cursor:wait; }
 .group-name-button { display:flex; width:100%; min-height:54px; align-items:center; gap:12px; padding:0 14px; border:1px solid var(--border); border-radius:9px; color:var(--green); background:var(--surface); cursor:pointer; font-size:inherit; font-weight:inherit; text-align:left; }
 .group-name-button::after { margin-left:auto; }
-.group-image,.group-image-placeholder { display:grid; width:42px; height:42px; flex:0 0 42px; place-items:center; border-radius:10px; background:var(--accent-soft); object-fit:cover; font-size:1.35rem; }
+.group-icon { display:grid; width:42px; height:42px; flex:0 0 42px; place-items:center; border-radius:12px; background:var(--group-icon-bg,#e1f4e8); color:var(--group-icon-ink,#276344); object-fit:cover; }
+.group-icon-svg { width:62%; height:62%; overflow:visible; }
 .group-calendar-heading { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
 .group-calendar-heading .group-calendar-name { margin:0; }
-.group-calendar-heading .group-image,.group-calendar-heading .group-image-placeholder { width:52px; height:52px; flex-basis:52px; }
+.group-calendar-heading .group-icon { width:52px; height:52px; flex-basis:52px; }
+.group-icon[data-icon-color="green"],.group-icon-color-swatch[data-icon-color="green"] { --group-icon-bg:#e1f4e8; --group-icon-ink:#286446; }
+.group-icon[data-icon-color="blue"],.group-icon-color-swatch[data-icon-color="blue"] { --group-icon-bg:#e6edfb; --group-icon-ink:#405f9a; }
+.group-icon[data-icon-color="lightblue"],.group-icon-color-swatch[data-icon-color="lightblue"] { --group-icon-bg:#e2f2f8; --group-icon-ink:#35677e; }
+.group-icon[data-icon-color="purple"],.group-icon-color-swatch[data-icon-color="purple"] { --group-icon-bg:#eee9fb; --group-icon-ink:#5e4d8b; }
+.group-icon[data-icon-color="pink"],.group-icon-color-swatch[data-icon-color="pink"] { --group-icon-bg:#fae9ef; --group-icon-ink:#8b4e65; }
+.group-icon[data-icon-color="orange"],.group-icon-color-swatch[data-icon-color="orange"] { --group-icon-bg:#ffebe3; --group-icon-ink:#99523e; }
+.group-icon[data-icon-color="gray"],.group-icon-color-swatch[data-icon-color="gray"] { --group-icon-bg:#e7edf2; --group-icon-ink:#4c6071; }
+:root[data-theme="dark"] .group-icon[data-icon-color="green"],:root[data-theme="dark"] .group-icon-color-swatch[data-icon-color="green"] { --group-icon-bg:#294334; --group-icon-ink:#a5e2b9; }
+:root[data-theme="dark"] .group-icon[data-icon-color="blue"],:root[data-theme="dark"] .group-icon-color-swatch[data-icon-color="blue"] { --group-icon-bg:#343b51; --group-icon-ink:#c0cff4; }
+:root[data-theme="dark"] .group-icon[data-icon-color="lightblue"],:root[data-theme="dark"] .group-icon-color-swatch[data-icon-color="lightblue"] { --group-icon-bg:#293d4d; --group-icon-ink:#abd4f3; }
+:root[data-theme="dark"] .group-icon[data-icon-color="purple"],:root[data-theme="dark"] .group-icon-color-swatch[data-icon-color="purple"] { --group-icon-bg:#39324b; --group-icon-ink:#d2c4fa; }
+:root[data-theme="dark"] .group-icon[data-icon-color="pink"],:root[data-theme="dark"] .group-icon-color-swatch[data-icon-color="pink"] { --group-icon-bg:#49313a; --group-icon-ink:#f0b7ca; }
+:root[data-theme="dark"] .group-icon[data-icon-color="orange"],:root[data-theme="dark"] .group-icon-color-swatch[data-icon-color="orange"] { --group-icon-bg:#49332c; --group-icon-ink:#ffc0a8; }
+:root[data-theme="dark"] .group-icon[data-icon-color="gray"],:root[data-theme="dark"] .group-icon-color-swatch[data-icon-color="gray"] { --group-icon-bg:#303b45; --group-icon-ink:#bed0df; }
+.group-icon-picker { margin-top:2px; }
+.group-icon-picker h4 { margin:0 0 6px; font-size:1rem; }
+.group-icon-picker .card-description { margin-bottom:12px; }
+.group-icon-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+.group-icon-option { display:grid; min-width:0; min-height:76px; place-items:center; gap:5px; padding:8px 4px; border:1px solid var(--border); border-radius:11px; color:var(--ink); background:var(--surface-soft); cursor:pointer; font-size:.78rem; }
+.group-icon-option[data-icon-id="bowling"] > span:last-child { white-space:nowrap; font-size:.68rem; letter-spacing:-.04em; }
+.group-icon-option:hover { border-color:var(--accent-border); background:var(--accent-soft); }
+.group-icon-option[aria-pressed="true"] { border:2px solid var(--accent); padding:7px 3px; background:var(--accent-soft); }
+.group-icon-picker-preview { width:38px; height:38px; flex-basis:38px; }
+.group-icon-color-title { margin-top:16px !important; }
+.group-icon-colors { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; }
+.group-icon-color-option { display:grid; min-width:0; min-height:44px; place-items:center; padding:4px; border:1px solid transparent; border-radius:9px; background:transparent; cursor:pointer; }
+.group-icon-color-option[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-soft); }
+.group-icon-color-swatch { display:block; width:28px; height:28px; border:1px solid color-mix(in srgb,var(--group-icon-ink) 22%,transparent); border-radius:9px; background:var(--group-icon-bg); }
+.group-icon-picker-actions { margin-top:14px; }
 .group-name-button::after { content:">"; flex:0 0 auto; color:var(--accent-border); font-size:1.1rem; line-height:1; }
 .group-name-button[aria-pressed="true"] { border-color:var(--accent-border); background:var(--accent-soft); }
 @media (hover:hover) and (pointer:fine) {
