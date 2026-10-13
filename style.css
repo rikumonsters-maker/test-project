@@ -421,6 +421,16 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
 .selected-date-title { margin:0 0 12px; font-size:1.05rem; }
 .daily-total { display:flex; justify-content:space-between; gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid var(--line); font-weight:800; }
 .daily-total strong { color:var(--green); }
+.personal-sync-card { margin-bottom:16px; }
+.personal-sync-card p { overflow-wrap:anywhere; }
+.personal-sync-consent { margin-bottom:16px; border-color:var(--line); background:var(--surface); }
+.personal-sync-consent h2 { margin:0 0 10px; font-size:1.12rem; }
+.personal-sync-consent p { margin:0 0 10px; line-height:1.6; overflow-wrap:anywhere; }
+.personal-sync-consent .actions { margin-top:12px; }
+.personal-backup-help input[type="checkbox"] { width:20px; height:20px; min-height:20px; margin:0; accent-color:var(--green); }
+.personal-backup-help { margin:8px 0 0; color:var(--text-soft); font-size:.86rem; line-height:1.5; }
+.sync-conflict { padding-top:12px; border-top:1px dashed var(--line); }
+.sync-conflict .action-button { margin:4px; max-width:100%; }
 .page-nav { position:fixed; z-index:1000; right:0; bottom:0; left:0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; padding:8px max(12px,calc((100% - 860px)/2)) calc(8px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--nav-surface); box-shadow:var(--nav-shadow); }
 .nav-button { display:grid; min-width:0; min-height:60px; place-items:center; gap:2px; padding:4px 8px; border:0; border-radius:12px; color:var(--muted); background:transparent; cursor:pointer; font-size:.83rem; font-weight:750; }
 .nav-button[aria-current="page"] { color:var(--green); background:var(--accent-soft); }
