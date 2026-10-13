@@ -202,11 +202,6 @@
         </div>
         <div class="card personal-sync-card">
           <p id="personal-sync-status" role="status" aria-live="polite">予定の同期を準備しています…</p>
-          <div class="actions" id="personal-sync-controls" hidden><button class="action-button" id="personal-sync-retry" type="button">同期する</button><button class="action-button" id="personal-backup-export" type="button">個人予定のバックアップを保存</button><button class="action-button" id="personal-backup-import-trigger" type="button">バックアップから予定を復元</button><input id="personal-backup-import-file" type="file" accept="application/json,.json" hidden></div>
-          <label class="personal-backup-help" id="personal-backup-archive-option" hidden><input id="personal-backup-import-archive" type="checkbox"> バックアップ内の「切替前の旧予定」を復元する</label>
-          <p class="personal-backup-help" id="personal-backup-help" hidden>バックアップを選んだ後、復元内容を確認してから追加します。元データは削除されません。個人予定の詳細はグループに公開されず、時間帯と「予定あり」のみ表示されます。</p>
-          <p id="personal-backup-import-status" class="status" role="status" aria-live="polite" hidden></p>
-          <div id="personal-sync-conflicts"></div>
         </div>
         <div class="page-heading">
           <h2 id="agenda-page-title">予定</h2>
@@ -256,6 +251,20 @@
             </article>
           </div>
         </div>
+        <article class="card personal-sync-management" id="personal-sync-management" aria-labelledby="personal-sync-management-title" hidden>
+          <h3 id="personal-sync-management-title">個人予定の管理</h3>
+          <p class="card-description">同期やバックアップの保存・復元を行います。</p>
+          <div class="actions personal-sync-controls" id="personal-sync-controls" hidden>
+            <button class="action-button" id="personal-sync-retry" type="button">同期</button>
+            <button class="action-button" id="personal-backup-export" type="button">個人予定のバックアップを保存</button>
+            <button class="action-button" id="personal-backup-import-trigger" type="button">バックアップから予定を復元</button>
+            <input id="personal-backup-import-file" type="file" accept="application/json,.json" hidden>
+          </div>
+          <label class="personal-backup-help" id="personal-backup-archive-option" hidden><input id="personal-backup-import-archive" type="checkbox"> バックアップ内の「切替前の旧予定」を復元する</label>
+          <p class="personal-backup-help" id="personal-backup-help" hidden>バックアップを選んだ後、復元内容を確認してから追加します。元データは削除されません。個人予定の詳細はグループに公開されず、時間帯と「予定あり」のみ表示されます。</p>
+          <p id="personal-backup-import-status" class="status" role="status" aria-live="polite" hidden></p>
+          <div id="personal-sync-conflicts"></div>
+        </article>
       </section>
       </section>
 

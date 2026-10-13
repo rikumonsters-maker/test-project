@@ -421,8 +421,14 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
 .selected-date-title { margin:0 0 12px; font-size:1.05rem; }
 .daily-total { display:flex; justify-content:space-between; gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid var(--line); font-weight:800; }
 .daily-total strong { color:var(--green); }
-.personal-sync-card { margin-bottom:16px; }
-.personal-sync-card p { overflow-wrap:anywhere; }
+.personal-sync-card { margin-bottom:16px; padding:12px 16px; }
+.personal-sync-card p { margin:0; overflow-wrap:anywhere; line-height:1.5; }
+.personal-sync-management { margin-top:16px; }
+.personal-sync-management > h3 { margin:0 0 6px; font-size:1.02rem; }
+.personal-sync-management .card-description { margin:0; }
+.personal-sync-controls { gap:8px; margin-top:12px; }
+.personal-sync-controls .action-button { flex:0 1 auto; max-width:100%; min-height:44px; padding:9px 13px; font-size:.9rem; }
+.personal-sync-controls #personal-sync-retry { min-width:72px; }
 .personal-sync-consent { margin-bottom:16px; border-color:var(--line); background:var(--surface); }
 .personal-sync-consent h2 { margin:0 0 10px; font-size:1.12rem; }
 .personal-sync-consent p { margin:0 0 10px; line-height:1.6; overflow-wrap:anywhere; }
@@ -481,6 +487,7 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
   .time-input-row input[type="time"] { padding:8px 5px; }
   .actions { gap:8px; }
   .action-button { min-height:50px; flex:1; }
+  .personal-sync-controls .action-button { min-height:48px; padding:10px 12px; }
   .group-wish-actions { width:100%; }
   .group-wish-actions .action-button { flex:0 1 auto; min-width:0; }
   .expense-actions button { min-height:44px; }

@@ -438,13 +438,15 @@ async function startApp(user) {
 function updatePersonalSyncChoice(userId, active) {
   const gate = $("personal-sync-consent");
   const deferred = $("personal-sync-deferred");
+  const management = $("personal-sync-management");
   const controls = $("personal-sync-controls");
   if (active) {
-    gate.hidden = true; deferred.hidden = true; controls.hidden = false;
+    gate.hidden = true; deferred.hidden = true; management.hidden = false; controls.hidden = false;
     $("personal-backup-archive-option").hidden = false;
     $("personal-backup-help").hidden = false;
     return;
   }
+  management.hidden = true;
   controls.hidden = true;
   $("personal-backup-archive-option").hidden = true;
   $("personal-backup-help").hidden = true;
