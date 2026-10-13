@@ -97,7 +97,7 @@ export function initShift(app) {
     }
     state.shifts[view.shiftDate] = shift;
     app.saveState();
-    app.shared?.markDirty(view.shiftDate.slice(0, 7));
+    app.shared?.markDirty(view.shiftDate.slice(0, 7), { shifts:true });
     renderCalendar(); renderForm(); renderSummary();
     app.refreshAgenda?.();
     scheduleWage();
@@ -105,7 +105,7 @@ export function initShift(app) {
   function deleteShift() {
     delete state.shifts[view.shiftDate];
     app.saveState();
-    app.shared?.markDirty(view.shiftDate.slice(0, 7));
+    app.shared?.markDirty(view.shiftDate.slice(0, 7), { shifts:true });
     renderCalendar(); renderForm(); renderSummary();
     app.refreshAgenda?.();
     scheduleWage();

@@ -108,6 +108,8 @@ export function initCalendar(app) {
     syncTimeFields();
   }
   function editEvent(date, event) {
+    view.editingEventVersion = event.version;
+    view.editingEventExtra = event.extra || {};
     view.editingEventId = event.id;
     view.editingEventDate = date;
     $("event-title").value = event.title;
@@ -147,7 +149,14 @@ export function initCalendar(app) {
       end,
       allDay,
       note:$("event-note").value.trim(),
+      extra:view.editingEventId ? view.editingEventExtra : {},
     };
+    if(app.personalSync?.isActive?.()) {
+      try { app.personalSync.queue(view.editingEventId ? "update" : "create",record.id,record,date,view.editingEventVersion); }
+      catch(error) { $("event-error").textContent = error.message; $("event-error").hidden = false;return; }
+      view.agendaDate = date;view.agendaMonth = new Date(parseDate(date).getFullYear(),parseDate(date).getMonth(),1);
+      render();resetForm();void app.personalSync.sync();return;
+    }
     if (view.editingEventId && view.editingEventDate) {
       const previous = (state.events[view.editingEventDate] || []).filter((item) => item.id !== view.editingEventId);
       if (previous.length) state.events[view.editingEventDate] = previous;
@@ -165,6 +174,11 @@ export function initCalendar(app) {
     render(); resetForm();
   }
   function deleteEvent(date, id) {
+    if(app.personalSync?.isActive?.()) {
+      try {app.personalSync.queue("delete",id,null,null,(state.events[date]||[]).find(event=>event.id===id)?.version);}
+      catch(error) {$("event-error").textContent=error.message;$("event-error").hidden=false;return;}
+      if(view.editingEventId === id) resetForm();render();void app.personalSync.sync();return;
+    }
     const remaining = (state.events[date] || []).filter((event) => event.id !== id);
     if (remaining.length) state.events[date] = remaining;
     else delete state.events[date];

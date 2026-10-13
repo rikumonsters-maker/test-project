@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="referrer" content="no-referrer" />
     <meta name="theme-color" content="#166534" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -33,6 +34,7 @@
           <button class="action-button auth-primary" type="submit">アカウントを作成</button>
           <button class="action-button" id="show-login" type="button">ログインに戻る</button>
         </form>
+        <p class="status" id="auth-notice" hidden role="status"></p>
         <p class="status error" id="auth-error" hidden role="alert"></p>
       </div>
     </section>
@@ -43,7 +45,7 @@
         <div class="account-row"><button class="account-link" id="account-open" type="button" aria-label="プロフィールを開く"><span class="account-icon" id="account-icon" aria-hidden="true">🌿</span><span class="account-name" id="account-name"></span></button></div>
       </header>
       <div class="legacy-import card" id="legacy-import" hidden>
-        <p>この端末に以前の保存データがあります。現在のアカウントへ引き継ぎますか？ 元データは残します。</p>
+        <p>この端末に以前の保存データがあります。個人予定は自動で引き継がず、シフト・給与・家計簿などのデータだけを現在のアカウントへ移します。元データは残します。</p>
         <button class="action-button" id="import-legacy" type="button">このアカウントに引き継ぐ</button>
         <button class="action-button" id="dismiss-legacy" type="button">今はしない</button>
         <p class="status error" id="legacy-error" hidden role="alert"></p>
@@ -184,6 +186,28 @@
       </section>
 
       <section class="my-panel" id="page-calendar" role="tabpanel" aria-labelledby="my-tab-calendar" hidden>
+        <div class="card personal-sync-consent" id="personal-sync-consent" hidden>
+          <h2>新しいカレンダー同期を始めますか？</h2>
+          <p>同意すると、これから登録する個人予定がこのアカウントの新しいカレンダーに保存され、PC・スマホ間で同期されます。</p>
+          <p>この端末や以前のURLにある旧個人予定は自動では引き継がれません。旧予定は端末内に保管し、グループの既存ミラーも同意するまでは変更しません。復元したい予定は同期開始後に、バックアップから明示的に選べます。</p>
+          <p id="personal-sync-choice-status" class="status" role="status" aria-live="polite" hidden></p>
+          <div class="actions">
+            <button class="action-button" id="personal-sync-start" type="button">同意して新しい同期を始める</button>
+            <button class="action-button" id="personal-sync-later" type="button">今はしない</button>
+          </div>
+        </div>
+        <div class="card personal-sync-consent" id="personal-sync-deferred" hidden>
+          <p>個人予定の同期は開始していません。端末内の旧予定とグループ表示はそのままです。</p>
+          <button class="action-button" id="personal-sync-start-deferred" type="button">同意して新しい同期を始める</button>
+        </div>
+        <div class="card personal-sync-card">
+          <p id="personal-sync-status" role="status" aria-live="polite">予定の同期を準備しています…</p>
+          <div class="actions" id="personal-sync-controls" hidden><button class="action-button" id="personal-sync-retry" type="button">同期する</button><button class="action-button" id="personal-backup-export" type="button">個人予定のバックアップを保存</button><button class="action-button" id="personal-backup-import-trigger" type="button">バックアップから予定を復元</button><input id="personal-backup-import-file" type="file" accept="application/json,.json" hidden></div>
+          <label class="personal-backup-help" id="personal-backup-archive-option" hidden><input id="personal-backup-import-archive" type="checkbox"> バックアップ内の「切替前の旧予定」を復元する</label>
+          <p class="personal-backup-help" id="personal-backup-help" hidden>バックアップを選んだ後、復元内容を確認してから追加します。元データは削除されません。個人予定の詳細はグループに公開されず、時間帯と「予定あり」のみ表示されます。</p>
+          <p id="personal-backup-import-status" class="status" role="status" aria-live="polite" hidden></p>
+          <div id="personal-sync-conflicts"></div>
+        </div>
         <div class="page-heading">
           <h2 id="agenda-page-title">予定</h2>
           <p>シフトと個人予定を表示</p>
@@ -245,7 +269,7 @@
           <div id="group-list" class="group-list" aria-label="参加中のグループ"></div>
           <article class="card" id="group-card">
             <h3>グループを追加</h3>
-            <p class="card-description">グループを作成するか、招待コードで別のグループに参加できます。参加すると、この端末に保存済みのものも含め、シフトと個人予定（メモを含む）が自動で共有されます。家計簿と給料額は共有されません。</p>
+            <p class="card-description">グループを作成するか、招待コードで別のグループに参加できます。個人予定の詳細は本人が同意した同期APIにのみ送信し、グループ同期APIには含めません。同意後もグループには時間帯と「予定あり」のみが表示されます。シフトは時間帯のみ共有され、勤務先・給与情報や家計簿は他のメンバーに送信されません。旧予定は自動移行されません。</p>
             <div class="card-stack">
               <form id="create-group-form" class="form-stack">
                 <label>グループ名<input id="group-name" type="text" maxlength="60" placeholder="例：家族" required /></label>

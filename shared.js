@@ -907,19 +907,18 @@ export function initShared(app) {
       if (!key.startsWith(`${month}-`) || !shift || !validTime(shift.start) || !validTime(shift.end)) continue;
       entries.push({ sourceType:"shift", sourceId:key, eventDate:key, title:"シフト", start:shift.start, end:shift.end, allDay:false, note:"" });
     }
-    for (const [key, events] of Object.entries(state.events)) {
-      if (!key.startsWith(`${month}-`) || !Array.isArray(events)) continue;
-      events.forEach((event, index) => {
-        if (!event || typeof event.title !== "string" || !event.title.trim() || (!event.allDay && (!validTime(event.start) || !validTime(event.end)))) return;
-        entries.push({ sourceType:"personal", sourceId:String(event.id || `${key}-${index}`), eventDate:key, title:event.title.slice(0, 80), start:event.allDay ? "" : event.start, end:event.allDay ? "" : event.end, allDay:Boolean(event.allDay), note:String(event.note || "").slice(0, 160) });
-      });
-    }
+    // Personal events belong only to /api/personal/events. A legacy pending group-month
+    // queue may still cause this request to run, but its body must never contain events.
     return entries;
   }
-  function markDirty(month) {
+  function markDirty(month, options = {}) {
     for (const group of memberships()) {
       const pending = (state.pendingGroupMonths[group.groupId] ||= {});
       pending[month] = (Number(pending[month]) || 0) + 1;
+      if (options.shifts) {
+        const pendingShifts = (state.pendingGroupShiftMonths[group.groupId] ||= {});
+        pendingShifts[month] = (Number(pendingShifts[month]) || 0) + 1;
+      }
     }
     saveState();
     void flushPending();
@@ -934,11 +933,16 @@ export function initShared(app) {
         if (!group) break;
         const [month, revision] = Object.entries(state.pendingGroupMonths[group.groupId])[0];
         try {
-          await requestJson("/api/shared/calendar/sync", { payload:{ ...credentials(group), month, entries:entriesForMonth(month) } });
-          if (state.pendingGroupMonths[group.groupId]?.[month] === revision) delete state.pendingGroupMonths[group.groupId][month];
+          const shiftRevision = state.pendingGroupShiftMonths?.[group.groupId]?.[month];
+          const syncShifts = shiftRevision !== undefined;
+          await requestJson("/api/shared/calendar/sync", { payload:{ ...credentials(group), month, entries:entriesForMonth(month), personalSync:Boolean(app.personalSync?.isActive?.()), syncPersonal:false, syncShifts } });
+          if (state.pendingGroupMonths[group.groupId]?.[month] === revision) {
+            delete state.pendingGroupMonths[group.groupId][month];
+          }
+          if (shiftRevision !== undefined && state.pendingGroupShiftMonths?.[group.groupId]?.[month] === shiftRevision) delete state.pendingGroupShiftMonths[group.groupId][month];
           saveState();
           if (activeGroupId === group.groupId && month === monthKey(view.groupMonth)) void refreshCurrentMonth();
-          setStatus("シフトと個人予定は参加中のグループへ自動共有されます。", "safe");
+          setStatus("個人予定の詳細は本人専用の同期APIにのみ送信し、グループ同期APIには含めません。シフトは時間帯のみ共有されます。", "safe");
         } catch (error) {
           setStatus(`予定を同期できませんでした。次回起動時に再試行します。${error.message}`, "error");
           failed = true;
@@ -962,7 +966,13 @@ export function initShared(app) {
       const data = await requestJson(path, { payload });
       state.groups.push(data.membership);
       const pending = (state.pendingGroupMonths[data.membership.groupId] ||= {});
-      for (const month of monthsWithData()) pending[month] = 1;
+      for (const month of monthsWithData()) {
+        pending[month] = 1;
+        if (entriesForMonth(month).some((entry) => entry.sourceType === "shift")) {
+          const pendingShifts = (state.pendingGroupShiftMonths[data.membership.groupId] ||= {});
+          pendingShifts[month] = (Number(pendingShifts[month]) || 0) + 1;
+        }
+      }
       saveState();
       renderGroups();
       setStatus(`${data.membership.groupName}に参加しました。`, "safe");
@@ -1104,5 +1114,5 @@ export function initShared(app) {
     showHome();
     void flushPending();
   }
-  return { init, showHome, openCalendar, markDirty };
+  return { init, showHome, openCalendar, markDirty, syncPending:() => void flushPending(), refreshPersonal:() => activeGroupId ? refreshCurrentMonth() : Promise.resolve() };
 }

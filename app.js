@@ -1,11 +1,13 @@
 import { initShift } from "./shift.js";
 import { initBudget } from "./budget.js";
 import { initCalendar } from "./calendar.js";
+import { createPersonalSync } from "./personal-sync.mjs";
+import { parsePersonalBackup } from "./backup-import.mjs";
 import { initShared } from "./shared.js";
 import { initProfile } from "./profile.js";
 import QrScanner from "./vendor/qr-scanner.min.js";
 import qrcode from "./vendor/qrcode-generator.js";
-import { LEGACY_STORAGE_KEY, userStorageKey, readStoredState, savePersonalState } from "./storage.mjs";
+import { LEGACY_STORAGE_KEY, userStorageKey, readStoredState, savePersonalState, mergeLegacyNonEventState } from "./storage.mjs";
 import { API_BASE } from "./config.mjs";
 import { initTheme, normalizeTheme, setTheme } from "./theme.mjs";
 
@@ -19,7 +21,7 @@ const emptyBudget = { fixed:"", saving:"", spent:"" };
 let activeStorageKey = null;
 let currentUser = null;
 function emptyState() {
-  return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", theme:"system", budget:{ ...emptyBudget }, groups:[], pendingGroupMonths:{} };
+  return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", theme:"system", budget:{ ...emptyBudget }, groups:[], pendingGroupMonths:{}, pendingGroupShiftMonths:{} };
 }
 function loadState(key) {
   try {
@@ -42,6 +44,7 @@ function loadState(key) {
       budget:{ ...emptyBudget, ...(saved.budget || {}) },
       groups:[],
       pendingGroupMonths,
+      pendingGroupShiftMonths:saved.pendingGroupShiftMonths && typeof saved.pendingGroupShiftMonths === "object" ? saved.pendingGroupShiftMonths : {},
     };
   } catch {
     return emptyState();
@@ -117,6 +120,7 @@ async function requestJson(path, { method = "POST", payload } = {}) {
   if (!response.ok) {
     const error = new Error(data.error || `通信に失敗しました（${response.status}）`);
     error.status = response.status;
+    error.data = data;
     throw error;
   }
   return data;
@@ -231,6 +235,7 @@ const budget = initBudget(app);
 const shared = initShared(app);
 app.shared = shared;
 const calendar = initCalendar(app);
+let personalSync = null;
 app.scheduleBudget = budget.schedule;
 let profile = null;
 
@@ -244,7 +249,7 @@ function setMyView(viewName) {
   });
   $("page-calendar").hidden = viewName !== "calendar";
   $("page-budget").hidden = viewName !== "budget";
-  if (viewName === "calendar") calendar.render();
+  if (viewName === "calendar") { calendar.render(); void personalSync?.sync(); }
   if (viewName === "budget") budget.refresh();
 }
 
@@ -274,6 +279,7 @@ function showAuth(mode = "login") {
   $("auth-loading").hidden = true;
   $("login-form").hidden = mode !== "login";
   $("register-form").hidden = mode !== "register";
+  $("auth-notice").hidden = true;
   authError();
 }
 function showExpiredSession() {
@@ -298,18 +304,21 @@ async function importLegacy() {
     const raw = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) throw new Error("引き継ぐデータが見つかりません。");
     const legacy = JSON.parse(raw);
+    const importedState = loadState(LEGACY_STORAGE_KEY);
+    app.personalSync?.archiveLegacy(importedState.events);
     const groups = Array.isArray(legacy.groups) ? legacy.groups : (legacy.shared?.groupId ? [legacy.shared] : []);
     for (const group of groups) {
       if (group.groupId && group.memberId && group.memberToken) {
         await requestJson("/api/groups/claim", { payload:{ groupId:group.groupId, memberId:group.memberId, memberToken:group.memberToken } });
       }
     }
-    Object.assign(state, loadState(LEGACY_STORAGE_KEY));
+    Object.assign(state, mergeLegacyNonEventState(state, importedState));
     state.groups = (await requestJson("/api/groups/mine", { payload:{} })).groups || [];
     saveState();
     for (const group of groups) delete group.memberToken;
     if (legacy.shared) delete legacy.shared.memberToken;
     localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(legacy));
+    if (currentUser) localStorage.setItem("daysync-legacy-imported-" + currentUser.id, "1");
     location.reload();
   } catch (importError) {
     error.textContent = `引き継ぎできませんでした。${importError.message}`;
@@ -322,6 +331,41 @@ async function startApp(user) {
   activeStorageKey = userStorageKey(user.id);
   const alreadySaved = localStorage.getItem(activeStorageKey) !== null;
   Object.assign(state, loadState(activeStorageKey));
+  const syncUserId = user.id;
+  personalSync = createPersonalSync({ storage:localStorage, key:activeStorageKey, state, requestJson,
+    isCurrent:() => currentUser?.id === syncUserId,
+    onChange:() => {
+      try {saveState();} catch {$("personal-sync-status").textContent="端末の保存領域が不足しています。バックアップを保存してください。";}
+      calendar.render();
+    },
+    onStatus:(message, conflicts) => {
+      $("personal-sync-status").textContent = message;
+      if(message.startsWith("同期完了")) void shared.refreshPersonal();
+      const list = $("personal-sync-conflicts"); list.replaceChildren();
+      for (const conflict of conflicts) {
+        const item = document.createElement("div"); item.className = "sync-conflict";
+        const text = document.createElement("p");
+        text.textContent = `端末の変更：${conflict.action === "delete" ? "削除" : `${conflict.event.date} ${conflict.event.title}`} ／ サーバー：${conflict.remote?.deleted ? "削除済み" : conflict.remote ? `${conflict.remote.date} ${conflict.remote.title}` : "予定なし"}`;
+        item.append(text);
+        const choices = [["サーバーの内容を使う", "server"]];
+        if(conflict.event) choices.push(["端末の変更を別の予定として保存", "copy"]);
+        else if(conflict.remote && !conflict.remote.deleted) choices.push(["最新の予定を削除する", "delete"]);
+        for(const [label,choice] of choices) {
+          const button = document.createElement("button");button.type = "button";button.className = "action-button";button.textContent = label;
+          button.addEventListener("click",()=> {if(window.confirm(`${label}。よろしいですか？`)) personalSync.resolve(conflict.operationId,choice);});
+          item.append(button);
+        }
+        list.append(item);
+      }
+    },
+  });
+  let syncState = {active:false};
+  try { syncState = await personalSync.initialize(); app.personalSync = personalSync; }
+  catch(error) {
+    $("personal-sync-status").textContent = `同期状態を確認できません。端末内の予定は変更していません。${error.message}`;
+    app.personalSync = personalSync;
+  }
+  updatePersonalSyncChoice(user.id, syncState.active);
   setTheme(state.theme);
   state.groups = (await requestJson("/api/groups/mine", { payload:{} })).groups || [];
   $("account-name").textContent = user.displayName;
@@ -344,6 +388,7 @@ async function startApp(user) {
   budget.init();
   shared.init();
   calendar.init();
+  if(syncState.active) void personalSync?.sync();
   if (!profile) profile = initProfile({
     requestJson,
     onNameChange:(name, icon) => {
@@ -363,9 +408,13 @@ async function startApp(user) {
   });
   shift.calculateWage();
   const dismissKey = `daysync-legacy-dismissed-${user.id}`;
-  $("legacy-import").hidden = alreadySaved || !localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(dismissKey) === "1";
+  const importedLegacy = localStorage.getItem("daysync-legacy-imported-" + user.id) === "1";
+  const newSyncMetadata = localStorage.getItem(`${activeStorageKey}-personal-sync-v2`) !== null;
+  const canTransferLegacy = !alreadySaved || (newSyncMetadata && !importedLegacy);
+  $("legacy-import").hidden = !canTransferLegacy || !localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(dismissKey) === "1";
   $("import-legacy").addEventListener("click", () => void importLegacy());
   $("dismiss-legacy").addEventListener("click", () => { localStorage.setItem(dismissKey, "1"); $("legacy-import").hidden = true; });
+  if (!syncState.active && localStorage.getItem("daysync-personal-sync-deferred-" + user.id) !== "1") setActivePage("my");
   const inviteFromUrl = new URLSearchParams(window.location.search).get("invite");
   if (inviteFromUrl?.trim()) {
     $("group-invite-code").value = inviteFromUrl.trim().slice(0, 40);
@@ -386,7 +435,86 @@ async function startApp(user) {
   }
 }
 
+function updatePersonalSyncChoice(userId, active) {
+  const gate = $("personal-sync-consent");
+  const deferred = $("personal-sync-deferred");
+  const controls = $("personal-sync-controls");
+  if (active) {
+    gate.hidden = true; deferred.hidden = true; controls.hidden = false;
+    $("personal-backup-archive-option").hidden = false;
+    $("personal-backup-help").hidden = false;
+    return;
+  }
+  controls.hidden = true;
+  $("personal-backup-archive-option").hidden = true;
+  $("personal-backup-help").hidden = true;
+  const declined = localStorage.getItem("daysync-personal-sync-deferred-" + userId) === "1";
+  gate.hidden = declined; deferred.hidden = !declined;
+}
+
 $("account-open").addEventListener("click", () => setActivePage("profile"));
+async function beginPersonalSync(button) {
+  if (!personalSync) return;
+  $("personal-sync-consent").hidden = false;
+  $("personal-sync-deferred").hidden = true;
+  button.disabled = true;
+  $("personal-sync-choice-status").hidden = false;
+  $("personal-sync-choice-status").textContent = "端末内の旧予定はバックアップに保管し、新しい同期を準備しています…";
+  try {
+    await personalSync.startFresh();
+    if (currentUser) localStorage.removeItem("daysync-personal-sync-deferred-" + currentUser.id);
+    updatePersonalSyncChoice(currentUser?.id, true);
+    $("personal-sync-status").textContent = personalSync.status() || "同期完了";
+    void shared.refreshPersonal();
+  } catch(error) {
+    $("personal-sync-choice-status").textContent = `同期を開始できませんでした。端末内の予定は保管されています。${error.message}`;
+    button.disabled = false;
+  }
+}
+$("personal-sync-start").addEventListener("click", () => void beginPersonalSync($("personal-sync-start")));
+$("personal-sync-start-deferred").addEventListener("click", () => void beginPersonalSync($("personal-sync-start-deferred")));
+$("personal-sync-later").addEventListener("click", () => {
+  if (currentUser) localStorage.setItem("daysync-personal-sync-deferred-" + currentUser.id, "1");
+  updatePersonalSyncChoice(currentUser?.id, false);
+  $("personal-sync-choice-status").textContent = "同期は開始していません。端末内の旧予定とグループ表示は変更していません。";
+  $("personal-sync-choice-status").hidden = false;
+});
+$("personal-sync-retry").addEventListener("click", () => void personalSync?.sync());
+$("personal-backup-export").addEventListener("click", () => {
+  const backup = personalSync?.backup(); if(!backup) return;
+  const url = URL.createObjectURL(new Blob([backup],{type:"application/json"}));
+  const link = document.createElement("a");link.href=url;link.download="daysync-personal-backup.json";link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+$("personal-backup-import-trigger").addEventListener("click", () => $("personal-backup-import-file").click());
+$("personal-backup-import-file").addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  const result = $("personal-backup-import-status");
+  if (!file) return;
+  result.hidden = false;
+  result.className = "status";
+  try {
+    if (file.size > 10 * 1024 * 1024) throw new Error("ファイルが大きすぎます。10MB以下のJSONバックアップを選んでください。");
+    if (!app.personalSync?.isActive?.()) throw new Error("先に新しいカレンダー同期を開始してください。元のデータは変更されていません。");
+    const includeArchive = $("personal-backup-import-archive").checked;
+    $("personal-backup-import-archive").checked = false;
+    const { events, count } = parsePersonalBackup(await file.text(), { includeArchive });
+    if (!window.confirm(`${count}件の予定を現在の同期カレンダーに復元します。グループには時間帯と「予定あり」のみが表示されます。続けますか？`)) return;
+    app.personalSync.restore(events);
+    result.textContent = `${count}件の復元を受け付けました。端末のバックアップも保持しています。同期します…`;
+    await app.personalSync.sync();
+    result.textContent = `${count}件のバックアップを統合しました。同期状態は上の表示を確認してください。`;
+  } catch (error) {
+    result.className = "status error";
+    result.textContent = `取り込めませんでした。${error.message}`;
+  } finally {
+    event.target.value = "";
+  }
+});
+document.addEventListener("visibilitychange",()=> {if(!document.hidden && currentUser) void personalSync?.sync();});
+window.addEventListener("online",()=> {if(currentUser) void personalSync?.sync();});
+window.addEventListener("focus",()=> {if(currentUser) void personalSync?.sync();});
+setInterval(()=> {if(!document.hidden && currentUser) void personalSync?.sync();},60000);
 initTheme((theme) => {
   if (!activeStorageKey) return;
   state.theme = theme;
