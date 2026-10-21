@@ -1,3 +1,6 @@
+import { initReminderControls } from "./reminder-controls.mjs";
+import { currentTimeZone, readReminderSettings, writeReminderSettings } from "./reminders.mjs";
+
 export function initCalendar(app) {
   const { $, state, view, renderMonthCalendar, changeMonth, parseDate, makeId, saveState, dateLabel, bindTimeInput } = app;
 
@@ -59,6 +62,8 @@ export function initCalendar(app) {
     for (const event of events) {
       const item = document.createElement("div");
       item.className = "agenda-item agenda-personal";
+      item.dataset.eventId = event.id || "";
+      if (event.id === view.reminderEventId) item.classList.add("agenda-reminder-target");
       const details = document.createElement("div");
       details.className = "agenda-event-details";
       const title = document.createElement("strong");
@@ -88,6 +93,13 @@ export function initCalendar(app) {
       item.append(details, actions);
       eventList.append(item);
     }
+    if (view.reminderEventId) {
+      const target = [...eventList.querySelectorAll("[data-event-id]")].find((item) => item.dataset.eventId === view.reminderEventId);
+      if (target) {
+        target.scrollIntoView({ behavior:"smooth", block:"center" });
+        view.reminderEventId = null;
+      }
+    }
   }
   function syncTimeFields() {
     const allDay = $("event-all-day").checked;
@@ -98,6 +110,7 @@ export function initCalendar(app) {
   function resetForm() {
     view.editingEventId = null;
     view.editingEventDate = null;
+    view.editingEventExtra = {};
     $("event-form").reset();
     $("event-date").value = view.agendaDate;
     $("event-form-title").textContent = "個人予定を追加";
@@ -106,6 +119,8 @@ export function initCalendar(app) {
     $("event-error").hidden = true;
     $("event-error").textContent = "";
     syncTimeFields();
+    reminderControls?.set([]);
+    updateReminderSyncNote();
   }
   function editEvent(date, event) {
     view.editingEventVersion = event.version;
@@ -120,11 +135,13 @@ export function initCalendar(app) {
     $("event-start-picker").value = event.start || "";
     $("event-end-picker").value = event.end || "";
     $("event-note").value = event.note || "";
+    reminderControls.set(readReminderSettings(view.editingEventExtra).offsetMinutes);
     $("event-form-title").textContent = "個人予定を編集";
     $("save-event").textContent = "変更を保存";
     $("cancel-event-edit").hidden = false;
     $("event-error").hidden = true;
     syncTimeFields();
+    updateReminderSyncNote();
     $("event-title").focus();
   }
   function submitEvent(event) {
@@ -142,6 +159,16 @@ export function initCalendar(app) {
       $("event-error").hidden = false;
       return;
     }
+    const existingReminderSettings = readReminderSettings(view.editingEventExtra || {});
+    let extra;
+    try {
+      extra = writeReminderSettings(view.editingEventExtra || {}, reminderControls.selected(),
+        existingReminderSettings.timeZone || currentTimeZone());
+    } catch (error) {
+      $("event-error").textContent = error.message;
+      $("event-error").hidden = false;
+      return;
+    }
     const record = {
       id:view.editingEventId || makeId(),
       title,
@@ -149,7 +176,7 @@ export function initCalendar(app) {
       end,
       allDay,
       note:$("event-note").value.trim(),
-      extra:view.editingEventId ? view.editingEventExtra : {},
+      extra,
     };
     if(app.personalSync?.isActive?.()) {
       try { app.personalSync.queue(view.editingEventId ? "update" : "create",record.id,record,date,view.editingEventVersion); }
@@ -186,6 +213,7 @@ export function initCalendar(app) {
     saveState(); app.shared?.markDirty(date.slice(0, 7)); render();
   }
   function init() {
+    reminderControls = initReminderControls($("personal-reminder-controls"));
     bindTimeInput("event-start", "event-start-picker");
     bindTimeInput("event-end", "event-end-picker");
     $("event-form").addEventListener("submit", submitEvent);
@@ -203,6 +231,14 @@ export function initCalendar(app) {
     });
     resetForm();
     render();
+  }
+  let reminderControls = null;
+  function updateReminderSyncNote() {
+    const note = $("personal-reminder-sync-note");
+    if (!note) return;
+    note.textContent = app.personalSync?.isActive?.()
+      ? "個人予定の同期が有効です。予定と通知設定を同期先に保存し、通知を許可した端末へ送ります。"
+      : "現在はこの端末だけに保存されます。アプリを閉じている間や別端末への通知には、個人予定の同期とプロフィール画面でのPush通知許可が必要です。";
   }
   return { init, render };
 }

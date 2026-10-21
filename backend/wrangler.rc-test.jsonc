@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "daysync-rc-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-25",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "workers_dev": false,
+  "vars": { "LOCAL_DEV": "true" },
+  "dev": { "ip": "127.0.0.1", "port": 8787, "local_protocol": "http" },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "daysync-rc-local",
+    "database_id": "00000000-0000-0000-0000-000000000001",
+    "remote": false,
+    "migrations_dir": "migrations"
+  }]
+}

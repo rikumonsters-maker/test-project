@@ -108,12 +108,33 @@ button { touch-action:manipulation; }
 .auth-switch { margin:8px 0 0; color:var(--muted); font-size:.9rem; text-align:center; }
 .auth-card .form-stack label { min-width:0; }
 .auth-card input { width:100%; min-width:0; }
-.account-row { display:flex; flex:0 0 auto; align-items:center; color:var(--muted); font-size:.9rem; }
+.account-row { display:flex; flex:0 0 auto; align-items:center; gap:8px; color:var(--muted); font-size:.9rem; }
 .account-row .action-button { padding:6px 10px; }
 .account-link { display:flex; min-height:44px; align-items:center; gap:8px; padding:4px 8px; border:1px solid var(--line); border-radius:24px; color:var(--ink); background:var(--surface); cursor:pointer; font-size:.9rem; font-weight:700; }
 .account-link:hover { color:var(--green); }
 .account-icon { display:grid; width:34px; height:34px; flex:0 0 34px; place-items:center; border-radius:50%; background:var(--accent-soft); font-size:1.1rem; }
 .account-name { max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.notification-bell { position:relative; display:grid; width:44px; height:44px; flex:0 0 44px; place-items:center; border:1px solid var(--line); border-radius:50%; color:var(--ink); background:var(--surface); cursor:pointer; }
+.notification-bell:hover { color:var(--green); border-color:var(--accent-border); }
+.notification-badge { position:absolute; top:-4px; right:-4px; display:grid; min-width:20px; height:20px; padding:0 4px; place-items:center; border:2px solid var(--surface); border-radius:999px; color:#fff; background:#c92b28; font-size:.65rem; font-weight:800; line-height:1; }
+.notification-dialog { width:min(460px,calc(100vw - 24px)); max-width:none; max-height:min(80dvh,720px); padding:0; border:1px solid var(--line); border-radius:18px; color:var(--ink); background:var(--surface); box-shadow:var(--shadow); }
+.notification-dialog::backdrop { background:var(--backdrop); }
+.notification-panel { display:flex; max-height:min(80dvh,720px); flex-direction:column; padding:18px; }
+.notification-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.notification-heading h2 { margin:0; font-size:1.2rem; }
+.notification-close { width:44px; height:44px; border:0; border-radius:50%; color:var(--ink); background:var(--surface-soft); cursor:pointer; font-size:1.6rem; line-height:1; }
+.notification-actions { display:flex; justify-content:flex-end; margin:8px 0 12px; }
+.notification-empty { margin:20px 0; color:var(--muted); text-align:center; }
+.notification-list { min-height:0; margin:0; padding:0; overflow:auto; list-style:none; }
+.notification-list li + li { border-top:1px solid var(--line); }
+.notification-item { display:grid; width:100%; min-height:60px; gap:5px; padding:12px; border:0; border-radius:10px; color:var(--ink); background:transparent; cursor:pointer; text-align:left; }
+.notification-item:hover,.notification-item:focus-visible { background:var(--accent-soft); }
+.notification-item.is-unread { background:var(--surface-soft); font-weight:700; }
+.notification-item-main { display:flex; align-items:center; gap:8px; }
+.notification-unread-dot { width:8px; height:8px; flex:0 0 8px; border-radius:50%; background:#c92b28; }
+.notification-time { color:var(--muted); font-size:.78rem; font-weight:400; }
+.notification-more { align-self:center; margin-top:12px; }
+.group-wish-card.notification-target { outline:3px solid var(--accent-border); outline-offset:3px; }
 .legacy-import { margin:0 0 16px; }
 .legacy-import p { margin:0 0 10px; }
 .legacy-import .action-button { margin:0 8px 8px 0; }
@@ -407,6 +428,8 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
 .agenda-shift { color:var(--green); background:var(--accent-soft); }
 .agenda-personal { border:1px solid var(--line); background:var(--surface-soft); }
 .agenda-shared { border:1px solid var(--shared-border); background:var(--shared-surface); }
+.agenda-shared .action-button { min-height:44px; flex:0 0 auto; }
+.agenda-reminder-target { outline:3px solid var(--accent-border); outline-offset:2px; }
 .agenda-tentative { border:1px dashed var(--accent-border); background:var(--surface-soft); }
 .agenda-event-details { display:grid; min-width:0; gap:3px; }
 .agenda-event-details strong { overflow-wrap:anywhere; }
@@ -416,6 +439,17 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
 .agenda-actions .action-button { min-width:62px; min-height:44px; padding:8px 10px; }
 .checkbox-label { display:flex; min-height:48px; align-items:center; justify-content:space-between; gap:12px; }
 .checkbox-label input[type="checkbox"] { width:24px; height:24px; min-height:24px; margin:0; padding:0; accent-color:var(--green); }
+.reminder-fields { display:grid; gap:10px; min-width:0; margin:2px 0; padding:13px; border:1px solid var(--line); border-radius:11px; background:var(--surface-soft); }
+.reminder-fields legend { padding:0 5px; font-weight:800; }
+.reminder-preset-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(105px,1fr)); gap:7px; }
+.reminder-choice { display:flex; min-height:44px; align-items:center; gap:9px; padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--surface); cursor:pointer; font-size:.9rem; }
+.reminder-choice input { width:20px; height:20px; min-height:20px; margin:0; accent-color:var(--green); }
+.reminder-none-choice { border-color:var(--accent-border); font-weight:700; }
+.reminder-custom-options { display:grid; grid-template-columns:repeat(auto-fit,minmax(105px,1fr)); gap:7px; }
+.reminder-custom-entry { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:8px; }
+.reminder-custom-entry .action-button { min-height:48px; }
+.reminder-help { margin:0; color:var(--muted); font-size:.82rem; line-height:1.5; }
+.reminder-fields .status { margin:0; }
 .form-stack[hidden] { display:none; }
 .empty-state { margin:0; padding:18px 10px; color:var(--muted); text-align:center; font-size:.9rem; }
 .selected-date-title { margin:0 0 12px; font-size:1.05rem; }
@@ -460,6 +494,7 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
 @media (max-width:520px) {
   .site-header { gap:4px; }
   .site-title { min-width:0; font-size:.9rem; }
+  .account-row { gap:5px; }
   .account-link { width:44px; min-width:44px; justify-content:center; padding:4px; }
   .account-name { display:none; }
   .nav-button { font-size:.75rem; }

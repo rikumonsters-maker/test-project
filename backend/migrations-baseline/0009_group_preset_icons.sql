@@ -1,0 +1,2 @@
+ALTER TABLE groups ADD COLUMN icon_id TEXT;
+ALTER TABLE groups ADD COLUMN icon_color_id TEXT NOT NULL DEFAULT 'green';

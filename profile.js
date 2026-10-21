@@ -84,14 +84,22 @@ export function initProfile({ requestJson, onLogout, onNameChange }) {
   }
 
   async function refreshNotifications() {
-    if (!supportsPush()) { enabled = false; updateToggle(); return; }
+    if (needsHomeScreen() || !supportsPush()) {
+      enabled = false; updateToggle(); status(unsupportedMessage(), 'caution'); return;
+    }
     try { publicKey = (await requestJson('/api/push/config', { method:'GET' })).publicKey; }
-    catch (error) { status(error.message, 'caution'); enabled = false; updateToggle(); return; }
-    if (Notification.permission !== 'granted') { enabled = false; updateToggle(); return; }
+    catch (error) { status(error.message || '通知機能を確認できません。', 'caution'); enabled = false; updateToggle(); return; }
+    if (Notification.permission === 'denied') {
+      enabled = false; updateToggle(); status('このブラウザーでは通知がブロックされています。端末またはブラウザーの設定から許可してください。', 'caution'); return;
+    }
+    if (Notification.permission !== 'granted') {
+      enabled = false; updateToggle(); status('この端末の通知はまだ許可されていません。「通知を受け取る」を押して有効にできます。', 'caution'); return;
+    }
     const subscription = await (await registration()).pushManager.getSubscription();
-    if (!subscription) { enabled = false; updateToggle(); return; }
+    if (!subscription) { enabled = false; updateToggle(); status('ブラウザーでは通知が許可されています。DaySyncの「通知を受け取る」を押してこの端末を登録してください。', 'caution'); return; }
     enabled = Boolean((await requestJson('/api/push/status', { payload:{ endpoint:subscription.endpoint } })).enabled);
     updateToggle();
+    status(enabled ? 'この端末はDaySyncのPush通知を受け取れます。' : 'ブラウザーの許可はありますが、この端末はDaySyncに登録されていません。通知をONにしてください。', enabled ? 'safe' : 'caution');
   }
 
   async function refresh() {

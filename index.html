@@ -42,8 +42,24 @@
     <main class="page" id="app-root" hidden>
       <header class="site-header">
         <h1 class="site-title">DaySync — 毎日を、ひとつに。</h1>
-        <div class="account-row"><button class="account-link" id="account-open" type="button" aria-label="プロフィールを開く"><span class="account-icon" id="account-icon" aria-hidden="true">🌿</span><span class="account-name" id="account-name"></span></button></div>
+        <div class="account-row">
+          <button class="notification-bell" id="notification-open" type="button" aria-label="通知を開く" aria-haspopup="dialog" aria-controls="notification-dialog" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4"/></svg>
+            <span class="notification-badge" id="notification-badge" hidden aria-hidden="true"></span>
+          </button>
+          <button class="account-link" id="account-open" type="button" aria-label="プロフィールを開く"><span class="account-icon" id="account-icon" aria-hidden="true">🌿</span><span class="account-name" id="account-name"></span></button>
+        </div>
       </header>
+      <dialog class="notification-dialog" id="notification-dialog" aria-labelledby="notification-title">
+        <div class="notification-panel">
+          <div class="notification-heading"><h2 id="notification-title">通知</h2><button class="notification-close" id="notification-close" type="button" aria-label="通知を閉じる">×</button></div>
+          <div class="notification-actions"><button class="action-button" id="notification-read-all" type="button">すべて既読にする</button></div>
+          <p class="status error" id="notification-error" hidden role="alert"></p>
+          <p class="notification-empty" id="notification-empty" role="status" hidden>通知はありません</p>
+          <ul class="notification-list" id="notification-list" aria-label="通知一覧"></ul>
+          <button class="action-button notification-more" id="notification-more" type="button" hidden>さらに表示</button>
+        </div>
+      </dialog>
       <div class="legacy-import card" id="legacy-import" hidden>
         <p>この端末に以前の保存データがあります。個人予定は自動で引き継がず、シフト・給与・家計簿などのデータだけを現在のアカウントへ移します。元データは残します。</p>
         <button class="action-button" id="import-legacy" type="button">このアカウントに引き継ぐ</button>
@@ -242,6 +258,22 @@
                   </div>
                 </div>
                 <label>メモ<input id="event-note" type="text" maxlength="160" placeholder="例：新宿" /></label>
+                <fieldset class="reminder-fields" id="personal-reminder-controls" data-reminder-controls>
+                  <legend>開始前の通知</legend>
+                  <label class="reminder-choice reminder-none-choice"><input type="checkbox" data-reminder-none checked /><span>通知しない</span></label>
+                  <div class="reminder-preset-grid">
+                    <label class="reminder-choice"><input type="checkbox" data-reminder-offset value="10" /><span>10分前</span></label>
+                    <label class="reminder-choice"><input type="checkbox" data-reminder-offset value="30" /><span>30分前</span></label>
+                    <label class="reminder-choice"><input type="checkbox" data-reminder-offset value="60" /><span>1時間前</span></label>
+                    <label class="reminder-choice"><input type="checkbox" data-reminder-offset value="120" /><span>2時間前</span></label>
+                    <label class="reminder-choice"><input type="checkbox" data-reminder-offset value="1440" /><span>1日前</span></label>
+                  </div>
+                  <div class="reminder-custom-options" data-reminder-custom-options></div>
+                  <div class="reminder-custom-entry"><label>任意の分数<input type="number" min="1" max="10080" step="1" inputmode="numeric" data-reminder-custom-input placeholder="例：45" /></label><button class="action-button" type="button" data-reminder-custom-add>追加</button></div>
+                  <p class="reminder-help">終日予定は設定したタイムゾーンの午前9時を基準にします。Push通知にはプロフィール画面でこの端末の通知をONにしてください。</p>
+                  <p class="reminder-help" id="personal-reminder-sync-note"></p>
+                  <p class="status error" data-reminder-error hidden role="alert"></p>
+                </fieldset>
                 <p class="status error" id="event-error" hidden aria-live="polite"></p>
                 <div class="actions">
                   <button class="action-button primary" id="save-event" type="submit">予定を追加</button>
@@ -399,6 +431,29 @@
           <p id="group-invite-qr-name" class="card-description"></p>
           <img id="group-invite-qr-image" class="qr-image" alt="グループ参加用QRコード" />
           <p id="group-invite-qr-url" class="qr-link"></p>
+        </dialog>
+        <dialog class="qr-dialog status-invite-dialog" id="shared-reminder-dialog" aria-labelledby="shared-reminder-title">
+          <h3 id="shared-reminder-title">共有予定のリマインド</h3>
+          <p class="card-description" id="shared-reminder-description">設定はあなたのアカウントだけに保存され、グループの他のメンバーには表示されません。</p>
+          <form class="form-stack" id="shared-reminder-form">
+            <fieldset class="reminder-fields" id="shared-reminder-controls" data-reminder-controls>
+              <legend>開始前の通知</legend>
+              <label class="reminder-choice reminder-none-choice"><input type="checkbox" data-reminder-none checked /><span>通知しない</span></label>
+              <div class="reminder-preset-grid">
+                <label class="reminder-choice"><input type="checkbox" data-reminder-offset value="10" /><span>10分前</span></label>
+                <label class="reminder-choice"><input type="checkbox" data-reminder-offset value="30" /><span>30分前</span></label>
+                <label class="reminder-choice"><input type="checkbox" data-reminder-offset value="60" /><span>1時間前</span></label>
+                <label class="reminder-choice"><input type="checkbox" data-reminder-offset value="120" /><span>2時間前</span></label>
+                <label class="reminder-choice"><input type="checkbox" data-reminder-offset value="1440" /><span>1日前</span></label>
+              </div>
+              <div class="reminder-custom-options" data-reminder-custom-options></div>
+              <div class="reminder-custom-entry"><label>任意の分数<input type="number" min="1" max="10080" step="1" inputmode="numeric" data-reminder-custom-input placeholder="例：45" /></label><button class="action-button" type="button" data-reminder-custom-add>追加</button></div>
+              <p class="reminder-help">終日予定は設定タイムゾーンの午前9時を基準にします。Push通知にはプロフィール画面でこの端末の通知をONにしてください。</p>
+              <p class="status error" data-reminder-error hidden role="alert"></p>
+            </fieldset>
+            <p class="status" id="shared-reminder-status" hidden role="status" aria-live="polite"></p>
+            <div class="actions"><button class="action-button primary" id="shared-reminder-save" type="submit">保存</button><button class="action-button" id="shared-reminder-cancel" type="button">閉じる</button></div>
+          </form>
         </dialog>
         <dialog class="qr-dialog status-invite-dialog" id="group-status-invite-dialog" aria-labelledby="group-status-invite-title">
           <h3 id="group-status-invite-title">遊びたい日から共有予定へ</h3>

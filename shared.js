@@ -1,4 +1,6 @@
 import { createInviteUrl } from './config.mjs';
+import { initReminderControls } from './reminder-controls.mjs';
+import { currentTimeZone } from './reminders.mjs';
 
 const GROUP_ICONS = [
   { id:"friends", label:"\u53cb\u9054", paths:["M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM16 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM2.5 20a5.5 5.5 0 0 1 11 0M10.5 20a5.5 5.5 0 0 1 11 0"] },
@@ -43,6 +45,10 @@ export function initShared(app) {
   let wishes = [];
   let editingWishId = null;
   let wishRequestId = 0;
+  let wishClientRequestId = null;
+  let sharedReminderControls = null;
+  let sharedReminderEvent = null;
+  let sharedReminderTimeZone = currentTimeZone();
 
   function memberships() {
     return state.groups.filter((group) => group && group.groupId && group.memberId);
@@ -431,9 +437,11 @@ export function initShared(app) {
     if (typeof dialog.close === "function" && dialog.open) dialog.close();
     else dialog.removeAttribute("open");
     editingWishId = null;
+    wishClientRequestId = null;
   }
   function openWishEditor(wish = null) {
     editingWishId = wish?.id || null;
+    if (!wish) wishClientRequestId = null;
     $("group-wish-title").textContent = wish ? "遊びたい日を編集" : "遊びたい日を追加";
     $("group-wish-date").value = wish?.wishDate || view.groupDate;
     $("group-wish-all-day").checked = wish?.isAllDay ?? true;
@@ -458,6 +466,17 @@ export function initShared(app) {
     for (const wish of wishes) {
       const card = document.createElement("div");
       card.className = "group-wish-card";
+      if (wish.id === view.notificationWishId) {
+        card.classList.add("notification-target");
+        card.tabIndex = -1;
+        view.notificationWishId = null;
+        setTimeout(() => {
+          if (card.isConnected) {
+            card.scrollIntoView({ behavior:"smooth", block:"center" });
+            card.focus({ preventScroll:true });
+          }
+        }, 0);
+      }
       const header = document.createElement("div");
       header.className = "group-wish-header";
       const date = document.createElement("strong");
@@ -828,6 +847,8 @@ export function initShared(app) {
       for (const event of entries) {
         const item = document.createElement("div");
         item.className = `agenda-item ${event.sourceType === "busy" ? "agenda-busy" : event.sourceType === "shift" ? "agenda-shift" : event.status === "tentative" ? "agenda-tentative" : "agenda-shared"}`;
+        item.dataset.eventId = event.id || "";
+        if (event.id === view.reminderEventId) item.classList.add("agenda-reminder-target");
         const details = document.createElement("div");
         details.className = "agenda-event-details";
         const title = document.createElement("strong");
@@ -846,6 +867,15 @@ export function initShared(app) {
           details.append(note);
         }
         item.append(details);
+        if (event.sourceType === "shared" && event.status !== "tentative") {
+          const reminder = document.createElement("button");
+          reminder.type = "button";
+          reminder.className = "action-button";
+          reminder.textContent = "リマインド";
+          reminder.setAttribute("aria-label", `${event.title}のリマインド設定`);
+          reminder.addEventListener("click", () => void openSharedReminder(event));
+          item.append(reminder);
+        }
         container.append(item);
       }
     }
@@ -868,17 +898,66 @@ export function initShared(app) {
         container.append(item);
       }
     }
+    if (view.reminderEventId) {
+      const target = [...container.querySelectorAll("[data-event-id]")].find((item) => item.dataset.eventId === view.reminderEventId);
+      if (target) {
+        target.scrollIntoView({ behavior:"smooth", block:"center" });
+        view.reminderEventId = null;
+      }
+    }
   }
   async function refreshCurrentMonth() {
     if (!activeGroup()) return;
     resetCache();
     renderCalendar();
   }
-  function openCalendar(groupId) {
+  async function openSharedReminder(event) {
+    const group = activeGroup();
+    if (!group || event.sourceType !== "shared" || event.status === "tentative") return;
+    sharedReminderEvent = event;
+    sharedReminderTimeZone = currentTimeZone();
+    sharedReminderControls.set([]);
+    const status = $("shared-reminder-status");
+    status.textContent = "設定を読み込んでいます…";
+    status.className = "status";
+    status.hidden = false;
+    $("shared-reminder-save").disabled = true;
+    const dialog = $("shared-reminder-dialog");
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+    try {
+      const result = await requestJson("/api/reminders/shared/get", { payload:{ ...credentials(group), eventId:event.id } });
+      if (sharedReminderEvent !== event || activeGroupId !== group.groupId) return;
+      sharedReminderTimeZone = result.timeZone || currentTimeZone();
+      sharedReminderControls.set(result.offsetMinutes || []);
+      status.textContent = "設定はあなたのアカウントだけに保存されます。";
+      status.className = "status safe";
+      $("shared-reminder-save").disabled = false;
+    } catch (error) {
+      status.textContent = error.message || "リマインド設定を読み込めませんでした。";
+      status.className = "status error";
+      $("shared-reminder-save").disabled = true;
+    }
+  }
+  function closeSharedReminder() {
+    const dialog = $("shared-reminder-dialog");
+    if (typeof dialog.close === "function" && dialog.open) dialog.close();
+    else dialog.removeAttribute("open");
+    sharedReminderEvent = null;
+    $("shared-reminder-status").hidden = true;
+  }
+  function openCalendar(groupId, reminderTarget = null) {
     const group = memberships().find((item) => item.groupId === groupId);
     if (!group) return;
     activeGroupId = groupId;
     selectedGroupId = groupId;
+    const targetDate = reminderTarget?.date;
+    if (typeof targetDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
+      view.groupDate = targetDate;
+      view.groupMonth = new Date(Number(targetDate.slice(0,4)),Number(targetDate.slice(5,7))-1,1);
+    }
+    view.reminderEventId = reminderTarget?.eventId || null;
+    view.notificationWishId = reminderTarget?.wishId || null;
     resetCache();
     wishes = [];
     renderWishes();
@@ -998,6 +1077,34 @@ export function initShared(app) {
     } finally { if (managedGroupId === group.groupId) setImageBusy(false); }
   }
   function init() {
+    sharedReminderControls = initReminderControls($("shared-reminder-controls"));
+    $("shared-reminder-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const group = activeGroup();
+      const reminderEvent = sharedReminderEvent;
+      if (!group || !reminderEvent) return;
+      const button = $("shared-reminder-save");
+      button.disabled = true;
+      const status = $("shared-reminder-status");
+      status.textContent = "保存しています…";
+      status.className = "status";
+      status.hidden = false;
+      try {
+        await requestJson("/api/reminders/shared/set", { payload:{
+          ...credentials(group), eventId:reminderEvent.id,
+          offsetMinutes:sharedReminderControls.selected(), timeZone:sharedReminderTimeZone,
+        } });
+        status.textContent = "リマインド設定を保存しました。通知は許可済みの端末に届きます。";
+        status.className = "status safe";
+      } catch (error) {
+        status.textContent = error.message || "リマインド設定を保存できませんでした。";
+        status.className = "status error";
+      } finally { button.disabled = false; }
+    });
+    $("shared-reminder-cancel").addEventListener("click", closeSharedReminder);
+    $("shared-reminder-dialog").addEventListener("click", (event) => {
+      if (event.target === $("shared-reminder-dialog")) closeSharedReminder();
+    });
     $("create-group-form").addEventListener("submit", (event) => void submitGroup(event, "/api/groups/create", () => ({ name:$("group-name").value.trim(), memberName:$("group-member-name").value.trim() })));
     $("join-group-form").addEventListener("submit", (event) => void submitGroup(event, "/api/groups/join", () => ({ inviteCode:$("group-invite-code").value.trim().toUpperCase(), memberName:$("join-member-name").value.trim() })));
     $("back-to-groups").addEventListener("click", showHome);
@@ -1044,8 +1151,9 @@ export function initShared(app) {
       button.disabled = true;
       setError("", "group-wish-form-error");
       try {
+        if (!editingWishId && !wishClientRequestId) wishClientRequestId = crypto.randomUUID();
         await requestJson(editingWishId ? "/api/groups/wishes/update" : "/api/groups/wishes/create", {
-          payload:{ ...credentials(group), ...(editingWishId ? { wishId:editingWishId } : {}), wishDate,
+          payload:{ ...credentials(group), ...(editingWishId ? { wishId:editingWishId } : { clientRequestId:wishClientRequestId }), wishDate,
             isAllDay, start:isAllDay ? "" : $("group-wish-start").value,
             end:isAllDay ? "" : $("group-wish-end").value, message:$("group-wish-message").value },
         });
