@@ -1,3 +1,5 @@
+import { registerPushSubscription, subscriptionKeyState } from './push-subscription.mjs';
+
 const $ = (id) => document.getElementById(id);
 
 function status(message = '', kind = '') {
@@ -37,15 +39,11 @@ function unsupportedMessage() {
   return 'この環境ではPush通知を利用できません。HTTPSと対応ブラウザーを確認してください。';
 }
 
-function applicationKey(base64url) {
-  const binary = atob(base64url.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - base64url.length % 4) % 4));
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
 export function initProfile({ requestJson, onLogout, onNameChange }) {
   let currentProfile = null;
   let registrationPromise = null;
   let enabled = false;
+  let needsRepair = false;
   let publicKey = null;
   let statusExpiryTimer = null;
 
@@ -79,11 +77,14 @@ export function initProfile({ requestJson, onLogout, onNameChange }) {
   }
 
   function updateToggle() {
-    $('push-toggle').textContent = enabled ? 'この端末の通知をOFFにする' : '通知を受け取る';
+    $('push-toggle').textContent = enabled ? 'この端末の通知をOFFにする' :
+      needsRepair ? '通知の登録を修復する' : '通知を受け取る';
     $('push-toggle').setAttribute('aria-pressed', String(enabled));
   }
 
   async function refreshNotifications() {
+    needsRepair = false;
+    publicKey = null;
     if (needsHomeScreen() || !supportsPush()) {
       enabled = false; updateToggle(); status(unsupportedMessage(), 'caution'); return;
     }
@@ -96,10 +97,16 @@ export function initProfile({ requestJson, onLogout, onNameChange }) {
       enabled = false; updateToggle(); status('この端末の通知はまだ許可されていません。「通知を受け取る」を押して有効にできます。', 'caution'); return;
     }
     const subscription = await (await registration()).pushManager.getSubscription();
-    if (!subscription) { enabled = false; updateToggle(); status('ブラウザーでは通知が許可されています。DaySyncの「通知を受け取る」を押してこの端末を登録してください。', 'caution'); return; }
-    enabled = Boolean((await requestJson('/api/push/status', { payload:{ endpoint:subscription.endpoint } })).enabled);
+    if (!subscription) { enabled = false; needsRepair = true; updateToggle(); status('端末の通知は許可されていますが、Push購読がありません。「通知の登録を修復する」を押してください。', 'caution'); return; }
+    const keyState = subscriptionKeyState(subscription, publicKey);
+    const registered = Boolean((await requestJson('/api/push/status', { payload:{ endpoint:subscription.endpoint } })).enabled);
+    enabled = registered && keyState !== 'mismatch';
+    needsRepair = !enabled;
     updateToggle();
-    status(enabled ? 'この端末はDaySyncのPush通知を受け取れます。' : 'ブラウザーの許可はありますが、この端末はDaySyncに登録されていません。通知をONにしてください。', enabled ? 'safe' : 'caution');
+    if (keyState === 'mismatch') status('Push購読の公開鍵が現在の設定と一致しません。通知の登録を修復してください。', 'caution');
+    else if (!registered) status('端末にPush購読はありますが、このアカウントには登録されていません。通知の登録を修復してください。', 'caution');
+    else if (keyState === 'unknown') status('この端末の購読は登録済みです。端末が公開鍵を表示しないため、鍵の一致は未確認です。', 'caution');
+    else status('端末の許可・Push購読・このアカウントへの登録を確認しました。実際の配信は未確認です。', 'safe');
   }
 
   async function refresh() {
@@ -121,23 +128,9 @@ export function initProfile({ requestJson, onLogout, onNameChange }) {
     const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
     if (permission !== 'granted') return status('通知が許可されていません。端末の設定から変更してください。', 'caution');
     const worker = await registration();
-    let subscription = await worker.pushManager.getSubscription();
-    if (subscription) {
-      const registered = await requestJson('/api/push/status', { payload:{ endpoint:subscription.endpoint } });
-      if (!registered.enabled) {
-        await subscription.unsubscribe();
-        subscription = null;
-      }
-    }
-    if (!subscription) subscription = await worker.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:applicationKey(publicKey) });
-    const details = subscription.toJSON();
-    try {
-      await requestJson('/api/push/subscribe', { payload:{ endpoint:subscription.endpoint, p256dh:details.keys?.p256dh, auth:details.keys?.auth } });
-    } catch (error) {
-      await subscription.unsubscribe();
-      throw error;
-    }
+    await registerPushSubscription(worker, publicKey, requestJson);
     enabled = true;
+    needsRepair = false;
     updateToggle();
     status('この端末の通知をONにしました。', 'safe');
   }
@@ -149,6 +142,7 @@ export function initProfile({ requestJson, onLogout, onNameChange }) {
       await subscription.unsubscribe();
     }
     enabled = false;
+    needsRepair = false;
     updateToggle();
     status('この端末の通知をOFFにしました。', 'safe');
   }

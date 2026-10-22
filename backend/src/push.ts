@@ -12,6 +12,7 @@ export interface PushEnv {
 type Subscription = { id:string; user_id:string; endpoint:string; p256dh:string; auth:string };
 type Delivery = Subscription & { delivery_id:string; group_id:string; scope:'group' | 'personal'; recipient_user_id:string | null; target_path:string | null; reminder_id:string | null; kind:Notice['kind']; body:string; attempts:number };
 type Notice = { body:string; groupId?:string; targetPath?:string; kind:'group_event_created' | 'group_event_updated' | 'group_joined' | 'wish_created' | 'wish_interested' | 'event_reminder' };
+type DeliveryResult = { status:number; reason:string; provider:'apple' | 'other' };
 const encoder = new TextEncoder();
 const BATCH_SIZE = 8; // Keep each free-tier invocation small; a cron drains the remaining queue.
 
@@ -111,20 +112,36 @@ function configured(env: PushEnv): boolean {
 	return Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT && /^(mailto:|https:\/\/)/.test(env.VAPID_SUBJECT));
 }
 
-async function deliver(env: PushEnv, subscription: Subscription, notice: Notice): Promise<number> {
+const appleReasons = new Set([
+	'BadJwtToken', 'BadVapidPublicKey', 'VapidPkHashMismatch', 'BadWebPushRequest',
+	'BadMessageId', 'BadDeviceToken', 'DeviceTokenNotForTopic', 'ExpiredProviderToken',
+	'InvalidProviderToken', 'MissingProviderToken', 'TooManyRequests', 'InternalServerError',
+]);
+
+async function deliver(env: PushEnv, subscription: Subscription, notice: Notice): Promise<DeliveryResult> {
 	const url = new URL(notice.targetPath || '/', PUBLIC_APP_ORIGIN);
 	if (notice.groupId) url.searchParams.set('group', notice.groupId);
 	const payload = JSON.stringify({ title:'DaySync', body:notice.body, url:url.href, kind:notice.kind });
+	const provider = new URL(subscription.endpoint).hostname.endsWith('.push.apple.com') ? 'apple' : 'other';
 	try {
 		const body = await encryptPushPayload(subscription.p256dh, subscription.auth, payload);
 		const response = await fetch(subscription.endpoint, {
 			method:'POST', redirect:'error', headers:{
 				'Content-Encoding':'aes128gcm', 'Content-Type':'application/octet-stream', TTL:'3600',
+				Urgency:notice.kind === 'event_reminder' ? 'high' : 'normal',
 				Authorization:await vapidHeader(subscription.endpoint, env),
 			}, body,
 		});
-		return response.status;
-	} catch (error) { console.warn('Push delivery failed', error); return 0; }
+		let reason = '';
+		if (provider === 'apple' && (response.status < 200 || response.status >= 300)) {
+			try {
+				const data:unknown = await response.json();
+				const value = data && typeof data === 'object' ? (data as Record<string,unknown>).reason : null;
+				if (typeof value === 'string' && appleReasons.has(value)) reason = value;
+			} catch { /* Keep a valid HTTP status when a provider sends an unreadable body. */ }
+		}
+		return { status:response.status, reason, provider };
+	} catch { return { status:0, reason:'request_error', provider }; }
 }
 
 export async function notifyGroup(env: PushEnv, groupId: string, actorUserId: string, notice: Omit<Notice, 'groupId'>): Promise<void> {
@@ -183,11 +200,14 @@ export async function drainPushQueue(env: PushEnv): Promise<void> {
 		const claimed = await env.DB.prepare('UPDATE push_deliveries SET next_attempt_at = ?1 WHERE id = ?2 AND next_attempt_at <= ?3')
 			.bind(new Date(Date.now() + 5 * 60_000).toISOString(), item.delivery_id, now).run();
 		if (!claimed.meta.changes) return;
-		const status = await deliver(env, item, { groupId:item.group_id, targetPath:item.target_path || undefined, kind:item.kind, body:item.body });
+		const result = await deliver(env, item, { groupId:item.group_id, targetPath:item.target_path || undefined, kind:item.kind, body:item.body });
+		const { status } = result;
+		if (status < 200 || status >= 300) console.warn('Push delivery attempt failed', {
+			provider:result.provider, status, reason:result.reason, attempt:item.attempts + 1,
+		});
 		if (status === 404 || status === 410) {
 			await env.DB.prepare('DELETE FROM push_subscriptions WHERE id = ?1').bind(item.id).run();
 		} else if ((status >= 200 && status < 300) || item.attempts >= 4) {
-			if (status < 200 || status >= 300) console.warn('Dropping undeliverable push', status);
 			await env.DB.prepare('DELETE FROM push_deliveries WHERE id = ?1').bind(item.delivery_id).run();
 		} else {
 			const delay = Math.min(3600, 60 * 2 ** item.attempts);
@@ -228,8 +248,8 @@ export async function handlePushRequest(request: Request, env: PushEnv, pathname
 		const owner = await env.DB.prepare('SELECT user_id FROM push_subscriptions WHERE endpoint = ?1').bind(body.endpoint).first<{ user_id:string }>();
 		if (owner?.user_id !== user.id) return json({ error:'この端末の通知は別のアカウントに登録されています' }, 409);
 		return json({ ok:true });
-	} catch (error) {
-		console.error(error);
+	} catch {
+		console.error('Push subscription registration failed');
 		return json({ error:'通知の登録に失敗しました' }, 500);
 	}
 }
