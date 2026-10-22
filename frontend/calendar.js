@@ -238,7 +238,7 @@ export function initCalendar(app) {
     if (!note) return;
     note.textContent = app.personalSync?.isActive?.()
       ? "個人予定の同期が有効です。予定と通知設定を同期先に保存し、通知を許可した端末へ送ります。"
-      : "現在はこの端末だけに保存されます。アプリを閉じている間や別端末への通知には、個人予定の同期とプロフィール画面でのPush通知許可が必要です。";
+      : "個人予定の同期が無効です。この端末だけに保存した通知設定からは、アプリ内通知もPush通知も送られません。通知を使うには個人予定の同期を開始してください。";
   }
   return { init, render };
 }

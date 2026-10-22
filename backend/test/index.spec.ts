@@ -857,7 +857,19 @@ describe('profile and device notifications', () => {
       await notifyGroup(pushEnv, group.groupId, owner.user.id, { kind:'group_event_created', body:'「サークル」に新しい予定が追加されました' });
       expect(sends).toHaveLength(1);
       expect(sends[0].url).toBe(endpoint);
+      expect(sends[0].request.redirect).toBe('manual');
       expect((sends[0].request.headers as Record<string,string>).Authorization).toMatch(/^vapid t=/);
+      const authorization = (sends[0].request.headers as Record<string,string>).Authorization;
+      const token = authorization.match(/^vapid t=([^,]+), k=(.+)$/);
+      expect(token).not.toBeNull();
+      expect(token![2]).toBe(keys.publicKey);
+      const [header, claims, signature] = token![1].split('.');
+      const decodeToken = (value:string) => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4)), (char) => char.charCodeAt(0));
+      expect(JSON.parse(new TextDecoder().decode(decodeToken(claims))).aud).toBe('https://fcm.googleapis.com');
+      const vapidPublic = await crypto.subtle.importKey('raw', decodeToken(keys.publicKey), {name:'ECDSA', namedCurve:'P-256'}, false, ['verify']);
+      expect(await crypto.subtle.verify({name:'ECDSA', hash:'SHA-256'}, vapidPublic,
+        decodeToken(signature), new TextEncoder().encode(`${header}.${claims}`))).toBe(true);
+      expect((sends[0].request.headers as Record<string,string>).TTL).toBe('3600');
       expect((sends[0].request.headers as Record<string,string>)['Content-Encoding']).toBe('aes128gcm');
       expect((sends[0].request.body as Uint8Array).length).toBeGreaterThan(100);
       const encrypted = sends[0].request.body as Uint8Array;
@@ -1096,6 +1108,64 @@ describe('profile and device notifications', () => {
     expect((await env.DB.prepare('SELECT id FROM push_deliveries WHERE group_id=?1').bind(group.groupId).all()).results).toHaveLength(0);
   });
 
+  it('classifies an Apple rejection without logging endpoints or keys', async () => {
+    const owner = await register();
+    const guest = await register();
+    const group = (await api('/api/groups/create', { name:'Apple delivery diagnosis' }, owner.cookie)).data.membership;
+    await api('/api/groups/join', { inviteCode:group.inviteCode }, guest.cookie);
+    const keys = await testKeys();
+    const pushEnv:PushEnv = { DB:env.DB, VAPID_PUBLIC_KEY:keys.publicKey,
+      VAPID_PRIVATE_KEY:keys.privateKey, VAPID_SUBJECT:'mailto:test@example.com' };
+    const endpoint = 'https://web.push.apple.com/private-token';
+    expect((await handlePushRequest(new Request('https://example.com/api/push/subscribe', { method:'POST', body:JSON.stringify({
+      endpoint, p256dh:keys.p256dh, auth:keys.auth,
+    }) }), pushEnv, '/api/push/subscribe', guest.user)).status).toBe(200);
+    await queueGroupNotice(pushEnv, group.groupId, owner.user.id, { kind:'group_event_created', body:'共有予定' });
+    const warnings:unknown[][] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation((...values:unknown[]) => { warnings.push(values); });
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ reason:'VapidPkHashMismatch', endpoint }), {
+      status:403, headers:{ 'Content-Type':'application/json' },
+    }));
+    try { await drainPushQueue(pushEnv); }
+    finally { vi.unstubAllGlobals(); warn.mockRestore(); }
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toEqual(['Push delivery attempt failed', {
+      provider:'apple', status:403, reason:'VapidPkHashMismatch', attempt:1,
+    }]);
+    const rendered = JSON.stringify(warnings);
+    expect(rendered).not.toContain(endpoint);
+    expect(rendered).not.toContain(keys.p256dh);
+    expect(rendered).not.toContain(keys.auth);
+    expect((await env.DB.prepare('SELECT attempts FROM push_deliveries WHERE group_id=?1')
+      .bind(group.groupId).first<{attempts:number}>())?.attempts).toBe(1);
+  });
+
+  it('does not treat a redirected Push endpoint as a successful delivery', async () => {
+    const owner = await register();
+    const guest = await register();
+    const group = (await api('/api/groups/create', { name:'Push redirect diagnosis' }, owner.cookie)).data.membership;
+    await api('/api/groups/join', { inviteCode:group.inviteCode }, guest.cookie);
+    const keys = await testKeys();
+    const pushEnv:PushEnv = { DB:env.DB, VAPID_PUBLIC_KEY:keys.publicKey,
+      VAPID_PRIVATE_KEY:keys.privateKey, VAPID_SUBJECT:'mailto:test@example.com' };
+    const endpoint = 'https://web.push.apple.com/redirect-test';
+    expect((await handlePushRequest(new Request('https://example.com/api/push/subscribe', { method:'POST', body:JSON.stringify({
+      endpoint, p256dh:keys.p256dh, auth:keys.auth,
+    }) }), pushEnv, '/api/push/subscribe', guest.user)).status).toBe(200);
+    await queueGroupNotice(pushEnv, group.groupId, owner.user.id, { kind:'group_event_created', body:'共有予定' });
+    let redirectMode = '';
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', async (_url:string, request:RequestInit) => {
+      redirectMode = request.redirect || '';
+      return new Response(null, { status:302, headers:{ Location:'https://other.example/' } });
+    });
+    try { await drainPushQueue(pushEnv); }
+    finally { vi.unstubAllGlobals(); warn.mockRestore(); }
+    expect(redirectMode).toBe('manual');
+    expect((await env.DB.prepare('SELECT attempts FROM push_deliveries WHERE group_id=?1')
+      .bind(group.groupId).first<{attempts:number}>())?.attempts).toBe(1);
+  });
+
   it('schedules personal reminders only to that user, recalculates on edit, and cancels on delete', async () => {
     const owner=await register('個人予定の本人');
     const other=await register('別ユーザー');
@@ -1135,10 +1205,11 @@ describe('profile and device notifications', () => {
     await drainReminderQueue(pushEnv);
     expect((await env.DB.prepare('SELECT id FROM push_deliveries WHERE reminder_id IS NOT NULL').all()).results).toHaveLength(3);
 
-    const sent:string[]=[];
-    vi.stubGlobal('fetch',async(url:string)=>{sent.push(url);return new Response(null,{status:201});});
+    const sent:Array<{url:string;request:RequestInit}>=[];
+    vi.stubGlobal('fetch',async(url:string,request:RequestInit)=>{sent.push({url,request});return new Response(null,{status:201});});
     try { await drainPushQueue(pushEnv); } finally { vi.unstubAllGlobals(); }
-    expect(sent).toEqual([ownerEndpoint,ownerEndpoint,ownerEndpoint]);
+    expect(sent.map((item)=>item.url)).toEqual([ownerEndpoint,ownerEndpoint,ownerEndpoint]);
+    expect(sent.every((item)=>(item.request.headers as Record<string,string>).Urgency==='high')).toBe(true);
 
     const updatedEvent={...event,date:nextEventDate,title:'PRIVATE_PERSONAL_TITLE_CHANGED'};
     expect((await api('/api/personal/events/update',{syncProtocol:2,id:'reminder-personal',operationId:'personal-reminder-update',version:1,event:updatedEvent},owner.cookie)).status).toBe(200);
