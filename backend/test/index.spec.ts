@@ -857,6 +857,7 @@ describe('profile and device notifications', () => {
       await notifyGroup(pushEnv, group.groupId, owner.user.id, { kind:'group_event_created', body:'「サークル」に新しい予定が追加されました' });
       expect(sends).toHaveLength(1);
       expect(sends[0].url).toBe(endpoint);
+      expect(sends[0].request.redirect).toBe('manual');
       expect((sends[0].request.headers as Record<string,string>).Authorization).toMatch(/^vapid t=/);
       const authorization = (sends[0].request.headers as Record<string,string>).Authorization;
       const token = authorization.match(/^vapid t=([^,]+), k=(.+)$/);
@@ -1135,6 +1136,32 @@ describe('profile and device notifications', () => {
     expect(rendered).not.toContain(endpoint);
     expect(rendered).not.toContain(keys.p256dh);
     expect(rendered).not.toContain(keys.auth);
+    expect((await env.DB.prepare('SELECT attempts FROM push_deliveries WHERE group_id=?1')
+      .bind(group.groupId).first<{attempts:number}>())?.attempts).toBe(1);
+  });
+
+  it('does not treat a redirected Push endpoint as a successful delivery', async () => {
+    const owner = await register();
+    const guest = await register();
+    const group = (await api('/api/groups/create', { name:'Push redirect diagnosis' }, owner.cookie)).data.membership;
+    await api('/api/groups/join', { inviteCode:group.inviteCode }, guest.cookie);
+    const keys = await testKeys();
+    const pushEnv:PushEnv = { DB:env.DB, VAPID_PUBLIC_KEY:keys.publicKey,
+      VAPID_PRIVATE_KEY:keys.privateKey, VAPID_SUBJECT:'mailto:test@example.com' };
+    const endpoint = 'https://web.push.apple.com/redirect-test';
+    expect((await handlePushRequest(new Request('https://example.com/api/push/subscribe', { method:'POST', body:JSON.stringify({
+      endpoint, p256dh:keys.p256dh, auth:keys.auth,
+    }) }), pushEnv, '/api/push/subscribe', guest.user)).status).toBe(200);
+    await queueGroupNotice(pushEnv, group.groupId, owner.user.id, { kind:'group_event_created', body:'共有予定' });
+    let redirectMode = '';
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', async (_url:string, request:RequestInit) => {
+      redirectMode = request.redirect || '';
+      return new Response(null, { status:302, headers:{ Location:'https://other.example/' } });
+    });
+    try { await drainPushQueue(pushEnv); }
+    finally { vi.unstubAllGlobals(); warn.mockRestore(); }
+    expect(redirectMode).toBe('manual');
     expect((await env.DB.prepare('SELECT attempts FROM push_deliveries WHERE group_id=?1')
       .bind(group.groupId).first<{attempts:number}>())?.attempts).toBe(1);
   });

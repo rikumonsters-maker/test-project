@@ -126,7 +126,7 @@ async function deliver(env: PushEnv, subscription: Subscription, notice: Notice)
 	try {
 		const body = await encryptPushPayload(subscription.p256dh, subscription.auth, payload);
 		const response = await fetch(subscription.endpoint, {
-			method:'POST', redirect:'error', headers:{
+			method:'POST', redirect:'manual', headers:{
 				'Content-Encoding':'aes128gcm', 'Content-Type':'application/octet-stream', TTL:'3600',
 				Urgency:notice.kind === 'event_reminder' ? 'high' : 'normal',
 				Authorization:await vapidHeader(subscription.endpoint, env),
