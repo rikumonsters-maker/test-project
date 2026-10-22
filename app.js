@@ -10,6 +10,7 @@ import qrcode from "./vendor/qrcode-generator.js";
 import { LEGACY_STORAGE_KEY, userStorageKey, readStoredState, savePersonalState, mergeLegacyNonEventState } from "./storage.mjs";
 import { API_BASE } from "./config.mjs";
 import { initTheme, normalizeTheme, setTheme } from "./theme.mjs";
+import { initNotificationCenter } from "./notifications.mjs";
 
 const CATEGORIES = ["食費", "交通", "娯楽", "買い物", "交際費", "固定費", "その他"];
 const money = new Intl.NumberFormat("ja-JP", { maximumFractionDigits:0 });
@@ -238,6 +239,7 @@ const calendar = initCalendar(app);
 let personalSync = null;
 app.scheduleBudget = budget.schedule;
 let profile = null;
+let notificationCenter = null;
 
 let activeMyView = "calendar";
 
@@ -388,6 +390,8 @@ async function startApp(user) {
   budget.init();
   shared.init();
   calendar.init();
+  if (!notificationCenter) notificationCenter = initNotificationCenter({ requestJson });
+  notificationCenter.start();
   if(syncState.active) void personalSync?.sync();
   if (!profile) profile = initProfile({
     requestJson,
@@ -397,6 +401,7 @@ async function startApp(user) {
       $("account-icon").textContent = icon || "🌿";
     },
     onLogout:() => {
+      notificationCenter?.stop();
       currentUser = null;
       activeStorageKey = null;
       setTheme("system");
@@ -416,6 +421,11 @@ async function startApp(user) {
   $("dismiss-legacy").addEventListener("click", () => { localStorage.setItem(dismissKey, "1"); $("legacy-import").hidden = true; });
   if (!syncState.active && localStorage.getItem("daysync-personal-sync-deferred-" + user.id) !== "1") setActivePage("my");
   const inviteFromUrl = new URLSearchParams(window.location.search).get("invite");
+  const notificationParams = new URLSearchParams(window.location.search);
+  const reminderKind = notificationParams.get("reminder");
+  const reminderDate = notificationParams.get("date");
+  const reminderEventId = notificationParams.get("eventId");
+  const notificationWishId = notificationParams.get("wishId");
   if (inviteFromUrl?.trim()) {
     $("group-invite-code").value = inviteFromUrl.trim().slice(0, 40);
     setActivePage("group");
@@ -423,13 +433,28 @@ async function startApp(user) {
     cleanUrl.searchParams.delete("invite");
     window.history.replaceState(window.history.state, "", cleanUrl);
     $("group-invite-code").focus({ preventScroll:true });
+  } else if (reminderKind === "personal" && /^\d{4}-\d{2}-\d{2}$/.test(reminderDate || "")) {
+    view.agendaDate = reminderDate;
+    view.agendaMonth = new Date(Number(reminderDate.slice(0, 4)), Number(reminderDate.slice(5, 7)) - 1, 1);
+    view.reminderEventId = reminderEventId;
+    setActivePage("my");
+    setMyView("calendar");
+    calendar.render();
+    const cleanUrl = new URL(window.location.href);
+    for (const key of ["reminder", "date", "eventId"]) cleanUrl.searchParams.delete(key);
+    window.history.replaceState(window.history.state, "", cleanUrl);
   } else {
-    const groupFromUrl = new URLSearchParams(window.location.search).get("group");
+    const groupFromUrl = notificationParams.get("group");
     if (groupFromUrl && state.groups.some((group) => group.groupId === groupFromUrl)) {
       setActivePage("group");
-      shared.openCalendar(groupFromUrl);
+      shared.openCalendar(groupFromUrl, { date:reminderDate,
+        eventId:reminderKind === "shared" ? reminderEventId : null, wishId:notificationWishId });
       const cleanUrl = new URL(window.location.href);
       cleanUrl.searchParams.delete("group");
+      cleanUrl.searchParams.delete("reminder");
+      cleanUrl.searchParams.delete("date");
+      cleanUrl.searchParams.delete("eventId");
+      cleanUrl.searchParams.delete("wishId");
       window.history.replaceState(window.history.state, "", cleanUrl);
     }
   }

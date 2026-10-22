@@ -1,38 +1,22 @@
-# DaySync frontend
+# DaySync 開発プロジェクト
 
-正式な公開URL: https://daysync-app.vercel.app/
+このフォルダは Frontend と Cloudflare Worker Backend を一緒に開発するための作業ツリーです。Git の基点は 2026-10-20 に確認した GitHub `main` の `945a7617a4ebca3bfd90170956ec26b11537ca74` です。統合作業は未コミットです。
 
-正式Originは `config.mjs` の `PUBLIC_APP_ORIGIN` に集約しています。QR招待と通知タップはこのURLを使用し、API・manifest・PWAアイコンは相対パスを維持します。
+## 構成
 
-旧URL https://test-project-nu-one-12.vercel.app/ も移行期間中は利用できます。Cookie・localStorage・Push購読・ホーム画面アプリはOriginごとに保存されるため、新URLでは一度ログインしてください。旧URLの個人データは削除されませんが、新URLへ自動コピーされません。既存の個人データを確認する際は旧URLを使用してください。
+- `frontend/`: DaySync-Frontend-Release の未公開通知リマインド変更を含む静的 Frontend。`vercel.json` に既存 API rewrite を保持。
+- `backend/`: DaySync-Notification-Work-20261013 の通知対応 Worker。`migrations/0013_push_reminders.sql` を保持。
+- `backend/wrangler.production.jsonc`: 旧 RC から保全した本番用 Worker 設定。現行 Cloudflare 側との一致は、このローカル統合では検証していません。
+- `backend/wrangler.rc-test.jsonc` と `wrangler.rc-baseline.jsonc`、`wrangler.rc-0012.jsonc`: ローカル開発・テスト用。
 
-## ローカル認証の確認
+Temp の Backend は Git リポジトリではありません。元フォルダやその未コミット変更は編集していません。Secret、Cookie、トークンやローカル環境変数ファイルはコピーしていません。
 
-VS Codeでターミナルを2つ開き、次を実行します。PowerShellでは `npm.cmd` を使用できます。
+## ローカル確認
 
-backend:
+Frontend: `cd frontend`, `npm ci`, `node --test`。開発サーバーは `npm run dev`。
 
-```powershell
-cd backend
-npm.cmd run db:local
-npm.cmd run dev
-```
+Backend: `cd backend`, `npm ci`, `npm test`, `npm run typecheck`。Worker のビルド確認は `node_modules/.bin/wrangler.cmd deploy --dry-run --config wrangler.production.jsonc --outdir .wrangler/dry-run`。
 
-frontend:
+## 将来の公開時に確認する設定
 
-```powershell
-cd frontend
-npm.cmd run dev
-```
-
-`http://localhost:5500` または `http://127.0.0.1:5500` を開きます。
-VS Code Live Serverの5500番も使用できます。`file://` では認証できません。
-
-- frontendがlocalhostならAPIは `http://localhost:8787`、127.0.0.1なら `http://127.0.0.1:8787` です。ホストを混在させないでください。
-- API設定は `config.mjs` に集約しています。Workerのポート変更時は `LOCAL_WORKER_PORT` と `backend/wrangler.local.jsonc` の `dev.port` を揃えます。
-- CORSは開発用設定かつローカルHTTPのWorkerに限り、localhost / 127.0.0.1 の5500・3000・5173・8767番を明示的に許可します。frontendのポートを追加する場合は `backend/src/development.ts` の一覧を編集します。
-- Cookieは開発用ローカルHTTPのみSecureなし。それ以外はSecureを付け、常にHttpOnly / SameSite=Laxです。全APIで `credentials: "include"` を維持しています。
-- 本番はAPIの相対URL `/api/...` と既存の `vercel.json` のCloudflare Workerへのrewriteを使用します。本番へ直接クロスサイト接続する設定には変更しません。
-- 開発用Workerは `wrangler.local.jsonc` と専用ローカルD1（`daysync-local`）を使用します。本番の `wrangler.jsonc`・DB・Workerには接続しません。
-
-新規登録後は自動ログインします。再読み込み後もログインが維持され、上部のプロフィールリンクからログアウトできます。ログイン画面で再ログインして確認してください。
+このリポジトリを GitHub に公開する場合、Vercel の Root Directory は `frontend` に合わせる必要があります。現在の本番設定は変更していません。Cloudflare Worker は `backend/wrangler.production.jsonc` を基準に現行の binding、互換設定、Secret 名、cron を本番と照合してください。migration 0013 はローカルに保全しただけで、本番 D1 には適用していません。

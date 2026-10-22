@@ -1,0 +1,19 @@
+{
+  "name": "cloudflare-api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev --local --config wrangler.rc-test.jsonc",
+    "db:local:baseline": "wrangler d1 migrations apply daysync-rc-local --local --config wrangler.rc-baseline.jsonc",
+    "db:local:0012": "wrangler d1 migrations apply daysync-rc-local --local --config wrangler.rc-0012.jsonc",
+    "test": "node test/run-vitest.mjs run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.0.0",
+    "@types/node": "^26.6.3",
+    "typescript": "^5.5.2",
+    "vitest": "~4.1.0",
+    "wrangler": "^4.141.0"
+  }
+}

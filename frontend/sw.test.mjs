@@ -40,6 +40,19 @@ test('push never navigates to a different origin', async () => {
   assert.equal(notifications[0].options.data.url, `${PUBLIC_APP_ORIGIN}/`);
 });
 
+test('personal reminder push uses a generic message and opens its private event date', async () => {
+  const { handlers, notifications, opened } = worker();
+  let pending;
+  const url='/?reminder=personal&eventId=private-event-id&date=2026-10-15';
+  handlers.get('push')({ data:{ json:() => ({ body:'予定の開始時刻が近づいています', url }) }, waitUntil:(promise) => { pending = promise; } });
+  await pending;
+  assert.equal(notifications[0].options.body,'予定の開始時刻が近づいています');
+  assert.equal(JSON.stringify(notifications[0].options).includes('PRIVATE_PERSONAL_TITLE'),false);
+  handlers.get('notificationclick')({ notification:{ data:notifications[0].options.data, close() {} }, waitUntil:(promise) => { pending = promise; } });
+  await pending;
+  assert.deepEqual(opened,[`${PUBLIC_APP_ORIGIN}${url}`]);
+});
+
 test('notifications received on the old URL open the new public group URL', async () => {
   const { handlers, notifications, opened } = worker('https://test-project-nu-one-12.vercel.app');
   let pending;
