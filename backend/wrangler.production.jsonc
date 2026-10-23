@@ -1,13 +1,11 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // Candidate RC deployment config only. This is not yet cleared for deploy.
-  // The live version reports base_path "/", serve_directly=true,
-  // raw_run_worker_first=false, html_handling=auto-trailing-slash, and
-  // not_found_handling=none. RC backend/public contains the hash-verified root
-  // HTML, but the production asset manifest and any other assets remain unverified.
+  // Production version 19 reports these asset runtime settings. backend/public
+  // contains only index.html; its SHA-256 matches the live workers.dev root
+  // response (checked 2026-10-24). Recheck this before a future deploy.
   "name": "cloudflare-api",
-  // RC entrypoint (src/index.ts); the original production module filename is
-  // not exposed by the read-only Worker metadata and therefore is unverified.
+  // Repository entrypoint. Worker version metadata confirms fetch and scheduled
+  // handlers but does not expose the original source filename.
   "main": "src/index.ts",
   "account_id": "f17c675f86cd6f9116a15f5b0f1ab86e",
   "compatibility_date": "2026-09-25",
@@ -55,8 +53,7 @@
     "database_id": "142e6c05-b703-4825-828b-b6dd702c38bd"
   }]
   // migrations_dir intentionally omitted: this file is for Worker deployment
-  // only, not D1 migration operations. Use the separately reviewed 0012-only
-  // migration config for any explicitly approved migration work.
+  // only. Review D1 migrations separately before any migration operation.
   // The live account reports usage_model=standard, which this Wrangler schema
   // does not expose as a configurable field. Recheck it before any deployment.
 }
