@@ -137,10 +137,12 @@ export function initBudget(app) {
         fixed:Number($("fixed").value),
         saving:Number($("saving").value),
         spent,
+        month:app.monthPrefix(view.budgetMonth).slice(0, 7),
+        today:app.dateKey(new Date()),
       });
       if (request !== view.budgetRequest) return;
       $("remaining").textContent = app.money.format(result.remaining);
-      $("daily").textContent = app.money.format(result.daily);
+      $("daily").textContent = result.daily === null ? "—" : app.money.format(result.daily);
       const labels = {
         safe:["✓", "順調です"],
         caution:["!", "支出ペースに注意"],

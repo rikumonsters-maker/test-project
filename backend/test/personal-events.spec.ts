@@ -122,6 +122,10 @@ describe('personal event sync opt-in and privacy',()=>{
     const mirrorCounts=await env.DB.prepare("SELECT source_type,COUNT(*) AS n FROM member_calendar_entries WHERE group_id=?1 GROUP BY source_type").bind(g.groupId).all<any>();
     expect(mirrorCounts.results).toContainEqual(expect.objectContaining({source_type:'personal',n:1}));
     expect(mirrorCounts.results).toContainEqual(expect.objectContaining({source_type:'shift',n:1}));
+    const ownGroup=await api(a.cookie,'/api/shared/events/list',{groupId:g.groupId,month:'2026-10'});
+    expect(ownGroup.data.events.find((event:any)=>event.id===`personal:${id}`)).toMatchObject({
+      title:'非公開タイトル',note:'非公開メモ',createdByUserId:a.user.id,
+    });
     const shared=await api(b.cookie,'/api/shared/events/list',{groupId:g.groupId,month:'2026-10'});
     for(const secret of ['非公開タイトル','非公開メモ','秘密の場所','old-personal-id','shift-2026-10-15',a.user.id,id]) expect(JSON.stringify(shared.data)).not.toContain(secret);
     expect(shared.data.events.every((event:any)=>event.title==='予定あり')).toBe(true);
