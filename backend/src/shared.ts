@@ -253,15 +253,22 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 		id:`busy:${crypto.randomUUID()}`, title:'予定あり', eventDate:event.event_date, start:event.starts_at,
 		end:event.ends_at, allDay:Boolean(event.all_day), sourceType:'busy',
 	}));
-	const personal = await db.prepare(`SELECT e.*, m.id AS member_id, u.display_name FROM personal_events e
+	const personal = await db.prepare(`SELECT e.event_date,e.starts_at,e.ends_at,e.all_day,
+		CASE WHEN e.user_id=?4 THEN 1 ELSE 0 END AS owned,
+		CASE WHEN e.user_id=?4 THEN e.id ELSE NULL END AS id,
+		CASE WHEN e.user_id=?4 THEN e.title ELSE NULL END AS title,
+		CASE WHEN e.user_id=?4 THEN e.note ELSE NULL END AS note,
+		CASE WHEN e.user_id=?4 THEN m.id ELSE NULL END AS member_id,
+		CASE WHEN e.user_id=?4 THEN u.display_name ELSE NULL END AS display_name
+		FROM personal_events e
 		JOIN personal_sync_users s ON s.user_id=e.user_id JOIN group_members m ON m.user_id=e.user_id
 		JOIN users u ON u.id=e.user_id WHERE m.group_id=?1 AND e.deleted=0 AND e.event_date>=?2 AND e.event_date<?3`)
-		.bind(member.group_id, `${month}-01`, `${month}-32`).all<{
-			id:string; user_id:string; event_date:string; title:string; starts_at:string; ends_at:string; all_day:number; note:string; member_id:string; display_name:string;
+		.bind(member.group_id, `${month}-01`, `${month}-32`, user.id).all<{
+			id:string | null; owned:number; event_date:string; title:string | null; starts_at:string; ends_at:string; all_day:number; note:string | null; member_id:string | null; display_name:string | null;
 		}>();
-	const personalEvents = personal.results.map(event => event.user_id === user.id ? {
+	const personalEvents = personal.results.map(event => event.owned ? {
 		id:`personal:${event.id}`,title:event.title,eventDate:event.event_date,start:event.starts_at,end:event.ends_at,
-		allDay:Boolean(event.all_day),note:event.note,createdByMemberId:event.member_id,createdByUserId:event.user_id,createdByName:event.display_name,sourceType:'personal',
+		allDay:Boolean(event.all_day),note:event.note,createdByMemberId:event.member_id,createdByUserId:user.id,createdByName:event.display_name,sourceType:'personal',
 	} : {id:`busy:${crypto.randomUUID()}`,title:'予定あり',eventDate:event.event_date,start:event.starts_at,end:event.ends_at,allDay:Boolean(event.all_day),sourceType:'busy'});
 	return jsonResponse({ events:[...legacyEvents, ...automaticEvents, ...personalEvents, ...redacted].sort((a, b) =>
 		a.eventDate.localeCompare(b.eventDate) || Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start),
@@ -384,6 +391,7 @@ async function syncCalendar(env: SharedEnv, ctx: ExecutionContext, body: JsonRec
 		previous.delete(key);
 	}
 	if (previous.size) changed = true;
+	if (!added && !changed) return jsonResponse({ ok:true, count:entries.length });
 	const statements = [db.prepare(
 		`DELETE FROM member_calendar_entries WHERE group_id = ?1 AND member_id = ?2 AND event_date >= ?3 AND event_date < ?4
 		 AND source_type='shift'`,

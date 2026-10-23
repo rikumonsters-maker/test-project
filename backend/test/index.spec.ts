@@ -266,6 +266,22 @@ describe('DaySync authentication', () => {
     expect((await api('/api/auth/me', undefined, account.cookie)).status).toBe(401);
   });
 
+  it('calculates the selected budget month using the device date, including leap years', async () => {
+    const account = await register();
+    const amounts = { income:90000, fixed:10000, saving:10000, spent:30000 };
+    const current = await api('/api/budget', { ...amounts, month:'2028-02', today:'2028-02-10' }, account.cookie);
+    expect(current.data).toMatchObject({ remaining:40000, daily:2000, status:'caution' });
+    const future = await api('/api/budget', { ...amounts, month:'2028-03', today:'2028-02-10' }, account.cookie);
+    expect(future.data).toMatchObject({ remaining:40000, daily:Math.round(40000/31), status:'safe' });
+    const past = await api('/api/budget', { ...amounts, month:'2028-01', today:'2028-02-10' }, account.cookie);
+    expect(past.data).toMatchObject({ remaining:40000, daily:null, status:'safe' });
+    expect(past.data.message).toContain('この月');
+    for (const invalid of [{month:'2028-13',today:'2028-02-10'}, {month:'2028-02',today:'2028-02-30'},
+      {month:'2028-02'}]) {
+      expect((await api('/api/budget', { ...amounts, ...invalid }, account.cookie)).status).toBe(400);
+    }
+  });
+
   it('does not expose another user budget or wage data', async () => {
     const owner = await register();
     const other = await register();
@@ -506,6 +522,28 @@ describe('account-bound groups', () => {
     expect((await api('/api/shared/events/list', { groupId:other.groupId, month:'2026-10' }, first.cookie)).data.events).toHaveLength(0);
     expect((await api('/api/shared/calendar/sync', { groupId:group.groupId, month:'2026-10', entries:[], syncShifts:true }, first.cookie)).status).toBe(200);
     expect((await api('/api/shared/events/list', { groupId:group.groupId, month:'2026-10' }, second.cookie)).data.events).toHaveLength(0);
+  });
+
+  it('does not rewrite unchanged shift mirror rows on a retry', async () => {
+    const owner = await register();
+    const group = (await api('/api/groups/create', { name:'shift retry' }, owner.cookie)).data.membership;
+    await env.DB.prepare('CREATE TABLE test_shift_sync_audit (id INTEGER PRIMARY KEY)').run();
+    await env.DB.prepare(`CREATE TRIGGER test_shift_sync_insert AFTER INSERT ON member_calendar_entries
+      BEGIN INSERT INTO test_shift_sync_audit(id) VALUES (NULL); END`).run();
+    await env.DB.prepare(`CREATE TRIGGER test_shift_sync_delete AFTER DELETE ON member_calendar_entries
+      BEGIN INSERT INTO test_shift_sync_audit(id) VALUES (NULL); END`).run();
+    const entry = {sourceType:'shift',sourceId:'2026-10-12',eventDate:'2026-10-12',
+      title:'シフト',start:'18:00',end:'22:00',allDay:false,note:''};
+    const sync = (entries:typeof entry[]) => api('/api/shared/calendar/sync',
+      {groupId:group.groupId,month:'2026-10',entries,syncShifts:true},owner.cookie);
+    expect((await sync([entry])).data).toMatchObject({ok:true,count:1});
+    const count = async () => Number((await env.DB.prepare('SELECT COUNT(*) AS n FROM test_shift_sync_audit')
+      .first<{n:number}>())?.n);
+    const initial = await count();
+    expect((await sync([entry])).data).toMatchObject({ok:true,count:1});
+    expect(await count()).toBe(initial);
+    expect((await sync([{...entry,end:'23:00'}])).data).toMatchObject({ok:true,count:1});
+    expect(await count()).toBeGreaterThan(initial);
   });
 
   it('keeps existing shared-event edit permissions', async () => {

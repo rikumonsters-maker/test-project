@@ -39,6 +39,12 @@ function isNonNegativeNumber(value: unknown): value is number {
 	return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
+function validCalendarDate(value: unknown): value is string {
+	if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+	const date = new Date(`${value}T00:00:00.000Z`);
+	return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 async function readJson(request: Request): Promise<unknown> {
 	return request.json();
 }
@@ -94,29 +100,41 @@ export default {
 		const values = body as Record<string, unknown>;
 
 		if (pathname === '/api/budget') {
-			const { income, fixed, saving, spent } = values;
+			const { income, fixed, saving, spent, month, today } = values;
 			if (!isNonNegativeNumber(income) || !isNonNegativeNumber(fixed) || !isNonNegativeNumber(saving) || !isNonNegativeNumber(spent)) {
 				return withCors(jsonResponse(
 					{ error: 'income、fixed、saving、spentには0以上の数値を指定してください' },
 					400,
 				), origin);
 			}
+			if ((month !== undefined || today !== undefined) &&
+				(typeof month !== 'string' || !/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month) ||
+				 !validCalendarDate(today))) {
+				return withCors(jsonResponse({ error:'対象月と今日の日付を確認してください' }, 400), origin);
+			}
 
 			const remaining = income - fixed - saving - spent;
-			const now = new Date();
-			const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-			const daysLeft = daysInMonth - now.getDate() + 1;
-			const daily = Math.round(remaining / daysLeft);
+			const currentDate = today ?? new Date().toISOString().slice(0, 10);
+			const selectedMonth = month ?? currentDate.slice(0, 7);
+			const [year, monthNumber] = selectedMonth.split('-').map(Number);
+			const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+			const currentMonth = currentDate.slice(0, 7);
+			const currentDay = Number(currentDate.slice(8, 10));
+			const daysLeft = selectedMonth < currentMonth ? 0
+				: selectedMonth > currentMonth ? daysInMonth : daysInMonth - currentDay + 1;
+			const daily = daysLeft ? Math.round(remaining / daysLeft) : null;
 
 			const spendingBudget = income - fixed - saving;
-			const onPaceBudget = spendingBudget * now.getDate() / daysInMonth;
+			const onPaceBudget = spendingBudget * currentDay / daysInMonth;
 			let status: 'safe' | 'caution' | 'danger' = 'safe';
-			let message = 'このペースなら目標貯金を達成できます';
+			let message = selectedMonth < currentMonth ? 'この月の支出は予算内です'
+				: selectedMonth > currentMonth ? '予定した支出は予算内です' : 'このペースなら目標貯金を達成できます';
 
 			if (spendingBudget < 0 || spent > spendingBudget) {
 				status = 'danger';
-				message = 'このままだと目標貯金を下回る可能性があります';
-			} else if (spent > onPaceBudget) {
+				message = selectedMonth < currentMonth ? 'この月は目標貯金を下回りました'
+					: 'このままだと目標貯金を下回る可能性があります';
+			} else if (selectedMonth === currentMonth && spent > onPaceBudget) {
 				status = 'caution';
 				message = '少し支出ペースが高めです';
 			}
