@@ -1,22 +1,41 @@
 # DaySync 開発プロジェクト
 
-このフォルダは Frontend と Cloudflare Worker Backend を一緒に開発するための作業ツリーです。Git の基点は 2026-10-20 に確認した GitHub `main` の `945a7617a4ebca3bfd90170956ec26b11537ca74` です。統合作業は未コミットです。
+FrontendとCloudflare Worker Backendの正式な統合開発フォルダ。GitHubの対応先は `rikumonsters-maker/test-project`。現在の本番FrontendはVercel、APIはCloudflare Workers、DBはD1で稼働している。本番への反映は、このローカル統合作業には含まれない。
 
 ## 構成
 
-- `frontend/`: DaySync-Frontend-Release の未公開通知リマインド変更を含む静的 Frontend。`vercel.json` に既存 API rewrite を保持。
-- `backend/`: DaySync-Notification-Work-20261013 の通知対応 Worker。`migrations/0013_push_reminders.sql` を保持。
-- `backend/wrangler.production.jsonc`: 旧 RC から保全した本番用 Worker 設定。現行 Cloudflare 側との一致は、このローカル統合では検証していません。
-- `backend/wrangler.rc-test.jsonc` と `wrangler.rc-baseline.jsonc`、`wrangler.rc-0012.jsonc`: ローカル開発・テスト用。
+- `frontend/`: 静的Frontend。VercelのRoot Directoryは `frontend`。`vercel.json` が既存APIへのrewriteを保持する。
+- `backend/src/`: Workerの実行コード。認証、個人予定の同意制同期、グループ共有、Push・リマインド、アプリ内通知を含む。
+- `backend/migrations/`: 現行migration。0001〜0010と0012〜0014を含み、未公開パスワード再設定用の0011は含めない。
+- `backend/wrangler.production.jsonc`: Workerの本番用設定。ローカルテストやdry-runで使う際も、deployは別途レビュー・承認して実施する。
+- `backend/tools/`: オフラインWorker比較ツールと、インメモリSQLiteでのmigration構成チェック。
+- `docs/legacy/`: 旧RCの検証記録、旧設計、未公開機能候補。実行・配信・migration対象外。判断理由は[旧成果物の整理](docs/legacy/README.md)を参照。
+- `.local-legacy-archive/`: Git管理外の非公開アーカイブ。旧作業ツリー、Git履歴、ローカルDB等を保管。`frontend/` と `backend/public/` の外に置く。
 
-Temp の Backend は Git リポジトリではありません。元フォルダやその未コミット変更は編集していません。Secret、Cookie、トークンやローカル環境変数ファイルはコピーしていません。
+## ローカル開発と検証
 
-## ローカル確認
+Node.js 24以降を使用する。PowerShellで `npm` の実行が制限される場合は `npm.cmd` を使う。
 
-Frontend: `cd frontend`, `npm ci`, `node --test`。開発サーバーは `npm run dev`。
+```powershell
+cd frontend
+npm.cmd ci
+node --test
+npm.cmd run dev
+```
 
-Backend: `cd backend`, `npm ci`, `npm test`, `npm run typecheck`。Worker のビルド確認は `node_modules/.bin/wrangler.cmd deploy --dry-run --config wrangler.production.jsonc --outdir .wrangler/dry-run`。
+```powershell
+cd backend
+npm.cmd ci
+npm.cmd test
+npm.cmd run typecheck
+node tools/verify-migration-layout.mjs
+node tools/compare-worker-version.mjs --self-test
+node tools/compare-worker-bundle-structure.mjs --self-test
+node_modules/.bin/wrangler.cmd deploy --dry-run --config wrangler.production.jsonc --outdir .wrangler/dry-run
+```
 
-## 将来の公開時に確認する設定
+最後のコマンドはローカルのdry-runビルドのみ。本番WorkerへのdeployやD1 migration適用は行わない。比較ツールはローカルに保存したWorker version応答とdry-run成果物を引数で受け取り、ネットワーク接続やSecret値の取得をしない。
 
-このリポジトリを GitHub に公開する場合、Vercel の Root Directory は `frontend` に合わせる必要があります。現在の本番設定は変更していません。Cloudflare Worker は `backend/wrangler.production.jsonc` を基準に現行の binding、互換設定、Secret 名、cron を本番と照合してください。migration 0013 はローカルに保全しただけで、本番 D1 には適用していません。
+Frontendの個人予定同期は本人の同意後に新しい空のカレンダーから開始する。旧端末内予定を自動移行・自動再送信しない。旧パスワード再設定コードは非公開アーカイブに保管しただけで、現在のAPI・UI・migrationには接続していない。
+
+本番設定・Secret・Cookie・データをローカル検証のために上書きしない。実機のPush到達性と実利用者データの確認はローカルテストだけでは代替できない。
