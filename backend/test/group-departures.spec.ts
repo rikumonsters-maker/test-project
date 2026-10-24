@@ -159,6 +159,11 @@ describe('group departure retention and authorization',()=>{
     expect((await inbox(f.member)).notifications.some((n:any)=>oldNotices.includes(n.id))).toBe(false);
     expect((await api(f.member,'/api/groups/wishes/list',{groupId:f.group.groupId})).data.wishes[0]).toMatchObject({reactionCount:0,reacted:false});
     expect((await reminder(f.member,f.group.groupId,confirmed.data.eventId)).status).toBe(404);
+    await expect(db.prepare(`INSERT INTO event_reminders
+      (id,scope,user_id,group_id,shared_event_id,offset_minutes,time_zone,event_start_at,due_at,created_at)
+      VALUES(?1,'shared',?2,?3,?4,10,'Asia/Tokyo','2030-10-21T04:00:00.000Z','2030-10-21T03:50:00.000Z','now')`)
+      .bind(crypto.randomUUID(),f.member.id,f.group.groupId,confirmed.data.eventId).run())
+      .rejects.toThrow('inactive group membership');
     expect((await db.prepare('SELECT * FROM event_reminders WHERE user_id=?1 AND group_id=?2').bind(f.member.id,f.group.groupId).all()).results).toEqual([]);
     expect((await api(f.member,'/api/shared/events/update',{...event,groupId:f.group.groupId,id:confirmed.data.eventId})).status).toBe(403);
     // Explicit new reaction is allowed, but is not an automatic participant restore.
@@ -225,15 +230,16 @@ describe('group departure retention and authorization',()=>{
     } finally { vi.unstubAllGlobals(); }
   });
 
-  it('Cron refuses a stale shared reminder for a departed user even if a row reappears',async()=>{
+  it('rejects a stale shared reminder before Cron can queue it',async()=>{
     const f=await fixture();
     await api(f.member,'/api/groups/leave',{groupId:f.group.groupId});
     const id=crypto.randomUUID();
-    await db.prepare(`INSERT INTO event_reminders(id,scope,user_id,group_id,shared_event_id,offset_minutes,time_zone,event_start_at,due_at,created_at)
+    await expect(db.prepare(`INSERT INTO event_reminders(id,scope,user_id,group_id,shared_event_id,offset_minutes,time_zone,event_start_at,due_at,created_at)
       VALUES(?1,'shared',?2,?3,?4,10,'Asia/Tokyo','2030-10-21T04:00:00.000Z','2000-01-01T00:00:00.000Z',?5)`)
-      .bind(id,f.member.id,f.group.groupId,f.id,new Date().toISOString()).run();
+      .bind(id,f.member.id,f.group.groupId,f.id,new Date().toISOString()).run())
+      .rejects.toThrow('inactive group membership');
     await drainReminderQueue({DB:db});
-    expect(await db.prepare('SELECT queued_at FROM event_reminders WHERE id=?1').bind(id).first()).toEqual({queued_at:null});
+    expect(await db.prepare('SELECT id FROM event_reminders WHERE id=?1').bind(id).first()).toBeNull();
     expect((await inbox(f.member)).notifications).toEqual([]);
   });
 

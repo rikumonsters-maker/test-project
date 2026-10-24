@@ -50,3 +50,16 @@ WHEN NOT EXISTS (SELECT 1 FROM shared_events e JOIN active_group_members m
 BEGIN
   SELECT RAISE(ABORT, 'inactive group membership');
 END;
+-- Old Workers do not understand revoked participation. A rejoined account
+-- must not be able to recreate its former shared reminder through one.
+CREATE TRIGGER shared_reminders_active_participant BEFORE INSERT ON event_reminders
+WHEN NEW.scope='shared' AND NOT EXISTS (
+  SELECT 1 FROM shared_events e JOIN active_group_members m
+    ON m.group_id=e.group_id AND m.user_id=NEW.user_id
+  WHERE e.id=NEW.shared_event_id AND e.group_id=NEW.group_id AND e.status='confirmed'
+    AND (e.wish_id IS NULL OR EXISTS (
+      SELECT 1 FROM shared_event_participants p
+      WHERE p.event_id=e.id AND p.user_id=NEW.user_id AND p.revoked_at IS NULL)))
+BEGIN
+  SELECT RAISE(ABORT, 'inactive group membership');
+END;

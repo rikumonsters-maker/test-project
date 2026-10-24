@@ -9,6 +9,8 @@ participation. The historical member ID remains for shared-event foreign keys.
 The pre-0015 Worker authorizes group access with `group_members.user_id`; a
 departed account therefore cannot use its historical row even if an old
 version receives a request. The new Worker uses `active_group_members`.
+Migration triggers also reject stale reaction reactivation and shared reminder
+inserts, including an old Worker's attempt after a former participant rejoins.
 
 Deploy the leave-only bridge to 100% **before** applying 0015. Confirm that
 new leave requests return 503 and that pre-bridge invocations have drained
