@@ -14,6 +14,12 @@ const allowedOrigins = new Set([
 	'https://test-project-nu-one-12.vercel.app',
 ]);
 
+// Emergency recovery stays on the migration-compatible Worker code. Older
+// Worker versions do not understand departed memberships and cannot be restored.
+function groupAccessPaused(env: Env): boolean {
+	return (env as Env & { GROUP_ACCESS_PAUSED?: string }).GROUP_ACCESS_PAUSED === 'true';
+}
+
 function withCors(response: Response, origin: string | null): Response {
 	const headers = new Headers(response.headers);
 	headers.set('vary', 'Origin');
@@ -51,6 +57,7 @@ async function readJson(request: Request): Promise<unknown> {
 
 export default {
 	async scheduled(_controller, env, ctx): Promise<void> {
+		if (groupAccessPaused(env)) return;
 		ctx.waitUntil((async () => {
 			await drainReminderQueue(env);
 			await drainPushQueue(env);
@@ -70,6 +77,10 @@ export default {
 		if (pathname.startsWith('/api/auth/')) return withCors(await handleAuthRequest(request, env, pathname), origin);
 		const user = await getSessionUser(request, env.DB);
 		if (!user) return withCors(jsonResponse({ error:'ログインが必要です' }, 401), origin);
+		if (groupAccessPaused(env) &&
+			(pathname.startsWith('/api/groups/') || pathname.startsWith('/api/shared/') || pathname.startsWith('/api/reminders/shared/'))) {
+			return withCors(jsonResponse({ error:'グループ機能は安全確認のため一時停止中です。しばらくしてからお試しください。' }, 503), origin);
+		}
 		if (pathname.startsWith('/api/notifications')) return withCors(await handleNotificationRequest(request, env.DB, pathname, user), origin);
 		if (pathname.startsWith('/api/personal/events')) return withCors(await handlePersonalEvents(request, env.DB, pathname, user), origin);
 		if (pathname.startsWith('/api/reminders/')) return withCors(await handleReminderRequest(request, env.DB, pathname, user), origin);

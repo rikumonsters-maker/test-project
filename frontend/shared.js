@@ -1,3 +1,4 @@
+import { canManageSharedEvent, initSharedEventEditor } from './shared-event-editor.mjs';
 import { createInviteUrl } from './config.mjs';
 import { initReminderControls } from './reminder-controls.mjs';
 import { currentTimeZone } from './reminders.mjs';
@@ -46,6 +47,7 @@ export function initShared(app) {
   let editingWishId = null;
   let wishRequestId = 0;
   let wishClientRequestId = null;
+  let sharedEventEditor = null;
   let sharedReminderControls = null;
   let sharedReminderEvent = null;
   let sharedReminderTimeZone = currentTimeZone();
@@ -867,6 +869,15 @@ export function initShared(app) {
           details.append(note);
         }
         item.append(details);
+        if (canManageSharedEvent(event)) {
+          const edit = document.createElement("button");
+          edit.type = "button";
+          edit.className = "action-button";
+          edit.textContent = "編集・削除";
+          edit.setAttribute("aria-label", event.title + "を編集・削除");
+          edit.addEventListener("click", () => sharedEventEditor.open(event));
+          item.append(edit);
+        }
         if (event.sourceType === "shared" && event.status !== "tentative") {
           const reminder = document.createElement("button");
           reminder.type = "button";
@@ -1061,13 +1072,14 @@ export function initShared(app) {
     }
   }
   async function leaveGroup(group) {
-    if (!window.confirm(`${group.groupName}から退出しますか？共有済みのあなたの予定もグループから削除されます。`)) return;
+    if (!window.confirm(`${group.groupName}から退出しますか？確定済みの共有予定は残り、残ったメンバーが管理します。退出後はこのグループの通知を受け取りません。募集・仮予定がある場合や最後の1人の場合は退出できません。`)) return;
     setError("", "group-icon-error");
     setImageBusy(true);
     try {
       await requestJson("/api/groups/leave", { payload:credentials(group) });
       state.groups = state.groups.filter((item) => item.groupId !== group.groupId);
       delete state.pendingGroupMonths[group.groupId];
+      if (state.pendingGroupShiftMonths) delete state.pendingGroupShiftMonths[group.groupId];
       saveState();
       closeGroupManagement();
       renderGroups();
@@ -1077,6 +1089,7 @@ export function initShared(app) {
     } finally { if (managedGroupId === group.groupId) setImageBusy(false); }
   }
   function init() {
+    sharedEventEditor = initSharedEventEditor({ $, requestJson, activeGroup, onSaved:refreshCurrentMonth });
     sharedReminderControls = initReminderControls($("shared-reminder-controls"));
     $("shared-reminder-form").addEventListener("submit", async (event) => {
       event.preventDefault();
