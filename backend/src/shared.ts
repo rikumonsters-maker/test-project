@@ -186,10 +186,10 @@ async function leaveGroup(db: D1Database, body: JsonRecord, user: SessionUser): 
 	const timestamp = new Date().toISOString();
 	// The eligibility check and revocation run in one D1 batch transaction.
 	// In particular, two simultaneous departures cannot remove the last member.
-	const departed = 'EXISTS (SELECT 1 FROM group_members WHERE id=?3 AND group_id=?2 AND user_id=?1 AND left_at=?4)';
+	const departed = 'EXISTS (SELECT 1 FROM group_members WHERE id=?3 AND group_id=?2 AND departed_user_id=?1 AND user_id IS NULL AND left_at=?4)';
 	const binds = [user.id, member.group_id, member.member_id, timestamp];
 	const results = await db.batch([
-		db.prepare(`UPDATE group_members SET left_at=?4, access_token=lower(hex(randomblob(32)))
+		db.prepare(`UPDATE group_members SET departed_user_id=user_id, user_id=NULL, left_at=?4, access_token=lower(hex(randomblob(32)))
 			WHERE user_id=?1 AND group_id=?2 AND id=?3 AND left_at IS NULL
 			AND EXISTS (SELECT 1 FROM active_group_members other WHERE other.group_id=?2 AND other.id<>?3 AND other.user_id IS NOT NULL)
 			AND NOT EXISTS (SELECT 1 FROM group_availability_wishes WHERE group_id=?2 AND user_id=?1)

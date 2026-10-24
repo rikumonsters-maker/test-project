@@ -1,5 +1,32 @@
 # グループ退出時の共有予定保持
 
+## Final review: old and new Worker transition
+
+Migration 0015 also adds `group_members.departed_user_id`. A successful departure
+atomically moves the account ID from `user_id` to `departed_user_id`, sets
+`left_at`, rotates the legacy access token, and revokes group notifications and
+participation. The historical member ID remains for shared-event foreign keys.
+The pre-0015 Worker authorizes group access with `group_members.user_id`; a
+departed account therefore cannot use its historical row even if an old
+version receives a request. The new Worker uses `active_group_members`.
+
+Deploy the leave-only bridge to 100% **before** applying 0015. Confirm that
+new leave requests return 503 and that pre-bridge invocations have drained
+before the migration. Do not infer this from the traffic percentage alone:
+an invocation already running on the pre-bridge version can still delete a
+shared event. If invocation drain cannot be established, pause the release.
+After 0015, deploy the new Worker to 100%, verify the served version and
+absence of bridge invocations, and only then allow departure requests.
+Never roll back to the pre-0015 Worker after the first departure. The
+0015-compatible emergency Worker pauses all group APIs and Cron while retaining
+account and personal APIs; investigate and redeploy a corrected 0015-compatible
+version instead of restoring historical member privileges.
+
+An in-flight Push request already sent to the Push provider cannot be recalled.
+The departure batch removes queued group deliveries and shared reminders; the
+new Worker also checks active membership when claiming queued Push. A request
+that passed its final check immediately before departure may still finish.
+
 対象ブランチ: `fix/preserve-shared-events-on-leave-20261024`
 
 基準: GitHub main `0fcafe6c8e41b2a2bc12fe8e00d5f1f3ad28755b`。

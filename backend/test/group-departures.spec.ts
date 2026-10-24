@@ -74,7 +74,8 @@ describe('group departure retention and authorization',()=>{
     expect((await api(f.outsider,'/api/shared/events/delete',body)).status).toBe(401);
     expect((await api(f.member,'/api/shared/events/delete',body)).status).toBe(200);
     expect(await db.prepare('SELECT id FROM event_reminders WHERE shared_event_id=?1').bind(f.id).first()).toBeNull();
-    expect(await db.prepare('SELECT id FROM group_members WHERE id=?1').bind(f.group.memberId).first()).not.toBeNull();
+    expect(await db.prepare('SELECT user_id,departed_user_id FROM group_members WHERE id=?1').bind(f.group.memberId).first())
+      .toEqual({user_id:null,departed_user_id:f.owner.id});
   });
 
   it('denies every group API and old legacy claim to the departed user',async()=>{
@@ -88,6 +89,12 @@ describe('group departure retention and authorization',()=>{
       expect((await api(f.owner,'/api/shared/'+path,{...event,groupId:f.group.groupId,id:f.id,month:'2030-10',entries:[],userId:f.member.id,date:event.eventDate})).status).toBe(401);
     }
     expect((await api(f.owner,'/api/groups/mine')).data.groups).toEqual([]);
+    // This is the pre-0015 Worker's membership predicate. The old version
+    // must also reject the departed account during a version transition.
+    expect(await db.prepare('SELECT id FROM group_members WHERE group_id=?1 AND user_id=?2')
+      .bind(f.group.groupId,f.owner.id).first()).toBeNull();
+    expect(await db.prepare('SELECT id FROM group_members WHERE id=?1 AND group_id=?2 AND access_token=?3')
+      .bind(f.group.memberId,f.group.groupId,old!.access_token).first()).toBeNull();
     expect((await api(f.owner,'/api/groups/claim',{groupId:f.group.groupId,memberId:f.group.memberId,memberToken:old!.access_token})).status).toBe(403);
     expect((await reminder(f.owner,f.group.groupId,f.id,true)).status).toBe(404);
     expect((await reminder(f.owner,f.group.groupId,f.id)).status).toBe(404);
@@ -145,6 +152,8 @@ describe('group departure retention and authorization',()=>{
     expect(oldNotices.length).toBeGreaterThan(0);
     expect((await api(f.member,'/api/groups/leave',{groupId:f.group.groupId})).status).toBe(200);
     expect((await inbox(f.member)).notifications).toEqual([]);
+    await expect(db.prepare('UPDATE group_availability_reactions SET revoked_at=NULL WHERE wish_id=?1 AND user_id=?2')
+      .bind(w.data.id,f.member.id).run()).rejects.toThrow('inactive group membership');
     const rejoined=(await api(f.member,'/api/groups/join',{inviteCode:f.group.inviteCode})).data.membership;
     expect(rejoined.memberId).not.toBe(f.joined.memberId);
     expect((await inbox(f.member)).notifications.some((n:any)=>oldNotices.includes(n.id))).toBe(false);
@@ -233,6 +242,8 @@ describe('group departure retention and authorization',()=>{
     await api(f.owner,'/api/groups/leave',{groupId:f.group.groupId});
     const rejoined=(await api(f.owner,'/api/groups/join',{inviteCode:f.group.inviteCode})).data.membership;
     expect(rejoined.memberId).not.toBe(f.group.memberId);
+    expect(await db.prepare('SELECT user_id,departed_user_id FROM group_members WHERE id=?1')
+      .bind(f.group.memberId).first()).toEqual({user_id:null,departed_user_id:f.owner.id});
     expect((await db.prepare('SELECT id FROM active_group_members WHERE group_id=?1 AND user_id=?2').bind(f.group.groupId,f.owner.id).all()).results).toHaveLength(1);
     const listed=await api(f.owner,'/api/shared/events/list',{groupId:f.group.groupId,month:'2030-10'});
     expect(listed.data.events[0]).toMatchObject({createdByMemberId:f.group.memberId,creatorLeft:true,canManage:true});
