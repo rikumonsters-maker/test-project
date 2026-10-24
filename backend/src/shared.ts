@@ -106,7 +106,7 @@ async function renameGroup(db: D1Database, body: JsonRecord, user: SessionUser):
 	if (!member) return jsonResponse({ error:'グループが見つからないか、変更する権限がありません' }, 404);
 	const name = stringValue(body.name, 60);
 	if (!name) return jsonResponse({ error:'グループ名は1〜60文字で入力してください' }, 400);
-	await db.prepare('UPDATE groups SET name = ?1 WHERE id = ?2 AND EXISTS(SELECT 1 FROM active_group_members WHERE id=?3 AND group_id=?2)').bind(name, member.group_id, member.member_id).run();
+	await db.prepare('UPDATE groups SET name = ?1, management_version=management_version+1 WHERE id = ?2 AND EXISTS(SELECT 1 FROM active_group_members WHERE id=?3 AND group_id=?2)').bind(name, member.group_id, member.member_id).run();
 	return jsonResponse({ ok:true, groupName:name });
 }
 
@@ -118,7 +118,7 @@ async function updateGroupIcon(db: D1Database, body: JsonRecord, user: SessionUs
 	if (!groupIcon || !GROUP_ICON_IDS.has(groupIcon) || !groupIconColor || !GROUP_ICON_COLOR_IDS.has(groupIconColor)) {
 		return jsonResponse({ error:'\u30b0\u30eb\u30fc\u30d7\u30a2\u30a4\u30b3\u30f3\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044' }, 400);
 	}
-	await db.prepare('UPDATE groups SET group_icon = ?1, group_icon_color = ?2 WHERE id = ?3 AND EXISTS(SELECT 1 FROM active_group_members WHERE id=?4 AND group_id=?3)')
+	await db.prepare('UPDATE groups SET group_icon = ?1, group_icon_color = ?2, management_version=management_version+1 WHERE id = ?3 AND EXISTS(SELECT 1 FROM active_group_members WHERE id=?4 AND group_id=?3)')
 		.bind(groupIcon, groupIconColor, member.group_id, member.member_id).run();
 	return jsonResponse({ ok:true, groupIcon, groupIconColor });
 }
@@ -490,7 +490,8 @@ async function updateEvent(env: SharedEnv, ctx: ExecutionContext, body: JsonReco
 	const timestamp = new Date().toISOString();
 	const result = await db.batch([
 		db.prepare(
-		`UPDATE shared_events AS e SET title = ?1, event_date = ?2, starts_at = ?3, ends_at = ?4, all_day = ?5, note = ?6, updated_at = ?7
+		`UPDATE shared_events AS e SET title = ?1, event_date = ?2, starts_at = ?3, ends_at = ?4, all_day = ?5, note = ?6, updated_at = ?7,
+		 management_version=management_version+1
 		 WHERE id = ?8 AND group_id = ?9 AND ${canManageSharedEventSql('e', '?10')}`,
 		).bind(event.title, event.eventDate, event.start, event.end, Number(event.allDay), event.note, timestamp, id, member.group_id, member.member_id),
 		...reminderStatements,
@@ -507,6 +508,9 @@ async function deleteEvent(db: D1Database, body: JsonRecord, user: SessionUser):
 	if (!member) return jsonResponse({ error: 'グループへの参加情報を確認できません' }, 401);
 	if (!id) return jsonResponse({ error: '予定を指定してください' }, 400);
 	const result = await db.batch([
+		db.prepare(`INSERT INTO shared_event_delete_grants(event_id,actor_member_id)
+			SELECT e.id,?3 FROM shared_events e WHERE e.id=?1 AND e.group_id=?2 AND ${canManageSharedEventSql('e', '?3')}`)
+			.bind(id,member.group_id,member.member_id),
 		db.prepare(`DELETE FROM push_deliveries WHERE reminder_id IN (
 			SELECT r.id FROM event_reminders r JOIN shared_events e ON e.id=r.shared_event_id
 			WHERE r.scope='shared' AND r.group_id=?1 AND r.shared_event_id=?2 AND ${canManageSharedEventSql('e', '?3')})`)
@@ -514,7 +518,7 @@ async function deleteEvent(db: D1Database, body: JsonRecord, user: SessionUser):
 		db.prepare(`DELETE FROM shared_events AS e WHERE id = ?1 AND group_id = ?2 AND ${canManageSharedEventSql('e', '?3')}`)
 			.bind(id, member.group_id, member.member_id),
 	]);
-	if (!result[1].meta.changes) return jsonResponse({ error: 'この予定を削除する権限がありません' }, 403);
+	if (!result[2].meta.changes) return jsonResponse({ error: 'この予定を削除する権限がありません' }, 403);
 	return jsonResponse({ ok:true });
 }
 

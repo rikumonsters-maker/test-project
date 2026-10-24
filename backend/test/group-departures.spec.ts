@@ -61,6 +61,23 @@ describe('group departure retention and authorization',()=>{
     expect((await db.prepare('PRAGMA foreign_key_check').all()).results).toEqual([]);
   });
 
+  it('rolls back a pre-migration Worker leave batch that reaches D1 after 0015',async()=>{
+    const f=await fixture();
+    expect(await db.prepare('SELECT id FROM group_members WHERE group_id=?1 AND user_id=?2')
+      .bind(f.group.groupId,f.owner.id).first()).not.toBeNull();
+    await expect(db.batch([
+      db.prepare(`DELETE FROM group_availability_reactions WHERE user_id=?1 AND wish_id IN
+        (SELECT id FROM group_availability_wishes WHERE group_id=?2)`).bind(f.owner.id,f.group.groupId),
+      db.prepare('DELETE FROM group_availability_wishes WHERE group_id=?1 AND user_id=?2').bind(f.group.groupId,f.owner.id),
+      db.prepare('DELETE FROM member_calendar_entries WHERE group_id=?1 AND member_id=?2').bind(f.group.groupId,f.group.memberId),
+      db.prepare('DELETE FROM shared_events WHERE group_id=?1 AND created_by_member_id=?2').bind(f.group.groupId,f.group.memberId),
+      db.prepare('DELETE FROM group_members WHERE group_id=?1 AND id=?2').bind(f.group.groupId,f.group.memberId),
+    ])).rejects.toThrow('group membership must be retained');
+    expect(await db.prepare('SELECT id FROM shared_events WHERE id=?1').bind(f.id).first()).not.toBeNull();
+    expect(await db.prepare('SELECT id FROM group_members WHERE id=?1').bind(f.group.memberId).first()).not.toBeNull();
+    expect((await db.prepare('PRAGMA foreign_key_check').all()).results).toEqual([]);
+  });
+
   it('retains events and lets remaining members edit/delete only after the creator leaves',async()=>{
     const f=await fixture();
     const body={...event,groupId:f.group.groupId,id:f.id};
@@ -69,10 +86,17 @@ describe('group departure retention and authorization',()=>{
     expect((await api(f.owner,'/api/groups/leave',{groupId:f.group.groupId})).status).toBe(200);
     const listed=await api(f.member,'/api/shared/events/list',{groupId:f.group.groupId,month:'2030-10'});
     expect(listed.data.events.find((e:any)=>e.id===f.id)).toMatchObject({title:event.title,note:event.note,canManage:true,creatorLeft:true});
+    await expect(db.prepare('UPDATE shared_events SET title=?1 WHERE id=?2 AND group_id=?3 AND created_by_member_id=?4')
+      .bind('stale old Worker',f.id,f.group.groupId,f.group.memberId).run())
+      .rejects.toThrow('orphan event requires active manager');
     expect((await api(f.member,'/api/shared/events/update',{...body,title:'引き継いで編集',start:'15:00',end:'16:00'})).status).toBe(200);
     expect(await db.prepare('SELECT event_start_at FROM event_reminders WHERE shared_event_id=?1').bind(f.id).first()).toEqual({event_start_at:'2030-10-21T06:00:00.000Z'});
     expect((await api(f.outsider,'/api/shared/events/delete',body)).status).toBe(401);
+    await expect(db.prepare('DELETE FROM shared_events WHERE id=?1 AND group_id=?2 AND created_by_member_id=?3')
+      .bind(f.id,f.group.groupId,f.group.memberId).run())
+      .rejects.toThrow('orphan event requires active manager');
     expect((await api(f.member,'/api/shared/events/delete',body)).status).toBe(200);
+    expect(await db.prepare('SELECT event_id FROM shared_event_delete_grants WHERE event_id=?1').bind(f.id).first()).toBeNull();
     expect(await db.prepare('SELECT id FROM event_reminders WHERE shared_event_id=?1').bind(f.id).first()).toBeNull();
     expect(await db.prepare('SELECT user_id,departed_user_id FROM group_members WHERE id=?1').bind(f.group.memberId).first())
       .toEqual({user_id:null,departed_user_id:f.owner.id});
@@ -89,6 +113,9 @@ describe('group departure retention and authorization',()=>{
       expect((await api(f.owner,'/api/shared/'+path,{...event,groupId:f.group.groupId,id:f.id,month:'2030-10',entries:[],userId:f.member.id,date:event.eventDate})).status).toBe(401);
     }
     expect((await api(f.owner,'/api/groups/mine')).data.groups).toEqual([]);
+    await expect(db.prepare('UPDATE groups SET name=?1 WHERE id=?2').bind('stale old Worker',f.group.groupId).run())
+      .rejects.toThrow('group update requires active member');
+    expect((await api(f.member,'/api/groups/rename',{groupId:f.group.groupId,name:'残留メンバーによる変更'})).status).toBe(200);
     // This is the pre-0015 Worker's membership predicate. The old version
     // must also reject the departed account during a version transition.
     expect(await db.prepare('SELECT id FROM group_members WHERE group_id=?1 AND user_id=?2')
@@ -154,6 +181,8 @@ describe('group departure retention and authorization',()=>{
     expect((await inbox(f.member)).notifications).toEqual([]);
     await expect(db.prepare('UPDATE group_availability_reactions SET revoked_at=NULL WHERE wish_id=?1 AND user_id=?2')
       .bind(w.data.id,f.member.id).run()).rejects.toThrow('inactive group membership');
+    await expect(db.prepare('DELETE FROM group_availability_reactions WHERE wish_id=?1 AND user_id=?2')
+      .bind(w.data.id,f.member.id).run()).rejects.toThrow('inactive group membership');
     const rejoined=(await api(f.member,'/api/groups/join',{inviteCode:f.group.inviteCode})).data.membership;
     expect(rejoined.memberId).not.toBe(f.joined.memberId);
     expect((await inbox(f.member)).notifications.some((n:any)=>oldNotices.includes(n.id))).toBe(false);
@@ -171,6 +200,26 @@ describe('group departure retention and authorization',()=>{
     expect((await reminder(f.member,f.group.groupId,confirmed.data.eventId)).status).toBe(404);
   });
 
+  it('rejects an old Worker confirmation based on a revoked reaction after rejoin',async()=>{
+    const f=await fixture();
+    const wish=(await api(f.owner,'/api/groups/wishes/create',{groupId:f.group.groupId,wishDate:event.eventDate,isAllDay:true})).data;
+    expect((await api(f.member,'/api/groups/wishes/react',{groupId:f.group.groupId,wishId:wish.id})).status).toBe(200);
+    const tentative=await db.prepare('SELECT id FROM shared_events WHERE wish_id=?1').bind(wish.id).first<{id:string}>();
+    expect(tentative).not.toBeNull();
+    expect((await api(f.member,'/api/groups/leave',{groupId:f.group.groupId})).status).toBe(200);
+    expect((await api(f.member,'/api/groups/join',{inviteCode:f.group.inviteCode})).status).toBe(201);
+    await expect(db.batch([
+      db.prepare("UPDATE shared_events SET status='confirmed' WHERE id=?1 AND status='tentative'").bind(tentative!.id),
+      db.prepare('INSERT INTO shared_event_participants(event_id,user_id) VALUES(?1,?2)').bind(tentative!.id,f.owner.id),
+      db.prepare('INSERT INTO shared_event_participants(event_id,user_id) VALUES(?1,?2)').bind(tentative!.id,f.member.id),
+    ])).rejects.toThrow('inactive group membership');
+    expect(await db.prepare('SELECT status FROM shared_events WHERE id=?1').bind(tentative!.id).first()).toEqual({status:'tentative'});
+    expect((await db.prepare('SELECT user_id FROM shared_event_participants WHERE event_id=?1').bind(tentative!.id).all()).results).toEqual([]);
+    expect((await api(f.member,'/api/groups/wishes/react',{groupId:f.group.groupId,wishId:wish.id})).status).toBe(200);
+    expect((await api(f.owner,'/api/groups/wishes/confirm',{groupId:f.group.groupId,wishId:wish.id,...event,
+      participantUserIds:[f.owner.id,f.member.id]})).status).toBe(200);
+  });
+
   it('retains personal/shift data but hides departed users from group calendars and future queueing',async()=>{
     const f=await fixture();
     await db.prepare(`INSERT INTO member_calendar_entries(group_id,member_id,source_type,source_id,event_date,title,starts_at,ends_at,note)
@@ -182,6 +231,8 @@ describe('group departure retention and authorization',()=>{
     const before=await api(f.member,'/api/shared/events/list',{groupId:f.group.groupId,month:'2030-10'});
     expect(JSON.stringify(before.data)).not.toMatch(/PRIVATE_/);
     await api(f.owner,'/api/groups/leave',{groupId:f.group.groupId});
+    await expect(db.prepare('DELETE FROM member_calendar_entries WHERE group_id=?1 AND member_id=?2')
+      .bind(f.group.groupId,f.group.memberId).run()).rejects.toThrow('inactive group membership');
     const after=await api(f.member,'/api/shared/events/list',{groupId:f.group.groupId,month:'2030-10'});
     expect(after.data.events).toHaveLength(1);
     expect(await db.prepare('SELECT id FROM personal_events WHERE user_id=?1').bind(f.owner.id).first()).not.toBeNull();
@@ -254,7 +305,8 @@ describe('group departure retention and authorization',()=>{
     const listed=await api(f.owner,'/api/shared/events/list',{groupId:f.group.groupId,month:'2030-10'});
     expect(listed.data.events[0]).toMatchObject({createdByMemberId:f.group.memberId,creatorLeft:true,canManage:true});
     // The rejoined user has only the same confirmed-orphan permission as everyone else.
-    await db.prepare("UPDATE shared_events SET status='tentative' WHERE id=?1").bind(f.id).run();
-    expect((await api(f.owner,'/api/shared/events/update',{...event,groupId:f.group.groupId,id:f.id})).status).toBe(403);
+    expect((await api(f.owner,'/api/shared/events/update',{...event,groupId:f.group.groupId,id:f.id})).status).toBe(200);
+    await expect(db.prepare("UPDATE shared_events SET status='tentative' WHERE id=?1").bind(f.id).run())
+      .rejects.toThrow('orphan event requires active manager');
   });
 });

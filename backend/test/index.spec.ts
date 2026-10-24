@@ -15,6 +15,7 @@ import migration10 from '../migrations/0010_group_icon_ids.sql?raw';
 import migration12 from '../migrations/0012_personal_event_sync.sql?raw';
 import migration13 from '../migrations/0013_push_reminders.sql?raw';
 import migration14 from '../migrations/0014_in_app_notifications.sql?raw';
+import migration14a from '../migrations/0014a_group_leave_guard.sql?raw';
 import migration15 from '../migrations/0015_group_departures.sql?raw';
 import { applySQL } from './migration-helper';
 import { drainPushQueue, encryptPushPayload, handlePushRequest, notifyGroup, queueGroupNotice, type PushEnv } from '../src/push';
@@ -91,8 +92,7 @@ describe('in-app notification center', () => {
     expect((await api('/api/notifications/read-all',{},member.cookie)).data.unreadCount).toBe(0);
     expect((await api('/api/notifications',undefined,member.cookie)).data.notifications.every((item:any)=>item.readAt)).toBe(true);
 
-    await env.DB.prepare('DELETE FROM group_members WHERE group_id=?1 AND user_id=?2')
-      .bind(group.groupId,member.user.id).run();
+    expect((await api('/api/groups/leave',{groupId:group.groupId},member.cookie)).status).toBe(200);
     expect((await api('/api/notifications',undefined,member.cookie)).data.notifications).toEqual([]);
     expect((await api('/api/notifications/count',undefined,member.cookie)).data.unreadCount).toBe(0);
   });
@@ -191,6 +191,7 @@ beforeAll(async () => {
   await applySQL(env.DB, migration12);
   await applySQL(env.DB, migration13);
   await applySQL(env.DB, migration14);
+  await applySQL(env.DB, migration14a);
   await applySQL(env.DB, migration15);
 });
 
