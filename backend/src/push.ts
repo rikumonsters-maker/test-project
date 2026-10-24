@@ -1,6 +1,6 @@
 import type { SessionUser } from './auth';
 import { PUBLIC_APP_ORIGIN } from './app-origin';
-import { notificationPath, queueGroupInbox, queueGroupUserInbox } from './notifications';
+import { notificationPath, queueGroupInbox, queueGroupUserInbox, validReminderSql } from './notifications';
 
 export interface PushEnv {
 	DB: D1Database;
@@ -157,7 +157,7 @@ export async function queueGroupNotice(env: PushEnv, groupId: string, actorUserI
 	await env.DB.prepare(
 		`INSERT OR IGNORE INTO push_deliveries (id, subscription_id, group_id, kind, body, created_at, next_attempt_at, scope, dedupe_key)
 		 SELECT lower(hex(randomblob(16))), s.id, ?1, ?2, ?3, ?4, ?4, 'group', CASE WHEN ?6 IS NULL THEN NULL ELSE ?6 || ':' || s.id END
-		 FROM push_subscriptions s JOIN group_members m ON m.user_id = s.user_id
+		 FROM push_subscriptions s JOIN active_group_members m ON m.user_id = s.user_id
 		 WHERE m.group_id = ?1 AND s.user_id != ?5`,
 	).bind(groupId, notice.kind, notice.body, now, actorUserId, dedupeKey || null).run();
 }
@@ -172,7 +172,7 @@ export async function queueGroupUserNotice(env: PushEnv, groupId: string, recipi
 	await env.DB.prepare(
 		`INSERT OR IGNORE INTO push_deliveries (id, subscription_id, group_id, kind, body, created_at, next_attempt_at, scope, recipient_user_id, dedupe_key)
 		 SELECT lower(hex(randomblob(16))), s.id, ?1, ?2, ?3, ?4, ?4, 'group', ?5, ?6 || ':' || s.id
-		 FROM push_subscriptions s JOIN group_members m ON m.user_id = s.user_id
+		 FROM push_subscriptions s JOIN active_group_members m ON m.user_id = s.user_id
 		 WHERE m.group_id = ?1 AND s.user_id = ?5 AND s.user_id != ?7`,
 	).bind(groupId, notice.kind, notice.body, now, recipientUserId, dedupeKey, actorUserId).run();
 }
@@ -182,7 +182,7 @@ export async function drainPushQueue(env: PushEnv): Promise<void> {
 	await env.DB.prepare(
 		`DELETE FROM push_deliveries WHERE
 		 (scope = 'group' AND NOT EXISTS (
-		   SELECT 1 FROM push_subscriptions s JOIN group_members m ON m.user_id = s.user_id
+		   SELECT 1 FROM push_subscriptions s JOIN active_group_members m ON m.user_id = s.user_id
 		   WHERE s.id = push_deliveries.subscription_id AND m.group_id = push_deliveries.group_id
 		     AND (push_deliveries.recipient_user_id IS NULL OR m.user_id = push_deliveries.recipient_user_id)))
 		 OR (scope = 'personal' AND NOT EXISTS (
@@ -197,7 +197,12 @@ export async function drainPushQueue(env: PushEnv): Promise<void> {
 		 WHERE d.next_attempt_at <= ?1 ORDER BY d.created_at, d.id LIMIT ?2`,
 	).bind(now, BATCH_SIZE).all<Delivery>();
 	await Promise.all((rows.results || []).map(async (item) => {
-		const claimed = await env.DB.prepare('UPDATE push_deliveries SET next_attempt_at = ?1 WHERE id = ?2 AND next_attempt_at <= ?3')
+		const claimed = await env.DB.prepare(`UPDATE push_deliveries SET next_attempt_at = ?1 WHERE id = ?2 AND next_attempt_at <= ?3
+			AND (scope='personal' OR EXISTS(SELECT 1 FROM push_subscriptions s JOIN active_group_members m ON m.user_id=s.user_id
+			 WHERE s.id=push_deliveries.subscription_id AND m.group_id=push_deliveries.group_id
+			 AND (push_deliveries.recipient_user_id IS NULL OR m.user_id=push_deliveries.recipient_user_id)))
+			AND (reminder_id IS NULL OR EXISTS(SELECT 1 FROM event_reminders r
+			 WHERE r.id=push_deliveries.reminder_id AND r.event_start_at>?3 AND (${validReminderSql()})))`)
 			.bind(new Date(Date.now() + 5 * 60_000).toISOString(), item.delivery_id, now).run();
 		if (!claimed.meta.changes) return;
 		const result = await deliver(env, item, { groupId:item.group_id, targetPath:item.target_path || undefined, kind:item.kind, body:item.body });

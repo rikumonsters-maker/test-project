@@ -15,6 +15,8 @@ import migration10 from '../migrations/0010_group_icon_ids.sql?raw';
 import migration12 from '../migrations/0012_personal_event_sync.sql?raw';
 import migration13 from '../migrations/0013_push_reminders.sql?raw';
 import migration14 from '../migrations/0014_in_app_notifications.sql?raw';
+import migration14a from '../migrations/0014a_group_leave_guard.sql?raw';
+import migration15 from '../migrations/0015_group_departures.sql?raw';
 import { applySQL } from './migration-helper';
 import { drainPushQueue, encryptPushPayload, handlePushRequest, notifyGroup, queueGroupNotice, type PushEnv } from '../src/push';
 import { handleSharedRequest } from '../src/shared';
@@ -90,8 +92,7 @@ describe('in-app notification center', () => {
     expect((await api('/api/notifications/read-all',{},member.cookie)).data.unreadCount).toBe(0);
     expect((await api('/api/notifications',undefined,member.cookie)).data.notifications.every((item:any)=>item.readAt)).toBe(true);
 
-    await env.DB.prepare('DELETE FROM group_members WHERE group_id=?1 AND user_id=?2')
-      .bind(group.groupId,member.user.id).run();
+    expect((await api('/api/groups/leave',{groupId:group.groupId},member.cookie)).status).toBe(200);
     expect((await api('/api/notifications',undefined,member.cookie)).data.notifications).toEqual([]);
     expect((await api('/api/notifications/count',undefined,member.cookie)).data.unreadCount).toBe(0);
   });
@@ -190,9 +191,34 @@ beforeAll(async () => {
   await applySQL(env.DB, migration12);
   await applySQL(env.DB, migration13);
   await applySQL(env.DB, migration14);
+  await applySQL(env.DB, migration14a);
+  await applySQL(env.DB, migration15);
 });
 
 describe('DaySync authentication', () => {
+  it('keeps authenticated non-group APIs available in emergency pause and stops group APIs and Cron', async () => {
+    const owner=await register('一時停止の確認');
+    const group=(await api('/api/groups/create',{name:'一時停止テスト'},owner.cookie)).data.membership;
+    const paused={...env,GROUP_ACCESS_PAUSED:'true'};
+    const call=async(path:string,body?:Record<string,unknown>)=>worker.fetch(new Request('https://example.com'+path,{
+      method:body?'POST':'GET',headers:{Origin:PUBLIC_APP_ORIGIN,Cookie:owner.cookie,'Content-Type':'application/json'},
+      body:body?JSON.stringify(body):undefined,
+    }),paused,createExecutionContext());
+    expect((await call('/api/auth/me')).status).toBe(200);
+    expect((await call('/api/personal/events/status')).status).toBe(200);
+    for(const [path,body] of [
+      ['/api/groups/mine',{}],['/api/groups/leave',{groupId:group.groupId}],
+      ['/api/shared/events/list',{groupId:group.groupId,month:'2030-10'}],
+      ['/api/reminders/shared/get',{groupId:group.groupId,eventId:'none'}],
+    ] as Array<[string,Record<string,unknown>]>) {
+      const response=await call(path,body);
+      expect(response.status).toBe(503);
+      expect((await response.json() as any).error).toContain('一時停止中');
+    }
+    const waitUntil=vi.fn();
+    await worker.scheduled({} as ScheduledController,paused,{waitUntil} as unknown as ExecutionContext);
+    expect(waitUntil).not.toHaveBeenCalled();
+  });
   it('enables local CORS only with the development flag and a loopback HTTP Worker', async () => {
     for (const host of ['localhost', '127.0.0.1']) {
       for (const port of [5500, 3000, 5173, 8767]) {
@@ -649,8 +675,8 @@ describe('account-bound groups', () => {
     expect((await api('/api/groups/wishes/list', { groupId:group.groupId }, guest.cookie)).data.wishes).toHaveLength(0);
     const departing = await api('/api/groups/wishes/create', wish, owner.cookie);
     await api('/api/groups/wishes/react', { groupId:group.groupId, wishId:departing.data.id }, guest.cookie);
-    expect((await api('/api/groups/leave', { groupId:group.groupId }, owner.cookie)).status).toBe(200);
-    expect((await api('/api/groups/wishes/list', { groupId:group.groupId }, guest.cookie)).data.wishes).toHaveLength(0);
+    expect((await api('/api/groups/leave', { groupId:group.groupId }, owner.cookie)).status).toBe(409);
+    expect((await api('/api/groups/wishes/list', { groupId:group.groupId }, guest.cookie)).data.wishes).toHaveLength(1);
   });
 
   it('notifies current group members on wish creation and alerts the owner once for each new reaction', async () => {

@@ -1,0 +1,13 @@
+{
+  // Migration review only. Never use this configuration for Worker deployment.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cloudflare-api",
+  "account_id": "f17c675f86cd6f9116a15f5b0f1ab86e",
+  "compatibility_date": "2026-09-25",
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "money-app-shared",
+    "database_id": "142e6c05-b703-4825-828b-b6dd702c38bd",
+    "migrations_dir": "migrations-0014a-only"
+  }]
+}

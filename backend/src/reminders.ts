@@ -1,3 +1,4 @@
+import { canManageSharedEventSql } from './group-permissions';
 import type { SessionUser } from './auth';
 import { reminderInboxStatement, validReminderSql } from './notifications';
 import type { PushEnv } from './push';
@@ -145,9 +146,9 @@ export function validatePersonalReminderEvent(event:PersonalEvent):boolean {
 
 async function sharedEventForUser(db:D1Database, groupId:string, eventId:string, userId:string):Promise<SharedEvent | null> {
 	return db.prepare(`SELECT e.id,e.group_id,e.event_date AS date,e.starts_at AS start,e.all_day AS allDay,
-		e.status,e.wish_id FROM shared_events e JOIN group_members gm ON gm.group_id=e.group_id
+		e.status,e.wish_id FROM shared_events e JOIN active_group_members gm ON gm.group_id=e.group_id
 		WHERE e.id=?1 AND e.group_id=?2 AND gm.user_id=?3 AND e.status='confirmed'
-		AND (e.wish_id IS NULL OR EXISTS(SELECT 1 FROM shared_event_participants p WHERE p.event_id=e.id AND p.user_id=?3))`)
+		AND (e.wish_id IS NULL OR EXISTS(SELECT 1 FROM shared_event_participants p WHERE p.event_id=e.id AND p.user_id=?3 AND p.revoked_at IS NULL))`)
 		.bind(eventId,groupId,userId).first<SharedEvent>();
 }
 
@@ -168,9 +169,9 @@ function sharedReminderStatements(db:D1Database, userId:string, event:SharedEven
 		statements.push(db.prepare(`INSERT INTO event_reminders
 			(id,scope,user_id,group_id,personal_event_id,shared_event_id,offset_minutes,time_zone,event_start_at,due_at,created_at)
 			SELECT lower(hex(randomblob(16))),'shared',?1,?2,NULL,?3,?4,?5,?6,?7,?8
-			WHERE EXISTS(SELECT 1 FROM shared_events e JOIN group_members gm ON gm.group_id=e.group_id
+			WHERE EXISTS(SELECT 1 FROM shared_events e JOIN active_group_members gm ON gm.group_id=e.group_id
 			 WHERE e.id=?3 AND e.group_id=?2 AND gm.user_id=?1 AND e.status='confirmed'
-			 AND (e.wish_id IS NULL OR EXISTS(SELECT 1 FROM shared_event_participants p WHERE p.event_id=e.id AND p.user_id=?1)))
+			 AND (e.wish_id IS NULL OR EXISTS(SELECT 1 FROM shared_event_participants p WHERE p.event_id=e.id AND p.user_id=?1 AND p.revoked_at IS NULL)))
 			ON CONFLICT(user_id,shared_event_id,offset_minutes) WHERE scope='shared' DO UPDATE SET
 			 time_zone=excluded.time_zone,event_start_at=excluded.event_start_at,due_at=excluded.due_at,
 			 queued_at=NULL,generation=event_reminders.generation+1
@@ -181,20 +182,21 @@ function sharedReminderStatements(db:D1Database, userId:string, event:SharedEven
 }
 
 export function sharedReminderRefreshStatements(db:D1Database, groupId:string, eventId:string,
-	event:EventTime & { allDay:boolean }, userReminders:Array<{ user_id:string; offset_minutes:number; time_zone:string }>):D1PreparedStatement[] {
+	event:EventTime & { allDay:boolean }, userReminders:Array<{ user_id:string; offset_minutes:number; time_zone:string }>, actorMemberId:string):D1PreparedStatement[] {
 	const statements:D1PreparedStatement[]=[];
 	for (const reminder of userReminders) {
 		const startAt=eventStart(event,reminder.time_zone);
 		if (!startAt) throw new Error('予定のタイムゾーンまたは開始時刻を確認してください');
 		statements.push(db.prepare(`DELETE FROM push_deliveries WHERE reminder_id IN (
 			SELECT id FROM event_reminders WHERE scope='shared' AND user_id=?1 AND shared_event_id=?2 AND offset_minutes=?3
-			AND (time_zone!=?4 OR event_start_at!=?5 OR due_at!=?6))`)
-			.bind(reminder.user_id,eventId,reminder.offset_minutes,reminder.time_zone,startAt,dueAt(startAt,reminder.offset_minutes)));
+			AND (time_zone!=?4 OR event_start_at!=?5 OR due_at!=?6)
+			AND EXISTS(SELECT 1 FROM shared_events e WHERE e.id=?2 AND ${canManageSharedEventSql('e', '?7')}))`)
+			.bind(reminder.user_id,eventId,reminder.offset_minutes,reminder.time_zone,startAt,dueAt(startAt,reminder.offset_minutes),actorMemberId));
 		statements.push(db.prepare(`UPDATE event_reminders SET event_start_at=?1,due_at=?2,queued_at=NULL,generation=generation+1
 			WHERE scope='shared' AND user_id=?3 AND shared_event_id=?4 AND offset_minutes=?5
 			AND (event_start_at!=?1 OR due_at!=?2)
-			AND EXISTS(SELECT 1 FROM shared_events e WHERE e.id=?4 AND e.group_id=?6 AND e.status='confirmed')`)
-			.bind(startAt,dueAt(startAt,reminder.offset_minutes),reminder.user_id,eventId,reminder.offset_minutes,groupId));
+			AND EXISTS(SELECT 1 FROM shared_events e WHERE e.id=?4 AND e.group_id=?6 AND e.status='confirmed' AND ${canManageSharedEventSql('e', '?7')})`)
+			.bind(startAt,dueAt(startAt,reminder.offset_minutes),reminder.user_id,eventId,reminder.offset_minutes,groupId,actorMemberId));
 	}
 	return statements;
 }

@@ -36,7 +36,7 @@ function wishInput(body: Body) {
 }
 
 async function isMember(db: D1Database, groupId: string, userId: string): Promise<boolean> {
-	return Boolean(await db.prepare('SELECT 1 FROM group_members WHERE group_id = ?1 AND user_id = ?2')
+	return Boolean(await db.prepare('SELECT 1 FROM active_group_members WHERE group_id = ?1 AND user_id = ?2')
 		.bind(groupId, userId).first());
 }
 
@@ -44,8 +44,8 @@ async function list(db: D1Database, groupId: string, user: SessionUser): Promise
 	const rows = await db.prepare(`SELECT w.id, w.group_id, w.user_id, w.wish_date, w.start_time, w.end_time,
 		w.is_all_day, w.message, w.created_at, w.updated_at, u.display_name, u.profile_icon,
 		e.id AS event_id, e.status AS event_status,
-		(SELECT COUNT(*) FROM group_availability_reactions r WHERE r.wish_id = w.id) AS reaction_count,
-		EXISTS(SELECT 1 FROM group_availability_reactions r WHERE r.wish_id = w.id AND r.user_id = ?2) AS reacted
+		(SELECT COUNT(*) FROM group_availability_reactions r WHERE r.wish_id = w.id AND r.revoked_at IS NULL) AS reaction_count,
+		EXISTS(SELECT 1 FROM group_availability_reactions r WHERE r.wish_id = w.id AND r.revoked_at IS NULL AND r.user_id = ?2) AS reacted
 		FROM group_availability_wishes w JOIN users u ON u.id = w.user_id
 		LEFT JOIN shared_events e ON e.wish_id = w.id
 		WHERE w.group_id = ?1 ORDER BY w.wish_date, w.created_at, w.id`)
@@ -56,7 +56,7 @@ async function list(db: D1Database, groupId: string, user: SessionUser): Promise
 		}>();
 	const interested = await db.prepare(`SELECT r.wish_id, r.user_id, u.display_name, u.profile_icon
 		FROM group_availability_reactions r JOIN group_availability_wishes w ON w.id = r.wish_id
-		JOIN users u ON u.id = r.user_id WHERE w.group_id = ?1 ORDER BY r.created_at, r.user_id`)
+		JOIN users u ON u.id = r.user_id WHERE w.group_id = ?1 AND r.revoked_at IS NULL ORDER BY r.created_at, r.user_id`)
 		.bind(groupId).all<{ wish_id:string; user_id:string; display_name:string; profile_icon:string }>();
 	const byWish = new Map<string, { userId:string; displayName:string; profileIcon:string }[]>();
 	for (const person of interested.results || []) {
@@ -147,16 +147,16 @@ async function reaction(env: PushEnv, ctx: ExecutionContext, groupId: string, bo
 	if (removeReaction) {
 		await db.prepare('DELETE FROM group_availability_reactions WHERE wish_id = ?1 AND user_id = ?2').bind(id, user.id).run();
 	} else {
-		const inserted = await db.prepare('INSERT OR IGNORE INTO group_availability_reactions (wish_id, user_id, created_at) VALUES (?1, ?2, ?3)')
+		const inserted = await db.prepare(`INSERT INTO group_availability_reactions (wish_id, user_id, created_at) VALUES (?1, ?2, ?3) ON CONFLICT(wish_id,user_id) DO UPDATE SET revoked_at=NULL,created_at=excluded.created_at WHERE group_availability_reactions.revoked_at IS NOT NULL`)
 			.bind(id, user.id, new Date().toISOString()).run();
-		const count = await db.prepare('SELECT COUNT(*) AS n FROM group_availability_reactions WHERE wish_id = ?1')
+		const count = await db.prepare('SELECT COUNT(*) AS n FROM group_availability_reactions WHERE wish_id = ?1 AND revoked_at IS NULL')
 			.bind(id).first<{ n:number }>();
 		if (Number(count?.n) >= 1) {
 			await db.prepare(`INSERT OR IGNORE INTO shared_events
 				(id, group_id, created_by_member_id, title, event_date, starts_at, ends_at, all_day, note, created_at, updated_at, status, wish_id)
 				SELECT ?1, w.group_id, m.id, COALESCE(NULLIF(w.message, ''), 'みんなで遊ぶ'), w.wish_date,
 				w.start_time, w.end_time, w.is_all_day, '', ?2, ?2, 'tentative', w.id
-				FROM group_availability_wishes w JOIN group_members m ON m.group_id = w.group_id AND m.user_id = w.user_id
+				FROM group_availability_wishes w JOIN active_group_members m ON m.group_id = w.group_id AND m.user_id = w.user_id
 				WHERE w.id = ?3 AND w.group_id = ?4`)
 				.bind(crypto.randomUUID(), new Date().toISOString(), id, groupId).run();
 		}
@@ -190,13 +190,13 @@ async function confirm(db: D1Database, groupId: string, body: Body, user: Sessio
 		JOIN shared_events e ON e.wish_id = w.id WHERE w.id = ?1 AND w.group_id = ?2`)
 		.bind(wishId, groupId).first<{ user_id:string; event_id:string; status:string }>();
 	if (!wish || wish.user_id !== user.id || wish.status !== 'tentative') return json({ error:'この仮予定を確定する権限がありません' }, 403);
-	const reactions = await db.prepare('SELECT user_id FROM group_availability_reactions WHERE wish_id = ?1')
+	const reactions = await db.prepare('SELECT user_id FROM group_availability_reactions WHERE wish_id = ?1 AND revoked_at IS NULL')
 		.bind(wishId).all<{ user_id:string }>();
 	const interestedIds = new Set([user.id, ...(reactions.results || []).map((row) => row.user_id)]);
 	if (interestedIds.size < 2) return json({ error:'参加者が不足しているため確定できません' }, 409);
 	if (!participantIds.includes(user.id)) return json({ error:'作成者を参加者に含めてください' }, 400);
 	if (participantIds.some((id) => !interestedIds.has(id))) return json({ error:'参加表明していないユーザーを選択できません' }, 400);
-	const members = await db.prepare(`SELECT user_id FROM group_members WHERE group_id = ?1 AND user_id IN (${participantIds.map(() => '?').join(',')})`)
+	const members = await db.prepare(`SELECT user_id FROM active_group_members WHERE group_id = ?1 AND user_id IN (${participantIds.map(() => '?').join(',')})`)
 		.bind(groupId, ...participantIds).all<{ user_id:string }>();
 	if ((members.results || []).length !== participantIds.length) return json({ error:'参加者にグループ外のユーザーが含まれています' }, 400);
 	const now = new Date().toISOString();
