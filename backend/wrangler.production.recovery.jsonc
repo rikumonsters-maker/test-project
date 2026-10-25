@@ -1,0 +1,59 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Production version 19 reports these asset runtime settings. backend/public
+  // contains only index.html; its SHA-256 matches the live workers.dev root
+  // response (checked 2026-10-24). Recheck this before a future deploy.
+  "name": "cloudflare-api",
+  // Repository entrypoint. Worker version metadata confirms fetch and scheduled
+  // handlers but does not expose the original source filename.
+  "main": "src/index.ts",
+  "account_id": "f17c675f86cd6f9116a15f5b0f1ab86e",
+  "compatibility_date": "2026-09-25",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "assets": {
+    "directory": "./public",
+    "base_path": "/",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none",
+    "run_worker_first": false
+  },
+  "workers_dev": true,
+  "preview_urls": true,
+  "triggers": {
+    "crons": ["*/1 * * * *"]
+  },
+  "logpush": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": false,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": false
+    }
+  },
+  // The live Worker has no plain-text vars. Do not copy LOCAL_DEV from RC tests.
+  "vars": { "GROUP_ACCESS_PAUSED": "true" },
+  // Names only; values remain Cloudflare Secrets and are never stored here.
+  "secrets": {
+    "required": [
+      "VAPID_PRIVATE_KEY",
+      "VAPID_PUBLIC_KEY",
+      "VAPID_SUBJECT"
+    ]
+  },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "money-app-shared",
+    "database_id": "142e6c05-b703-4825-828b-b6dd702c38bd"
+  }]
+  // migrations_dir intentionally omitted: this file is for Worker deployment
+  // only. Review D1 migrations separately before any migration operation.
+  // The live account reports usage_model=standard, which this Wrangler schema
+  // does not expose as a configurable field. Recheck it before any deployment.
+}

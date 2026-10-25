@@ -432,6 +432,24 @@
           <img id="group-invite-qr-image" class="qr-image" alt="グループ参加用QRコード" />
           <p id="group-invite-qr-url" class="qr-link"></p>
         </dialog>
+        <dialog class="qr-dialog status-invite-dialog" id="shared-event-editor" aria-labelledby="shared-event-edit-title">
+          <h3 id="shared-event-edit-title">共有予定の編集</h3>
+          <p class="card-description">作成者が退出した確定済み予定は、現在のグループメンバーが管理できます。</p>
+          <form id="shared-event-edit-form">
+            <label>タイトル<input name="title" maxlength="80" required></label>
+            <label>日付<input name="eventDate" type="date" required></label>
+            <label><input name="allDay" type="checkbox">終日</label>
+            <label>開始<input name="start" type="time" required></label>
+            <label>終了<input name="end" type="time" required></label>
+            <label>メモ<textarea name="note" maxlength="160"></textarea></label>
+            <p id="shared-event-edit-status" class="status error" role="alert"></p>
+            <div class="group-calendar-actions">
+              <button type="submit" class="action-button primary">保存</button>
+              <button type="button" class="action-button" id="shared-event-edit-delete">削除</button>
+              <button type="button" class="action-button" id="shared-event-edit-close">閉じる</button>
+            </div>
+          </form>
+        </dialog>
         <dialog class="qr-dialog status-invite-dialog" id="shared-reminder-dialog" aria-labelledby="shared-reminder-title">
           <h3 id="shared-reminder-title">共有予定のリマインド</h3>
           <p class="card-description" id="shared-reminder-description">設定はあなたのアカウントだけに保存され、グループの他のメンバーには表示されません。</p>

@@ -13,8 +13,8 @@ const messages: Record<NotificationKind, string> = {
 };
 
 type Row = { id:string; kind:NotificationKind; target_path:string; created_at:string; read_at:string | null };
-const visible = `(n.group_id IS NULL OR EXISTS (
-  SELECT 1 FROM group_members gm WHERE gm.group_id=n.group_id AND gm.user_id=n.user_id))`;
+const visible = `n.revoked_at IS NULL AND (n.group_id IS NULL OR EXISTS (
+  SELECT 1 FROM active_group_members gm WHERE gm.group_id=n.group_id AND gm.user_id=n.user_id))`;
 
 function json(data:unknown, status=200):Response {
   return new Response(JSON.stringify(data), { status, headers:{
@@ -36,7 +36,7 @@ export async function queueGroupInbox(db:D1Database, groupId:string, actorUserId
   await db.prepare(`INSERT OR IGNORE INTO in_app_notifications
     (id,user_id,group_id,kind,target_path,dedupe_key,created_at)
     SELECT lower(hex(randomblob(16))),gm.user_id,?1,?2,?3,?4,?5
-    FROM group_members gm WHERE gm.group_id=?1 AND gm.user_id IS NOT NULL AND gm.user_id!=?6`)
+    FROM active_group_members gm WHERE gm.group_id=?1 AND gm.user_id IS NOT NULL AND gm.user_id!=?6`)
     .bind(groupId,kind,targetPath,dedupeKey,now,actorUserId).run();
 }
 
@@ -47,7 +47,7 @@ export async function queueGroupUserInbox(db:D1Database, groupId:string, recipie
   await db.prepare(`INSERT OR IGNORE INTO in_app_notifications
     (id,user_id,group_id,kind,target_path,dedupe_key,created_at)
     SELECT lower(hex(randomblob(16))),gm.user_id,?1,?2,?3,?4,?5
-    FROM group_members gm WHERE gm.group_id=?1 AND gm.user_id=?6`)
+    FROM active_group_members gm WHERE gm.group_id=?1 AND gm.user_id=?6`)
     .bind(groupId,kind,targetPath,dedupeKey,now,recipientUserId).run();
 }
 
@@ -56,10 +56,10 @@ export function validReminderSql():string {
   return `(r.scope='personal' AND EXISTS(SELECT 1 FROM personal_events p
     WHERE p.user_id=r.user_id AND p.id=r.personal_event_id AND p.deleted=0))
     OR (r.scope='shared' AND EXISTS(SELECT 1 FROM shared_events e
-      JOIN group_members gm ON gm.group_id=e.group_id AND gm.user_id=r.user_id
+      JOIN active_group_members gm ON gm.group_id=e.group_id AND gm.user_id=r.user_id
       WHERE e.id=r.shared_event_id AND e.group_id=r.group_id AND e.status='confirmed'
       AND (e.wish_id IS NULL OR EXISTS(SELECT 1 FROM shared_event_participants sp
-        WHERE sp.event_id=e.id AND sp.user_id=r.user_id))))`;
+        WHERE sp.event_id=e.id AND sp.user_id=r.user_id AND sp.revoked_at IS NULL))))`;
 }
 
 export function reminderInboxStatement(db:D1Database, reminderId:string, targetPath:string,
