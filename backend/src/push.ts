@@ -216,7 +216,8 @@ export async function drainPushQueue(env: PushEnv): Promise<void> {
 		 WHERE d.next_attempt_at <= ?1 ORDER BY d.created_at, d.id LIMIT ?2`,
 	).bind(now, BATCH_SIZE).all<Delivery>();
 	await Promise.all((rows.results || []).map(async (item) => {
-		const claimed = await env.DB.prepare(`UPDATE push_deliveries SET next_attempt_at = ?1 WHERE id = ?2 AND next_attempt_at <= ?3
+		const claimed = await env.DB.prepare(`UPDATE push_deliveries SET next_attempt_at = ?1,
+			delivery_guard_version=delivery_guard_version+1 WHERE id = ?2 AND next_attempt_at <= ?3
 			AND (scope='personal' OR EXISTS(SELECT 1 FROM push_subscriptions s JOIN active_group_members m ON m.user_id=s.user_id
 			 WHERE s.id=push_deliveries.subscription_id AND m.group_id=push_deliveries.group_id
 			 AND (push_deliveries.recipient_user_id IS NULL OR m.user_id=push_deliveries.recipient_user_id)))
@@ -228,10 +229,11 @@ export async function drainPushQueue(env: PushEnv): Promise<void> {
 		// A group may close after the claim. Check the queue row and membership
 		// immediately before the external send; closure removes group queue rows.
 		if (item.scope === 'group') {
-			const stillEligible = await env.DB.prepare(`SELECT 1 FROM push_deliveries d
-				JOIN push_subscriptions s ON s.id=d.subscription_id
-				JOIN active_group_members m ON m.user_id=s.user_id AND m.group_id=d.group_id
-				WHERE d.id=?1 AND (d.recipient_user_id IS NULL OR d.recipient_user_id=m.user_id)`)
+			const stillEligible = await env.DB.prepare(`SELECT 1 FROM push_deliveries
+				JOIN push_subscriptions s ON s.id=push_deliveries.subscription_id
+				JOIN active_group_members m ON m.user_id=s.user_id AND m.group_id=push_deliveries.group_id
+				WHERE push_deliveries.id=?1 AND (push_deliveries.recipient_user_id IS NULL OR push_deliveries.recipient_user_id=m.user_id)
+				AND (push_deliveries.schedule_id IS NULL OR (${validScheduleNoticeSql("strftime('%Y-%m-%dT%H:%M:%fZ','now')")}))`)
 				.bind(item.delivery_id).first();
 			if (!stillEligible) return;
 		}
@@ -246,7 +248,8 @@ export async function drainPushQueue(env: PushEnv): Promise<void> {
 			await env.DB.prepare('DELETE FROM push_deliveries WHERE id = ?1').bind(item.delivery_id).run();
 		} else {
 			const delay = Math.min(3600, 60 * 2 ** item.attempts);
-			await env.DB.prepare('UPDATE push_deliveries SET attempts = attempts + 1, next_attempt_at = ?1 WHERE id = ?2')
+			await env.DB.prepare(`UPDATE push_deliveries SET attempts = attempts + 1, next_attempt_at = ?1,
+				delivery_guard_version=delivery_guard_version+1 WHERE id = ?2`)
 				.bind(new Date(Date.now() + delay * 1000).toISOString(), item.delivery_id).run();
 		}
 	}));

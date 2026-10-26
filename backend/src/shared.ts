@@ -654,7 +654,8 @@ async function updateEvent(env: SharedEnv, ctx: ExecutionContext, body: JsonReco
 	const result = await db.batch([
 		db.prepare(
 		`UPDATE shared_events AS e SET title = ?1, event_date = ?2, starts_at = ?3, ends_at = ?4, all_day = ?5, note = ?6, updated_at = ?7,
-		 management_version=management_version+1
+		 management_version=management_version+1,
+		 scheduling_write_version=CASE WHEN schedule_plan_id IS NOT NULL THEN scheduling_write_version+1 ELSE scheduling_write_version END
 		 WHERE id = ?8 AND group_id = ?9 AND e.cancelled_at IS NULL AND ${canManageSharedEventSql('e', '?10')}`,
 		).bind(event.title, event.eventDate, event.start, event.end, Number(event.allDay), event.note, timestamp, id, member.group_id, member.member_id),
 		...reminderStatements,

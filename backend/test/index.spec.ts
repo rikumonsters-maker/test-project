@@ -1148,7 +1148,8 @@ describe('profile and device notifications', () => {
 
       // Advance the retry time in the isolated test D1 so the scheduled handler
       // can exercise the same due-delivery path without waiting for wall-clock backoff.
-      await env.DB.prepare('UPDATE push_deliveries SET next_attempt_at=?1 WHERE group_id=?2')
+      await env.DB.prepare(`UPDATE push_deliveries SET next_attempt_at=?1,
+        delivery_guard_version=delivery_guard_version+1 WHERE group_id=?2`)
         .bind('2000-01-01T00:00:00.000Z', group.groupId).run();
       const pending:Promise<unknown>[] = [];
       const ctx = { waitUntil:(task:Promise<unknown>) => { pending.push(task); } } as unknown as ExecutionContext;

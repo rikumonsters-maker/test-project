@@ -125,6 +125,11 @@ describe('group scheduling and departure',()=>{
     const confirmed=await api(f.owner,'/api/groups/schedules/confirm',{groupId:f.group.groupId,scheduleId:id,
       optionId:replaced.data.id,participantUserIds:[f.owner.id,f.member.id]});
     expect(confirmed.status).toBe(200);
+    await expect(db.prepare("UPDATE shared_events SET title='Old Worker edit',management_version=management_version+1 WHERE id=?1")
+      .bind(id).run()).rejects.toThrow();
+    await expect(db.prepare('DELETE FROM shared_events WHERE id=?1').bind(id).run()).rejects.toThrow();
+    expect((await api(f.owner,'/api/shared/events/update',{groupId:f.group.groupId,id,
+      title:'Current Worker edit',eventDate:'2030-10-22',start:'14:00',end:'16:00',allDay:false,note:''})).status).toBe(200);
     expect((await api(f.owner,'/api/groups/schedules/confirm',{groupId:f.group.groupId,scheduleId:id,
       optionId:replaced.data.id,participantUserIds:[f.owner.id,f.member.id]})).data.replayed).toBe(true);
     expect((await db.prepare('SELECT COUNT(*) AS n FROM shared_events WHERE schedule_plan_id=?1').bind(id).first<{n:number}>())?.n).toBe(1);
@@ -259,6 +264,37 @@ describe('group scheduling and departure',()=>{
     expect((await api(f.owner,'/api/groups/schedules/cancel',{groupId:f.group.groupId,scheduleId:id})).status).toBe(200);
     await drainPushQueue({DB:db,VAPID_PUBLIC_KEY:'local',VAPID_PRIVATE_KEY:'local',VAPID_SUBJECT:'mailto:test@example.test'});
     expect(await db.prepare('SELECT id FROM push_deliveries WHERE id=?1').bind(delivery).first()).toBeNull();
+  });
+  it('rechecks schedule state if cancellation races with a claimed Push',async()=>{
+    const f=await fixture(),created=await create(f),id=created.data.id;
+    const subscription=crypto.randomUUID(),delivery=crypto.randomUUID(),now=new Date().toISOString();
+    await db.batch([
+      db.prepare(`INSERT INTO push_subscriptions(id,user_id,endpoint,p256dh,auth,created_at,updated_at)
+        VALUES(?1,?2,?3,'test','test',?4,?4)`)
+        .bind(subscription,f.member.id,'https://push.example.test/'+subscription,now),
+      db.prepare(`INSERT INTO push_deliveries(id,subscription_id,group_id,kind,body,created_at,
+        next_attempt_at,scope,recipient_user_id,schedule_id)
+        VALUES(?1,?2,?3,'schedule_started','generic',?4,?4,'group',?5,?6)`)
+        .bind(delivery,subscription,f.group.groupId,now,f.member.id,id),
+    ]);
+    const racingDB={prepare:(sql:string)=>{
+      const statement=db.prepare(sql);
+      if(!sql.includes('delivery_guard_version=delivery_guard_version+1')||
+        !sql.includes('next_attempt_at <= ?3'))return statement;
+      return {bind:(...values:unknown[])=>{
+        const bound=statement.bind(...values);
+        return {run:async()=>{
+          const result=await bound.run();
+          await db.prepare("UPDATE group_schedules SET state='cancelled' WHERE id=?1").bind(id).run();
+          return result;
+        }};
+      }};
+    }} as unknown as D1Database;
+    await drainPushQueue({DB:racingDB,VAPID_PUBLIC_KEY:'local',VAPID_PRIVATE_KEY:'local',VAPID_SUBJECT:'mailto:test@example.test'});
+    expect((await db.prepare('SELECT attempts FROM push_deliveries WHERE id=?1')
+      .bind(delivery).first<{attempts:number}>())?.attempts).toBe(0);
+    expect((await db.prepare('SELECT state FROM group_schedules WHERE id=?1')
+      .bind(id).first<{state:string}>())?.state).toBe('cancelled');
   });
   it('closes or transfers open work atomically, revokes access, and never restores old authority',async()=>{
     const f=await fixture(),created=await create(f),id=created.data.id;

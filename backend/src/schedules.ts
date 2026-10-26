@@ -315,7 +315,8 @@ async function cancel(env:PushEnv,ctx:ExecutionContext,member:ScheduleMember,bod
   if(plan.state==='cancelled') return json({ok:true,replayed:true});
   const now=new Date().toISOString();
   const results=await env.DB.batch([
-    env.DB.prepare(`UPDATE shared_events SET cancelled_at=?1,management_version=management_version+1
+    env.DB.prepare(`UPDATE shared_events SET cancelled_at=?1,management_version=management_version+1,
+      scheduling_write_version=scheduling_write_version+1
       WHERE schedule_plan_id=?2 AND group_id=?3 AND cancelled_at IS NULL
       AND EXISTS(SELECT 1 FROM active_group_members WHERE id=?4 AND group_id=?3)
       AND (created_by_member_id=?4 OR EXISTS(SELECT 1 FROM group_members creator
