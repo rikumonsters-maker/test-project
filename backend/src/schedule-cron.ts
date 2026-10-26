@@ -8,10 +8,11 @@ export async function drainScheduleNotices(env:PushEnv):Promise<void> {
   const now=new Date().toISOString();
   const inDay=new Date(Date.now()+24*3600000).toISOString();
   const inHour=new Date(Date.now()+3600000).toISOString();
-  const rows=await env.DB.prepare(`SELECT id,group_id,response_deadline,deadline_notified_at,reminder_notified_at
-    FROM group_schedules WHERE state='open' AND response_deadline>?1 AND response_deadline<=?2
-    AND (reminder_notified_at IS NULL OR (response_deadline<=?3 AND deadline_notified_at IS NULL))
-    ORDER BY response_deadline,id LIMIT 20`).bind(now,inDay,inHour).all<Due>();
+  const rows=await env.DB.prepare(`SELECT s.id,s.group_id,s.response_deadline,s.deadline_notified_at,s.reminder_notified_at
+    FROM group_schedules s JOIN groups g ON g.id=s.group_id AND g.closed_at IS NULL
+    WHERE s.state='open' AND s.response_deadline>?1 AND s.response_deadline<=?2
+    AND (s.reminder_notified_at IS NULL OR (s.response_deadline<=?3 AND s.deadline_notified_at IS NULL))
+    ORDER BY s.response_deadline,s.id LIMIT 20`).bind(now,inDay,inHour).all<Due>();
   for(const plan of rows.results) {
     if(!plan.reminder_notified_at) {
       const unanswered=await env.DB.prepare(`SELECT m.user_id FROM group_schedule_participants p
@@ -23,7 +24,8 @@ export async function drainScheduleNotices(env:PushEnv):Promise<void> {
       await queueScheduleNotice(env,plan.group_id,plan.id,unanswered.results.map(row=>row.user_id),
         'schedule_reminder','schedule-reminder:'+plan.id+':'+plan.response_deadline);
       await env.DB.prepare(`UPDATE group_schedules SET reminder_notified_at=?1
-        WHERE id=?2 AND state='open' AND reminder_notified_at IS NULL AND response_deadline>?1`)
+        WHERE id=?2 AND state='open' AND reminder_notified_at IS NULL AND response_deadline>?1
+        AND EXISTS(SELECT 1 FROM groups g WHERE g.id=group_schedules.group_id AND g.closed_at IS NULL)`)
         .bind(now,plan.id).run();
     }
     if(plan.response_deadline<=inHour&&!plan.deadline_notified_at) {
@@ -35,7 +37,8 @@ export async function drainScheduleNotices(env:PushEnv):Promise<void> {
       await queueScheduleNotice(env,plan.group_id,plan.id,members.results.map(row=>row.user_id),
         'schedule_deadline','schedule-deadline:'+plan.id+':'+plan.response_deadline);
       await env.DB.prepare(`UPDATE group_schedules SET deadline_notified_at=?1
-        WHERE id=?2 AND state='open' AND deadline_notified_at IS NULL AND response_deadline>?1`)
+        WHERE id=?2 AND state='open' AND deadline_notified_at IS NULL AND response_deadline>?1
+        AND EXISTS(SELECT 1 FROM groups g WHERE g.id=group_schedules.group_id AND g.closed_at IS NULL)`)
         .bind(now,plan.id).run();
     }
   }

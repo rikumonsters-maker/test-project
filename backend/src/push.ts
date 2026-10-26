@@ -225,6 +225,16 @@ export async function drainPushQueue(env: PushEnv): Promise<void> {
 			AND (schedule_id IS NULL OR (${validScheduleNoticeSql('?3')}))`)
 			.bind(new Date(Date.now() + 5 * 60_000).toISOString(), item.delivery_id, now).run();
 		if (!claimed.meta.changes) return;
+		// A group may close after the claim. Check the queue row and membership
+		// immediately before the external send; closure removes group queue rows.
+		if (item.scope === 'group') {
+			const stillEligible = await env.DB.prepare(`SELECT 1 FROM push_deliveries d
+				JOIN push_subscriptions s ON s.id=d.subscription_id
+				JOIN active_group_members m ON m.user_id=s.user_id AND m.group_id=d.group_id
+				WHERE d.id=?1 AND (d.recipient_user_id IS NULL OR d.recipient_user_id=m.user_id)`)
+				.bind(item.delivery_id).first();
+			if (!stillEligible) return;
+		}
 		const result = await deliver(env, item, { groupId:item.group_id, targetPath:item.target_path || undefined, kind:item.kind, body:item.body });
 		const { status } = result;
 		if (status < 200 || status >= 300) console.warn('Push delivery attempt failed', {

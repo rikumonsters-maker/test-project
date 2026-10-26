@@ -46,7 +46,7 @@ async function inbox(user:SessionUser){
 }
 let legacy:{wishId:string;memberId:string};
 beforeAll(async()=>{
-  for(const key of Object.keys(migrations).sort().filter(key=>!key.includes('0017_'))) await applySQL(db,migrations[key]);
+  for(const key of Object.keys(migrations).sort().filter(key=>!key.includes('0017_')&&!key.includes('0018_'))) await applySQL(db,migrations[key]);
   const creator=await user('移行前の作成者'),groupId=crypto.randomUUID(),memberId=crypto.randomUUID(),wishId=crypto.randomUUID();
   await db.batch([
     db.prepare(`INSERT INTO groups(id,name,invite_code,created_at) VALUES(?1,'既存','schedule-legacy','2026-01-01')`).bind(groupId),
@@ -58,6 +58,7 @@ beforeAll(async()=>{
   ]);
   legacy={wishId,memberId};
   await applySQL(db,migrations[Object.keys(migrations).find(key=>key.includes('0017_'))!]);
+  await applySQL(db,migrations[Object.keys(migrations).find(key=>key.includes('0018_'))!]);
 });
 
 describe('group scheduling and departure',()=>{

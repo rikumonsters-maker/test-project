@@ -4,6 +4,7 @@ import { initSchedules } from './schedules.mjs';
 import { createInviteUrl } from './config.mjs';
 import { initReminderControls } from './reminder-controls.mjs';
 import { currentTimeZone } from './reminders.mjs';
+import { createGroupDeletion } from './group-deletion.mjs';
 
 const GROUP_ICONS = [
   { id:"friends", label:"\u53cb\u9054", paths:["M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM16 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM2.5 20a5.5 5.5 0 0 1 11 0M10.5 20a5.5 5.5 0 0 1 11 0"] },
@@ -55,6 +56,7 @@ export function initShared(app) {
   let sharedReminderControls = null;
   let sharedReminderEvent = null;
   let sharedReminderTimeZone = currentTimeZone();
+  let groupDeletion = null;
 
   function buttonForSchedule(wish) {
     const control=document.createElement('button');control.type='button';control.className='action-button';
@@ -1106,7 +1108,10 @@ export function initShared(app) {
     setError('', 'group-icon-error');
     try {
       const options=await requestJson('/api/groups/leave/options',{payload:credentials(group)});
-      if(!options.successors?.length){setError('最後のメンバーは退出できません。','group-icon-error');return;}
+      if(options.lastMember){
+        groupDeletion.open(group,options.groupName || group.groupName);
+        return;
+      }
       if(options.otherTentative){setError('管理方法が未確定の仮予定があるため退出できません。','group-icon-error');return;}
       if(options.wishes||options.schedules){
         const select=$('group-leave-successor');select.replaceChildren();
@@ -1117,6 +1122,16 @@ export function initShared(app) {
     }catch(error){setError(error.message||'退出条件を確認できませんでした。','group-icon-error');return;}
     if (!window.confirm(`${group.groupName}から退出しますか？確定済みの共有予定は残り、退出後はグループ情報にアクセスできません。`)) return;
     await performLeave(group,{});
+  }
+  function completeGroupDeletion(group) {
+    state.groups=state.groups.filter(item=>item.groupId!==group.groupId);
+    delete state.pendingGroupMonths[group.groupId];
+    if(state.pendingGroupShiftMonths)delete state.pendingGroupShiftMonths[group.groupId];
+    saveState();
+    closeGroupManagement();
+    schedules?.close();
+    renderGroups();
+    setStatus(`グループ『${group.groupName}』を削除しました。`, 'safe');
   }
   async function performLeave(group,extra) {
     setError("", "group-icon-error");
@@ -1136,6 +1151,8 @@ export function initShared(app) {
     } finally { if (managedGroupId === group.groupId) setImageBusy(false); }
   }
   function init() {
+    groupDeletion=createGroupDeletion({$,requestJson,setError,onSuccess:completeGroupDeletion,
+      onMemberChanged:()=>setError('メンバー数が変わりました。もう一度「グループから退出」を押してください。','group-icon-error')});
     schedules=initSchedules({$,requestJson,activeGroup,getCurrentUserId:app.getCurrentUserId,
       onConfirmed:refreshCurrentMonth});
     commonAvailability = initCommonAvailability({ $, requestJson, activeGroup,

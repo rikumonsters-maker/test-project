@@ -131,14 +131,19 @@ async function joinGroup(env: SharedEnv, ctx: ExecutionContext, body: JsonRecord
 	const inviteCode = stringValue(body.inviteCode, 40)?.toUpperCase();
 	const memberName = stringValue(body.memberName, 40) || user.displayName;
 	if (!inviteCode || !memberName) return jsonResponse({ error: '招待コードと表示名を入力してください' }, 400);
-	const group = await db.prepare('SELECT id, name, invite_code, group_icon, group_icon_color FROM groups WHERE invite_code = ?1').bind(inviteCode)
+	const group = await db.prepare('SELECT id, name, invite_code, group_icon, group_icon_color FROM groups WHERE invite_code = ?1 AND closed_at IS NULL').bind(inviteCode)
 		.first<{ id: string; name: string; invite_code: string; group_icon:string; group_icon_color:string }>();
 	if (!group) return jsonResponse({ error: '招待コードが見つかりません' }, 404);
 	const existing = await db.prepare('SELECT id, display_name FROM active_group_members WHERE group_id = ?1 AND user_id = ?2').bind(group.id, user.id).first<{ id:string; display_name:string }>();
 	if (existing) return jsonResponse(membershipResponse(group.id, group.name, group.invite_code, existing.id, existing.display_name, group.group_icon || 'friends', group.group_icon_color || 'green'));
 	const memberId = crypto.randomUUID();
 	const memberToken = token();
-	await db.prepare('INSERT INTO group_members (id, group_id, display_name, access_token, created_at, user_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)').bind(memberId, group.id, memberName, memberToken, new Date().toISOString(), user.id).run();
+	try {
+		await db.prepare('INSERT INTO group_members (id, group_id, display_name, access_token, created_at, user_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
+			.bind(memberId, group.id, memberName, memberToken, new Date().toISOString(), user.id).run();
+	} catch {
+		return jsonResponse({error:'グループの参加状態が変わりました。招待コードを確認してください。'},409);
+	}
 	await scheduleNotice(env, ctx, group.id, user.id, 'group_joined', `「${group.name}」に${memberName}さんが参加しました`,
 		'group-joined:'+memberId);
 	return jsonResponse(membershipResponse(group.id, group.name, group.invite_code, memberId, memberName, group.group_icon || 'friends', group.group_icon_color || 'green'), 201);
@@ -310,7 +315,62 @@ async function leaveOptions(db:D1Database,body:JsonRecord,user:SessionUser):Prom
 		.bind(member.group_id,member.member_id).all<{user_id:string;display_name:string}>();
 	return jsonResponse({wishes:Number(work?.wishes||0),schedules:Number(work?.schedules||0),
 		otherTentative:Number(work?.other_tentative||0),
+		lastMember:others.results.length===0,groupName:member.group_name,
 		successors:others.results.map(row=>({userId:row.user_id,name:row.display_name}))});
+}
+
+async function closeGroup(db:D1Database,body:JsonRecord,user:SessionUser):Promise<Response> {
+	const groupId=stringValue(body.groupId,64);
+	if(!groupId)return jsonResponse({error:'グループを指定してください'},400);
+	const member=await requireMembership(db,body,user);
+	if(!member){
+		const previously=await db.prepare(`SELECT closed_at FROM groups WHERE id=?1 AND closed_at IS NOT NULL
+			AND closed_by_user_id=?2`).bind(groupId,user.id).first<{closed_at:string}>();
+		return previously?jsonResponse({ok:true,alreadyClosed:true}):
+			jsonResponse({error:'グループを削除する権限がありません'},403);
+	}
+	const active=await db.prepare(`SELECT COUNT(*) AS count FROM active_group_members
+		WHERE group_id=?1 AND user_id IS NOT NULL`).bind(groupId).first<{count:number}>();
+	if(Number(active?.count)!==1)return jsonResponse({error:'メンバー数が変わりました。グループ画面を更新してください。',
+		code:'GROUP_MEMBER_COUNT_CHANGED'},409);
+	const now=new Date().toISOString(),nonce=crypto.randomUUID();
+	const binds=[user.id,groupId,member.member_id,now];
+	try {
+		const result=await db.batch([
+			db.prepare(`UPDATE groups SET closed_at=?4,closed_by_user_id=?1,closed_by_member_id=?3,
+				management_version=management_version+1 WHERE id=?2 AND closed_at IS NULL
+				AND EXISTS(SELECT 1 FROM group_members m WHERE m.id=?3 AND m.group_id=?2
+				  AND m.user_id=?1 AND m.left_at IS NULL)
+				AND (SELECT COUNT(*) FROM group_members m WHERE m.group_id=?2
+				  AND m.user_id IS NOT NULL AND m.left_at IS NULL)=1`).bind(...binds),
+			db.prepare(`UPDATE group_members SET departed_user_id=COALESCE(departed_user_id,user_id),
+				user_id=NULL,left_at=?4,access_token=lower(hex(randomblob(32)))
+				WHERE group_id=?2 AND left_at IS NULL AND EXISTS(SELECT 1 FROM groups g
+				WHERE g.id=?2 AND g.closed_at=?4 AND g.closed_by_user_id=?1 AND g.closed_by_member_id=?3)`)
+				.bind(...binds),
+			db.prepare(`UPDATE in_app_notifications SET revoked_at=?4 WHERE group_id=?2 AND revoked_at IS NULL
+				AND EXISTS(SELECT 1 FROM groups g WHERE g.id=?2 AND g.closed_at=?4
+				AND g.closed_by_user_id=?1 AND g.closed_by_member_id=?3)`).bind(...binds),
+			db.prepare(`DELETE FROM push_deliveries WHERE scope='group' AND group_id=?2
+				AND EXISTS(SELECT 1 FROM groups g WHERE g.id=?2 AND g.closed_at=?4
+				AND g.closed_by_user_id=?1 AND g.closed_by_member_id=?3)`).bind(...binds),
+			db.prepare(`INSERT INTO group_closure_assertions(nonce,valid)
+				VALUES(?5,CASE WHEN EXISTS(SELECT 1 FROM groups g WHERE g.id=?2
+				  AND g.closed_at=?4 AND g.closed_by_user_id=?1 AND g.closed_by_member_id=?3)
+				AND NOT EXISTS(SELECT 1 FROM group_members m WHERE m.group_id=?2 AND m.left_at IS NULL)
+				THEN 1 ELSE 0 END)`).bind(...binds,nonce),
+			db.prepare('DELETE FROM group_closure_assertions WHERE nonce=?1').bind(nonce),
+		]);
+		if(!result[0].meta.changes)return jsonResponse({error:'メンバー数が変わりました。グループ画面を更新してください。',
+			code:'GROUP_MEMBER_COUNT_CHANGED'},409);
+	} catch {
+		const previously=await db.prepare(`SELECT closed_at FROM groups WHERE id=?1 AND closed_at IS NOT NULL
+			AND closed_by_user_id=?2`).bind(groupId,user.id).first<{closed_at:string}>();
+		if(previously)return jsonResponse({ok:true,alreadyClosed:true});
+		return jsonResponse({error:'グループの状態が変わりました。画面を更新して再確認してください。',
+			code:'GROUP_MEMBER_COUNT_CHANGED'},409);
+	}
+	return jsonResponse({ok:true,closedAt:now});
 }
 
 async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): Promise<Response> {
@@ -647,6 +707,7 @@ export async function handleSharedRequest(request: Request, env: SharedEnv, ctx:
 		if (pathname === '/api/groups/members/list') return await listGroupMembers(env.DB, body, user);
 		if (pathname === '/api/groups/leave/options') return await leaveOptions(env.DB,body,user);
 		if (pathname === '/api/groups/leave') return await leaveGroup(env,ctx, body, user);
+		if (pathname === '/api/groups/delete') return await closeGroup(env.DB,body,user);
 		if (pathname === '/api/shared/events/list') return await listEvents(env.DB, body, user);
 		if (pathname === '/api/shared/availability') return await availability(env.DB, body, user);
 		if (pathname === '/api/shared/availability/search') return await searchAvailability(env.DB, body, user);

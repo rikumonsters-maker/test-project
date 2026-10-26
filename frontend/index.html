@@ -462,6 +462,15 @@
           <p class="status error" id="group-icon-error" hidden role="alert"></p>
           <p class="status safe" id="group-icon-status" hidden role="status"></p>
         </dialog>
+        <dialog class="qr-dialog group-delete-dialog" id="group-delete-dialog" aria-labelledby="group-delete-title" aria-describedby="group-delete-description">
+          <h3 id="group-delete-title">あなたは最後のメンバーです</h3>
+          <p id="group-delete-description"></p>
+          <p class="status error" id="group-delete-error" hidden role="alert"></p>
+          <div class="actions">
+            <button class="action-button" id="group-delete-no" type="button">いいえ</button>
+            <button class="action-button danger" id="group-delete-yes" type="button">はい</button>
+          </div>
+        </dialog>
         <dialog class="qr-dialog" id="group-invite-qr-dialog" aria-labelledby="group-invite-qr-title">
           <button class="action-button qr-dialog-close" id="close-group-invite-qr" type="button">閉じる</button>
           <h3 id="group-invite-qr-title">グループに招待</h3>

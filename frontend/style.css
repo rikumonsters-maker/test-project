@@ -167,6 +167,8 @@ button { touch-action:manipulation; }
 .group-manage-dialog .action-button { text-align:left; }
 .group-manage-dialog .qr-dialog-close { text-align:center; }
 .group-manage-dialog #group-manage-name { overflow-wrap:anywhere; }
+.group-delete-dialog #group-delete-description { overflow-wrap:anywhere; }
+.group-delete-dialog .actions .action-button { min-width:96px; min-height:44px; }
 .segmented.theme-choices { grid-template-columns:repeat(3,minmax(0,1fr)); }
 button:disabled { opacity:.6; cursor:wait; }
 .group-name-button { display:flex; width:100%; min-height:54px; align-items:center; gap:12px; padding:0 14px; border:1px solid var(--border); border-radius:9px; color:var(--green); background:var(--surface); cursor:pointer; font-size:inherit; font-weight:inherit; text-align:left; }
