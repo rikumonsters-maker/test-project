@@ -384,6 +384,7 @@
                 <h3>メンバー</h3>
                 <ul class="group-member-list" id="group-members" aria-live="polite"></ul>
                 <p class="status error" id="group-members-error" hidden aria-live="polite"></p>
+                <button class="action-button common-availability-open" id="common-availability-open" type="button" aria-haspopup="dialog">共通空き時間を探す</button>
               </article>
               <article class="card">
                 <h3 id="group-date"></h3>
@@ -394,6 +395,23 @@
           </section>
         </div>
 
+        <dialog class="qr-dialog status-invite-dialog common-availability-dialog" id="common-availability-dialog" aria-labelledby="common-availability-title">
+          <button class="action-button qr-dialog-close" id="common-availability-close" type="button">閉じる</button>
+          <h3 id="common-availability-title">共通空き時間を探す</h3>
+          <p class="card-description">登録済みの個人予定・シフト・共有予定をもとに、9:00〜22:00の候補を探します。未確認のメンバーがいる候補は本人に確認してください。</p>
+          <form id="common-availability-form" class="form-stack">
+            <fieldset id="common-availability-members" class="participant-choices"><legend>メンバーを2人以上選択</legend></fieldset>
+            <div class="time-pair">
+              <label>開始日<input id="common-availability-start" type="date" required /></label>
+              <label>終了日<input id="common-availability-end" type="date" required /></label>
+            </div>
+            <label>必要時間<select id="common-availability-duration"></select></label>
+            <button class="action-button primary" id="common-availability-submit" type="submit">候補を探す</button>
+          </form>
+          <p class="status error" id="common-availability-error" role="alert" hidden></p>
+          <p id="common-availability-status" role="status" aria-live="polite"></p>
+          <div id="common-availability-results" class="common-availability-results" role="region" aria-label="共通空き時間の候補"></div>
+        </dialog>
         <dialog class="qr-dialog group-manage-dialog" id="group-manage-dialog" aria-labelledby="group-manage-title">
           <button class="action-button qr-dialog-close" id="close-group-manage" type="button">閉じる</button>
           <h3 id="group-manage-title">グループ管理</h3>

@@ -4,6 +4,7 @@ import { drainPushQueue, queueGroupNotice, type PushEnv } from './push';
 import { handleWishRequest } from './wishes';
 import { sharedReminderRefreshStatements } from './reminders';
 import { notificationPath } from './notifications';
+import { candidateSlots, formatMinute, freeIntervals, loadBusyDays, nextDate, unconfirmedByMonth } from './availability';
 
 type SharedEnv = PushEnv;
 
@@ -316,51 +317,50 @@ async function availability(db: D1Database, body: JsonRecord, user: SessionUser)
 	const target = await db.prepare('SELECT 1 FROM active_group_members WHERE group_id = ?1 AND user_id = ?2')
 		.bind(member.group_id, targetUserId).first();
 	if (!target) return jsonResponse({ error:'グループ外のメンバーは確認できません' }, 403);
-	const automatic = await db.prepare(`SELECT DISTINCT e.event_date, e.source_type, e.starts_at, e.ends_at, e.all_day
-		FROM member_calendar_entries e JOIN active_group_members m ON m.id = e.member_id
-		WHERE m.user_id = ?1 AND (e.source_type <> 'personal' OR NOT EXISTS (SELECT 1 FROM personal_sync_users s WHERE s.user_id=m.user_id))
-		AND (e.event_date = ?2 OR (e.event_date = date(?2, '-1 day')
-			AND e.source_type = 'shift' AND e.all_day = 0 AND e.ends_at <= e.starts_at))`)
-		.bind(targetUserId, date).all<{ event_date:string; source_type:string; starts_at:string; ends_at:string; all_day:number }>();
-	const shared = await db.prepare(`SELECT DISTINCT e.starts_at, e.ends_at, e.all_day
-		FROM shared_events e JOIN group_members creator ON creator.id = e.created_by_member_id
-		WHERE e.event_date = ?1 AND (e.group_id = ?2 OR (creator.left_at IS NULL AND creator.user_id = ?3) OR EXISTS
-			(SELECT 1 FROM shared_event_participants p WHERE p.event_id = e.id AND p.user_id = ?3 AND p.revoked_at IS NULL))`)
-		.bind(date, member.group_id, targetUserId).all<{ starts_at:string; ends_at:string; all_day:number }>();
-	const personal = await db.prepare(`SELECT e.starts_at,e.ends_at,e.all_day FROM personal_events e
-		JOIN personal_sync_users s ON s.user_id=e.user_id WHERE e.user_id=?1 AND e.event_date=?2 AND e.deleted=0`)
-		.bind(targetUserId,date).all<{starts_at:string;ends_at:string;all_day:number}>();
-	const intervals = [
-		...(automatic.results || []).map((entry): [number, number] => {
-			if (entry.all_day) return [0, 1440];
-			const start = Number(entry.starts_at.slice(0, 2)) * 60 + Number(entry.starts_at.slice(3));
-			const end = Number(entry.ends_at.slice(0, 2)) * 60 + Number(entry.ends_at.slice(3));
-			if (entry.source_type !== 'shift' || end > start) return [start, end];
-			return entry.event_date < date ? [0, end] : [start, 1440];
-		}),
-		...[...(shared.results || []), ...personal.results].map((entry): [number, number] => entry.all_day ? [0, 1440] :
-			[Number(entry.starts_at.slice(0, 2)) * 60 + Number(entry.starts_at.slice(3)),
-			 Number(entry.ends_at.slice(0, 2)) * 60 + Number(entry.ends_at.slice(3))]),
-	]
-		.filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end) && end > start)
-		.sort((a, b) => a[0] - b[0]);
-	const merged: [number, number][] = [];
-	for (const interval of intervals) {
-		const last = merged.at(-1);
-		if (last && interval[0] <= last[1]) last[1] = Math.max(last[1], interval[1]);
-		else merged.push([...interval]);
+	const busy=(await loadBusyDays(db,member.group_id,[targetUserId],date,date)).get(targetUserId)?.get(date) || [];
+	return jsonResponse({ date, busy:busy.map(([start,end])=>({start:formatMinute(start),end:formatMinute(end),label:'予定あり'})),
+		free:freeIntervals(busy).map(([start,end])=>({start:formatMinute(start),end:formatMinute(end)})) });
+}
+
+async function searchAvailability(db:D1Database, body:JsonRecord, user:SessionUser):Promise<Response> {
+	const member=await requireMembership(db,body,user);
+	if (!member) return jsonResponse({error:'グループへの参加情報を確認できません'},401);
+	const rawIds=body.userIds;
+	const first=body.startDate, last=body.endDate, duration=body.durationMinutes;
+	if (!Array.isArray(rawIds) || rawIds.length<2 || rawIds.length>20 ||
+		rawIds.some(id=>!stringValue(id,64)) || new Set(rawIds).size!==rawIds.length ||
+		!validDate(first) || !validDate(last) || first>last ||
+		(Date.parse(last+'T00:00:00Z')-Date.parse(first+'T00:00:00Z'))/86400000>13 ||
+		!Number.isInteger(duration) || (duration as number)<60 || (duration as number)>360 || (duration as number)%30!==0)
+		return jsonResponse({error:'2人以上のメンバー、14日以内の期間、1〜6時間を30分単位で指定してください'},400);
+	const userIds=rawIds as string[];
+	const selected=await db.prepare(`SELECT user_id,id FROM active_group_members WHERE group_id=? AND user_id IN (${userIds.map(()=>'?').join(',')})`)
+		.bind(member.group_id,...userIds).all<{user_id:string;id:string}>();
+	if (selected.results.length!==userIds.length) return jsonResponse({error:'グループ外または退出済みのメンバーは選択できません'},403);
+	const memberIds=new Map(selected.results.map(row=>[row.user_id,row.id]));
+	const months=[...new Set(Array.from({length:14},(_,i)=>nextDate(first,i)).filter(date=>date<=last)
+		.flatMap(date=>[date.slice(0,7),nextDate(date,-1).slice(0,7)]))];
+	const [busy,unconfirmed]=await Promise.all([
+		loadBusyDays(db,member.group_id,userIds,first,last),
+		unconfirmedByMonth(db,member.group_id,memberIds,months),
+	]);
+	// A selected member can leave while the range queries run. Never turn the
+	// missing rows into an apparently free slot, or answer a departed requester.
+	const current=await db.prepare(`SELECT user_id,id FROM active_group_members WHERE group_id=? AND user_id IN (${userIds.map(()=>'?').join(',')})`)
+		.bind(member.group_id,...userIds).all<{user_id:string;id:string}>();
+	if (current.results.length!==userIds.length || current.results.some(row=>memberIds.get(row.user_id)!==row.id) ||
+		!(await db.prepare('SELECT 1 FROM active_group_members WHERE id=? AND group_id=? AND user_id=?')
+			.bind(member.member_id,member.group_id,user.id).first()))
+		return jsonResponse({error:'検索中にメンバー構成が変わりました。もう一度お試しください'},409);
+	const days=[];
+	for (let date=first;date<=last;date=nextDate(date)) {
+		const unknown=userIds.filter(id=>unconfirmed.get(date.slice(0,7))?.has(id) ||
+			unconfirmed.get(nextDate(date,-1).slice(0,7))?.has(id));
+		days.push({date,unconfirmedUserIds:unknown,
+			slots:candidateSlots(busy,userIds,date,duration as number).map(([start,end])=>
+				({start:formatMinute(start),end:formatMinute(end),needsConfirmation:unknown.length>0}))});
 	}
-	const format = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
-	const free: [number, number][] = [];
-	let cursor = 9 * 60;
-	for (const [start, end] of merged) {
-		if (start > cursor) free.push([cursor, Math.min(start, 22 * 60)]);
-		cursor = Math.max(cursor, end);
-		if (cursor >= 22 * 60) break;
-	}
-	if (cursor < 22 * 60) free.push([cursor, 22 * 60]);
-	return jsonResponse({ date, busy:merged.map(([start, end]) => ({ start:format(start), end:format(end), label:'予定あり' })),
-		free:free.filter(([start, end]) => end > start).map(([start, end]) => ({ start:format(start), end:format(end) })) });
+	return jsonResponse({startDate:first,endDate:last,durationMinutes:duration,days});
 }
 
 async function syncCalendar(env: SharedEnv, ctx: ExecutionContext, body: JsonRecord, user: SessionUser): Promise<Response> {
@@ -423,7 +423,13 @@ async function syncCalendar(env: SharedEnv, ctx: ExecutionContext, body: JsonRec
 		previous.delete(key);
 	}
 	if (previous.size) changed = true;
-	if (!added && !changed) return jsonResponse({ ok:true, count:entries.length });
+	const coverage=db.prepare(`INSERT INTO group_calendar_sync_coverage(group_id,member_id,month,synced_at)
+		VALUES(?1,?2,?3,?4) ON CONFLICT(group_id,member_id,month) DO UPDATE SET synced_at=excluded.synced_at`)
+		.bind(member.group_id,member.member_id,month,new Date().toISOString());
+	if (!added && !changed) {
+		await coverage.run();
+		return jsonResponse({ ok:true, count:entries.length });
+	}
 	const statements = [db.prepare(
 		`DELETE FROM member_calendar_entries WHERE group_id = ?1 AND member_id = ?2 AND event_date >= ?3 AND event_date < ?4
 		 AND source_type='shift' AND EXISTS(SELECT 1 FROM active_group_members WHERE id=?2 AND group_id=?1)`,
@@ -434,6 +440,7 @@ async function syncCalendar(env: SharedEnv, ctx: ExecutionContext, body: JsonRec
 			 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
 		).bind(member.group_id, member.member_id, entry.sourceType, entry.sourceId, entry.eventDate, entry.title, entry.start, entry.end, Number(entry.allDay), entry.note));
 	}
+	statements.push(coverage);
 	await db.batch(statements);
 	if (added || changed) await scheduleNotice(env, ctx, member.group_id, user.id,
 		added ? 'group_event_created' : 'group_event_updated', `「${member.group_name}」の共有予定が${added ? '追加' : '変更'}されました`,
@@ -538,6 +545,7 @@ export async function handleSharedRequest(request: Request, env: SharedEnv, ctx:
 		if (pathname === '/api/groups/leave') return await leaveGroup(env.DB, body, user);
 		if (pathname === '/api/shared/events/list') return await listEvents(env.DB, body, user);
 		if (pathname === '/api/shared/availability') return await availability(env.DB, body, user);
+		if (pathname === '/api/shared/availability/search') return await searchAvailability(env.DB, body, user);
 		if (pathname === '/api/shared/calendar/sync') return await syncCalendar(env, ctx, body, user);
 		if (pathname === '/api/shared/events/create') return await createEvent(env, ctx, body, user);
 		if (pathname === '/api/shared/events/update') return await updateEvent(env, ctx, body, user);

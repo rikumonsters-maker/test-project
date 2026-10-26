@@ -1,4 +1,5 @@
 import { canManageSharedEvent, initSharedEventEditor } from './shared-event-editor.mjs';
+import { initCommonAvailability } from './common-availability.mjs';
 import { createInviteUrl } from './config.mjs';
 import { initReminderControls } from './reminder-controls.mjs';
 import { currentTimeZone } from './reminders.mjs';
@@ -48,6 +49,7 @@ export function initShared(app) {
   let wishRequestId = 0;
   let wishClientRequestId = null;
   let sharedEventEditor = null;
+  let commonAvailability = null;
   let sharedReminderControls = null;
   let sharedReminderEvent = null;
   let sharedReminderTimeZone = currentTimeZone();
@@ -84,6 +86,7 @@ export function initShared(app) {
     memberExpiryTimer = null;
   }
   function showHome() {
+    commonAvailability?.close();
     closeGroupManagement();
     closeStatusInvite();
     closeWishEditor();
@@ -958,6 +961,7 @@ export function initShared(app) {
     $("shared-reminder-status").hidden = true;
   }
   function openCalendar(groupId, reminderTarget = null) {
+    commonAvailability?.close();
     const group = memberships().find((item) => item.groupId === groupId);
     if (!group) return;
     activeGroupId = groupId;
@@ -1089,6 +1093,7 @@ export function initShared(app) {
     } finally { if (managedGroupId === group.groupId) setImageBusy(false); }
   }
   function init() {
+    commonAvailability = initCommonAvailability({ $, requestJson, activeGroup });
     sharedEventEditor = initSharedEventEditor({ $, requestJson, activeGroup, onSaved:refreshCurrentMonth });
     sharedReminderControls = initReminderControls($("shared-reminder-controls"));
     $("shared-reminder-form").addEventListener("submit", async (event) => {

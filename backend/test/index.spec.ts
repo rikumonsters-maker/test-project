@@ -17,6 +17,7 @@ import migration13 from '../migrations/0013_push_reminders.sql?raw';
 import migration14 from '../migrations/0014_in_app_notifications.sql?raw';
 import migration14a from '../migrations/0014a_group_leave_guard.sql?raw';
 import migration15 from '../migrations/0015_group_departures.sql?raw';
+import migration16 from '../migrations/0016_common_availability_coverage.sql?raw';
 import { applySQL } from './migration-helper';
 import { drainPushQueue, encryptPushPayload, handlePushRequest, notifyGroup, queueGroupNotice, type PushEnv } from '../src/push';
 import { handleSharedRequest } from '../src/shared';
@@ -193,6 +194,7 @@ beforeAll(async () => {
   await applySQL(env.DB, migration14);
   await applySQL(env.DB, migration14a);
   await applySQL(env.DB, migration15);
+  await applySQL(env.DB, migration16);
 });
 
 describe('DaySync authentication', () => {

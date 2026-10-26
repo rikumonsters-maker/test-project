@@ -226,6 +226,18 @@ button:disabled { opacity:.6; cursor:wait; }
 .status-invite-dialog .actions { flex-wrap:wrap; }
 .status-quote { margin:8px 0 18px; padding:10px 12px; border-radius:9px; background:var(--surface-soft); overflow-wrap:anywhere; }
 .availability-entry { margin:0 0 7px; padding:9px 11px; border-radius:8px; background:var(--bg); overflow-wrap:anywhere; font-size:.9rem; }
+.common-availability-open { width:100%; min-height:44px; margin-top:12px; }
+.common-availability-dialog { width:min(92vw,560px); max-height:calc(100dvh - 24px); }
+.common-availability-dialog input[type="date"],.common-availability-dialog select { min-height:44px; }
+.common-availability-choice { min-height:44px; padding:6px 4px; overflow-wrap:anywhere; }
+.common-availability-results { max-height:min(45dvh,440px); overflow-y:auto; margin-top:14px; }
+.common-availability-day { margin-top:9px; padding:8px 11px; border:1px solid var(--line); border-radius:9px; }
+.common-availability-day summary { min-height:44px; align-content:center; cursor:pointer; font-weight:700; }
+.common-availability-caution { margin:7px 0; color:var(--muted); font-size:.88rem; }
+.common-availability-slots { display:grid; gap:5px; margin:8px 0 4px; padding:0; list-style:none; }
+.common-availability-slots li { padding:8px 10px; border-radius:7px; background:var(--bg); font-size:.9rem; }
+.common-availability-dialog .time-pair { grid-template-columns:repeat(2,minmax(0,1fr)); }
+@media (max-width:520px) { .common-availability-dialog { width:calc(100vw - 16px); padding:16px; } .common-availability-dialog .time-pair { grid-template-columns:1fr; } }
 .qr-dialog::backdrop { background:var(--backdrop); }
 .qr-dialog h3 { margin:0 0 6px; }
 .qr-dialog-close { display:block; margin:0 0 14px auto; }

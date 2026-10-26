@@ -42,7 +42,7 @@ async function reminder(u:SessionUser, groupId:string, eventId:string, get=false
 }
 let legacy:{owner:SessionUser;groupId:string;memberId:string;eventId:string};
 beforeAll(async()=>{
-  for(const key of Object.keys(migrations).sort().filter(k=>!k.includes('0015_'))) await applySQL(db,migrations[key]);
+  for(const key of Object.keys(migrations).sort().filter(k=>!k.includes('0015_')&&!k.includes('0016_'))) await applySQL(db,migrations[key]);
   const owner=await user(), groupId=crypto.randomUUID(), memberId=crypto.randomUUID(), eventId=crypto.randomUUID();
   await db.batch([
     db.prepare("INSERT INTO groups(id,name,invite_code,created_at) VALUES(?1,'既存','legacy-migration-test','2026-01-01')").bind(groupId),
@@ -51,6 +51,7 @@ beforeAll(async()=>{
   ]);
   legacy={owner,groupId,memberId,eventId};
   await applySQL(db,migrations[Object.keys(migrations).find(k=>k.includes('0015_'))!]);
+  await applySQL(db,migrations[Object.keys(migrations).find(k=>k.includes('0016_'))!]);
 });
 
 describe('group departure retention and authorization',()=>{
