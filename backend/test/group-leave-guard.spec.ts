@@ -26,7 +26,7 @@ async function row(table:string, key:string, value:string) {
 }
 
 beforeAll(async()=>{
-  for (const key of Object.keys(migrations).sort().filter(k=>!k.includes('0014a_')&&!k.includes('0015_')&&!k.includes('0016_')))
+  for (const key of Object.keys(migrations).sort().filter(k=>!k.includes('0014a_')&&!k.includes('0015_')&&!k.includes('0016_')&&!k.includes('0017_')))
     await applySQL(db,migrations[key]);
   await db.batch([
     db.prepare("INSERT INTO users(id,email,display_name,password_hash,password_salt,created_at) VALUES(?1,?2,'Owner','test-only','test-only','now')").bind(ownerId,ownerId+'@example.test'),

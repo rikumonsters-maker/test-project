@@ -1,5 +1,6 @@
 import { canManageSharedEvent, initSharedEventEditor } from './shared-event-editor.mjs';
 import { initCommonAvailability } from './common-availability.mjs';
+import { initSchedules } from './schedules.mjs';
 import { createInviteUrl } from './config.mjs';
 import { initReminderControls } from './reminder-controls.mjs';
 import { currentTimeZone } from './reminders.mjs';
@@ -50,9 +51,22 @@ export function initShared(app) {
   let wishClientRequestId = null;
   let sharedEventEditor = null;
   let commonAvailability = null;
+  let schedules = null;
   let sharedReminderControls = null;
   let sharedReminderEvent = null;
   let sharedReminderTimeZone = currentTimeZone();
+
+  function buttonForSchedule(wish) {
+    const control=document.createElement('button');control.type='button';control.className='action-button';
+    control.textContent='日程調整を始める';
+    control.addEventListener('click',()=>void schedules?.openCreate({
+      sourceWishId:wish.id,title:wish.message||'みんなで遊ぶ',
+      participantUserIds:(wish.interestedUsers||[]).map(person=>person.userId),
+      options:[{date:wish.wishDate,start:wish.isAllDay?'18:00':wish.start,
+        end:wish.isAllDay||!wish.end?'20:00':wish.end}],
+    }));
+    return control;
+  }
 
   function memberships() {
     return state.groups.filter((group) => group && group.groupId && group.memberId);
@@ -87,6 +101,7 @@ export function initShared(app) {
   }
   function showHome() {
     commonAvailability?.close();
+    schedules?.close();
     closeGroupManagement();
     closeStatusInvite();
     closeWishEditor();
@@ -165,6 +180,7 @@ export function initShared(app) {
     setRenameMode(false);
     closeIconPicker();
     setError("", "group-icon-error");
+    $('group-leave-choices').hidden=true;
     $("group-icon-status").hidden = true;
     setImageBusy(false);
     $("group-manage-dialog").showModal();
@@ -172,9 +188,11 @@ export function initShared(app) {
   function closeGroupManagement() {
     const dialog = $("group-manage-dialog");
     if (dialog.open) dialog.close();
+    $('group-leave-choices').hidden=true;
   }
   function setImageBusy(busy) {
-    ["group-rename-open", "group-rename-save", "group-rename-cancel", "group-icon-change", "group-icon-save", "group-icon-cancel", "group-manage-leave"].forEach(id => { $(id).disabled = busy; });
+    ["group-rename-open", "group-rename-save", "group-rename-cancel", "group-icon-change", "group-icon-save", "group-icon-cancel", "group-manage-leave",
+      'group-leave-transfer','group-leave-close','group-leave-cancel'].forEach(id => { $(id).disabled = busy; });
     document.querySelectorAll("#group-icon-options button, #group-icon-colors button").forEach(button => { button.disabled = busy; });
   }
   function createGroupIconSvg(iconId, className = "") {
@@ -536,7 +554,13 @@ export function initShared(app) {
       card.append(status);
       const actions = document.createElement("div");
       actions.className = "group-wish-actions";
-      if (wish.isOwn) {
+      if(wish.scheduleId){
+        const schedule=document.createElement('button');schedule.type='button';schedule.className='action-button';
+        schedule.textContent='日程調整を見る';schedule.addEventListener('click',()=>void schedules?.openDetail(wish.scheduleId));
+        actions.append(schedule);
+      }
+      if (wish.isOwn && wish.managementState==='open') {
+        if(!wish.scheduleId) actions.append(buttonForSchedule(wish));
         if (wish.eventStatus === "tentative" && !wish.participantsInsufficient) {
           const convert = document.createElement("button");
           convert.type = "button";
@@ -556,7 +580,7 @@ export function initShared(app) {
         remove.textContent = "削除";
         remove.addEventListener("click", () => void deleteWish(wish));
         actions.append(edit, remove);
-      } else {
+      } else if(wish.managementState==='open') {
         const react = document.createElement("button");
         react.type = "button";
         react.className = `action-button ${wish.reacted ? "wish-reacted" : ""}`;
@@ -962,6 +986,7 @@ export function initShared(app) {
   }
   function openCalendar(groupId, reminderTarget = null) {
     commonAvailability?.close();
+    schedules?.close();
     const group = memberships().find((item) => item.groupId === groupId);
     if (!group) return;
     activeGroupId = groupId;
@@ -985,6 +1010,8 @@ export function initShared(app) {
     renderCalendar();
     void loadGroupMembers(group);
     void loadWishes();
+    if(typeof reminderTarget?.scheduleId==='string' && /^[A-Za-z0-9-]{1,64}$/.test(reminderTarget.scheduleId))
+      void schedules?.openDetail(reminderTarget.scheduleId);
     window.scrollTo({ top:0, behavior:"instant" });
   }
   function monthsWithData() {
@@ -1076,16 +1103,32 @@ export function initShared(app) {
     }
   }
   async function leaveGroup(group) {
-    if (!window.confirm(`${group.groupName}から退出しますか？確定済みの共有予定は残り、残ったメンバーが管理します。退出後はこのグループの通知を受け取りません。募集・仮予定がある場合や最後の1人の場合は退出できません。`)) return;
+    setError('', 'group-icon-error');
+    try {
+      const options=await requestJson('/api/groups/leave/options',{payload:credentials(group)});
+      if(!options.successors?.length){setError('最後のメンバーは退出できません。','group-icon-error');return;}
+      if(options.otherTentative){setError('管理方法が未確定の仮予定があるため退出できません。','group-icon-error');return;}
+      if(options.wishes||options.schedules){
+        const select=$('group-leave-successor');select.replaceChildren();
+        for(const person of options.successors)select.append(new Option(person.name,person.userId));
+        $('group-leave-choices-description').textContent=`募集${options.wishes}件、日程調整${options.schedules}件。終了して履歴を残すか、有効なメンバーに引き継いでください。`;
+        $('group-leave-choices').hidden=false;return;
+      }
+    }catch(error){setError(error.message||'退出条件を確認できませんでした。','group-icon-error');return;}
+    if (!window.confirm(`${group.groupName}から退出しますか？確定済みの共有予定は残り、退出後はグループ情報にアクセスできません。`)) return;
+    await performLeave(group,{});
+  }
+  async function performLeave(group,extra) {
     setError("", "group-icon-error");
     setImageBusy(true);
     try {
-      await requestJson("/api/groups/leave", { payload:credentials(group) });
+      await requestJson("/api/groups/leave", { payload:{...credentials(group),...extra} });
       state.groups = state.groups.filter((item) => item.groupId !== group.groupId);
       delete state.pendingGroupMonths[group.groupId];
       if (state.pendingGroupShiftMonths) delete state.pendingGroupShiftMonths[group.groupId];
       saveState();
       closeGroupManagement();
+      schedules?.close();
       renderGroups();
       setStatus(`${group.groupName}から退出しました。`, "safe");
     } catch (error) {
@@ -1093,7 +1136,10 @@ export function initShared(app) {
     } finally { if (managedGroupId === group.groupId) setImageBusy(false); }
   }
   function init() {
-    commonAvailability = initCommonAvailability({ $, requestJson, activeGroup });
+    schedules=initSchedules({$,requestJson,activeGroup,getCurrentUserId:app.getCurrentUserId,
+      onConfirmed:refreshCurrentMonth});
+    commonAvailability = initCommonAvailability({ $, requestJson, activeGroup,
+      onSchedule:prefill=>void schedules.openCreate(prefill) });
     sharedEventEditor = initSharedEventEditor({ $, requestJson, activeGroup, onSaved:refreshCurrentMonth });
     sharedReminderControls = initReminderControls($("shared-reminder-controls"));
     $("shared-reminder-form").addEventListener("submit", async (event) => {
@@ -1153,6 +1199,18 @@ export function initShared(app) {
     $("group-manage-leave").addEventListener("click", () => {
       const group = memberships().find(item => item.groupId === managedGroupId);
       if (group) void leaveGroup(group);
+    });
+    $('group-leave-cancel').addEventListener('click',()=>{$('group-leave-choices').hidden=true;});
+    $('group-leave-close').addEventListener('click',()=>{
+      const group=memberships().find(item=>item.groupId===managedGroupId);
+      if(group&&window.confirm('進行中の募集と日程調整を終了し、履歴を残して退出しますか？'))
+        void performLeave(group,{exitChoice:'close'});
+    });
+    $('group-leave-transfer').addEventListener('click',()=>{
+      const group=memberships().find(item=>item.groupId===managedGroupId);
+      const successorUserId=$('group-leave-successor').value;
+      if(group&&successorUserId&&window.confirm('管理権限を選択したメンバーに引き継いで退出しますか？'))
+        void performLeave(group,{exitChoice:'transfer',successorUserId});
     });
     $("group-wish-all-day").addEventListener("change", updateWishTimeState);
     $("group-wish-cancel").addEventListener("click", closeWishEditor);

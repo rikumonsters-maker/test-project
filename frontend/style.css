@@ -238,6 +238,20 @@ button:disabled { opacity:.6; cursor:wait; }
 .common-availability-slots li { padding:8px 10px; border-radius:7px; background:var(--bg); font-size:.9rem; }
 .common-availability-dialog .time-pair { grid-template-columns:repeat(2,minmax(0,1fr)); }
 @media (max-width:520px) { .common-availability-dialog { width:calc(100vw - 16px); padding:16px; } .common-availability-dialog .time-pair { grid-template-columns:1fr; } }
+.schedules-dialog { width:min(94vw,620px); max-height:calc(100dvh - 16px); overflow-y:auto; }
+.schedules-content { display:grid; gap:12px; padding-bottom:16px; }
+.schedules-content .form-stack input,.schedules-content .form-stack select,.schedules-content .form-stack textarea { min-height:44px; width:100%; }
+.schedule-list { list-style:none; display:grid; gap:8px; padding:0; }
+.schedule-list li,.schedule-option { display:grid; gap:8px; padding:12px; border:1px solid var(--line); border-radius:10px; }
+.schedule-list small { color:var(--muted); }
+.schedule-option h5 { margin:0; font-size:1rem; }
+.schedule-option p { margin:0; }
+.schedule-option .actions { display:flex; flex-wrap:wrap; gap:8px; }
+.schedule-option .action-button[aria-pressed="true"] { outline:2px solid currentColor; }
+.schedule-votes { margin:0; padding-left:22px; }
+#group-leave-choices { margin-top:14px; }
+#group-leave-choices select { min-height:44px; }
+@media(max-width:520px) { .schedules-dialog { width:calc(100vw - 12px); padding:14px; } .schedule-option .action-button { min-height:44px; } }
 .qr-dialog::backdrop { background:var(--backdrop); }
 .qr-dialog h3 { margin:0 0 6px; }
 .qr-dialog-close { display:block; margin:0 0 14px auto; }

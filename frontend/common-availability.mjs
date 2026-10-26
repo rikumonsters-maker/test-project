@@ -16,21 +16,45 @@ export function validateCommonAvailability({userIds,startDate,endDate,durationMi
   return null;
 }
 
-export function initCommonAvailability({$,requestJson,activeGroup}) {
+export function initCommonAvailability({$,requestJson,activeGroup,onSchedule}) {
   const dialog=$('common-availability-dialog');
   const form=$('common-availability-form');
   const results=$('common-availability-results');
   const status=$('common-availability-status');
+  const recommendations=$('common-availability-recommendations');
   const error=$('common-availability-error');
   const submit=$('common-availability-submit');
   const names=new Map();
   let generation=0;
   let openedGroupId=null;
+  let lastSelection=null;
 
   function setError(message='') { error.textContent=message; error.hidden=!message; }
   function close() { if (dialog.open) dialog.close(); }
   function render(data) {
     results.replaceChildren();
+    recommendations.replaceChildren();
+    if (data.recommendations?.length) {
+      const title=document.createElement('h4'); title.textContent='おすすめ日時（投票前の候補）'; recommendations.append(title);
+      const list=document.createElement('ol');
+      for (const slot of data.recommendations) {
+        const item=document.createElement('li');
+        const heading=document.createElement('strong');
+        heading.textContent=`${slot.date} ${slot.start}〜${slot.end}${slot.meetsMinimum?'':'・最低人数未達'}`;
+        const reason=document.createElement('p'); reason.textContent=slot.reason;
+        item.append(heading,reason); list.append(item);
+        if(onSchedule){
+          const create=document.createElement('button');create.type='button';create.className='action-button';
+          create.textContent='この日時で日程調整を始める';
+          create.addEventListener('click',()=>{close();onSchedule({
+            participantUserIds:lastSelection?.userIds||[],minimumParticipants:lastSelection?.minimumParticipants||2,
+            options:[{date:slot.date,start:slot.start,end:slot.end}],
+          });});
+          item.append(create);
+        }
+      }
+      recommendations.append(list);
+    }
     const count=data.days.reduce((n,day)=>n+day.slots.length,0);
     status.textContent=count ? `${count}件の候補が見つかりました。予定の最新状態は参加者に確認してください。` : '条件に合う候補はありません。';
     let first=true;
@@ -69,6 +93,8 @@ export function initCommonAvailability({$,requestJson,activeGroup}) {
     $('common-availability-members').replaceChildren();
     setError('');
     results.replaceChildren();
+    recommendations.replaceChildren();
+    lastSelection=null;
     status.textContent='メンバーを読み込んでいます…';
     const start=localDate(new Date());
     $('common-availability-start').value=start;
@@ -92,6 +118,13 @@ export function initCommonAvailability({$,requestJson,activeGroup}) {
         label.append(box,document.createTextNode(member.memberName));
         fieldset.append(label);
       }
+      const minimum=$('common-availability-minimum');
+      minimum.replaceChildren();
+      for (let count=1;count<=Math.min(names.size,20);count++) {
+        const option=document.createElement('option'); option.value=String(count); option.textContent=`${count}人`;
+        minimum.append(option);
+      }
+      minimum.value=String(Math.min(names.size,20));
       status.textContent='期間と必要時間を選んで検索してください。';
       if (names.size<2) setError('検索にはグループ内のアカウント登録済みメンバーが2人以上必要です。');
     } catch (cause) {
@@ -121,16 +154,21 @@ export function initCommonAvailability({$,requestJson,activeGroup}) {
       userIds:[...$('common-availability-members').querySelectorAll('input:checked')].map(box=>box.value),
       startDate:$('common-availability-start').value,endDate:$('common-availability-end').value,
       durationMinutes:Number(duration.value)};
+    payload.minimumParticipants=Number($('common-availability-minimum').value);
     const message=validateCommonAvailability(payload);
+    if(!Number.isInteger(payload.minimumParticipants)||payload.minimumParticipants<1||payload.minimumParticipants>payload.userIds.length){
+      setError('最低参加人数を確認してください。');return;
+    }
     setError(message || '');
     if (message) return;
     const current=++generation;
     submit.disabled=true;
     results.replaceChildren();
+    recommendations.replaceChildren();
     status.textContent='候補を探しています…';
     try {
       const data=await requestJson('/api/shared/availability/search',{payload});
-      if (current===generation && activeGroup()?.groupId===group.groupId) render(data);
+      if (current===generation && activeGroup()?.groupId===group.groupId){lastSelection=payload;render(data);}
     } catch (cause) {
       if (current===generation) { status.textContent=''; results.replaceChildren(); setError(cause.message || '候補を検索できませんでした。'); }
     } finally { submit.disabled=false; }

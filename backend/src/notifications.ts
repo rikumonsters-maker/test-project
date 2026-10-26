@@ -1,4 +1,5 @@
 import type { SessionUser } from './auth';
+import { scheduleMessages, type ScheduleNoticeKind } from './schedule-notices';
 
 export type NotificationKind = 'group_event_created' | 'group_event_updated' | 'group_joined'
   | 'wish_created' | 'wish_interested' | 'event_reminder';
@@ -12,7 +13,7 @@ const messages: Record<NotificationKind, string> = {
   event_reminder:'予定の開始時刻が近づいています',
 };
 
-type Row = { id:string; kind:NotificationKind; target_path:string; created_at:string; read_at:string | null };
+type Row = { id:string; kind:NotificationKind | ScheduleNoticeKind; target_path:string; created_at:string; read_at:string | null };
 const visible = `n.revoked_at IS NULL AND (n.group_id IS NULL OR EXISTS (
   SELECT 1 FROM active_group_members gm WHERE gm.group_id=n.group_id AND gm.user_id=n.user_id))`;
 
@@ -57,7 +58,7 @@ export function validReminderSql():string {
     WHERE p.user_id=r.user_id AND p.id=r.personal_event_id AND p.deleted=0))
     OR (r.scope='shared' AND EXISTS(SELECT 1 FROM shared_events e
       JOIN active_group_members gm ON gm.group_id=e.group_id AND gm.user_id=r.user_id
-      WHERE e.id=r.shared_event_id AND e.group_id=r.group_id AND e.status='confirmed'
+      WHERE e.id=r.shared_event_id AND e.group_id=r.group_id AND e.status='confirmed' AND e.cancelled_at IS NULL
       AND (e.wish_id IS NULL OR EXISTS(SELECT 1 FROM shared_event_participants sp
         WHERE sp.event_id=e.id AND sp.user_id=r.user_id AND sp.revoked_at IS NULL))))`;
 }
@@ -94,7 +95,7 @@ export async function handleNotificationRequest(request:Request, db:D1Database,
     if ((beforeAt||beforeId) && (!beforeAt || !beforeId ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(beforeAt) ||
       !/^[0-9a-f]{32}$/.test(beforeId))) return json({error:'一覧の位置を確認してください'},400);
-    const rows=await db.prepare(`SELECT n.id,n.kind,n.target_path,n.created_at,n.read_at
+    const rows=await db.prepare(`SELECT n.id,COALESCE(n.schedule_kind,n.kind) AS kind,n.target_path,n.created_at,n.read_at
       FROM in_app_notifications n WHERE n.user_id=?1 AND ${visible}
       AND (?2 IS NULL OR n.created_at<?2 OR (n.created_at=?2 AND n.id<?3))
       ORDER BY n.created_at DESC,n.id DESC LIMIT 31`)
@@ -102,7 +103,8 @@ export async function handleNotificationRequest(request:Request, db:D1Database,
     const page=rows.results.slice(0,30);
     const last=page.at(-1);
     return json({notifications:page.map(row=>({
-      id:row.id,kind:row.kind,message:messages[row.kind],targetPath:row.target_path,
+      id:row.id,kind:row.kind,message:row.kind in scheduleMessages
+        ? scheduleMessages[row.kind as ScheduleNoticeKind] : messages[row.kind as NotificationKind],targetPath:row.target_path,
       createdAt:row.created_at,readAt:row.read_at,
     })), unreadCount:await unreadCount(db,user.id),
       nextCursor:rows.results.length>30 && last ? {beforeAt:last.created_at,beforeId:last.id} : null});

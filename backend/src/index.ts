@@ -4,6 +4,7 @@ import { getSessionUser, handleAuthRequest } from './auth';
 import { handleProfileRequest } from './profile';
 import { drainPushQueue, handlePushRequest } from './push';
 import { drainReminderQueue, handleReminderRequest } from './reminders';
+import { drainScheduleNotices } from './schedule-cron';
 import { handleNotificationRequest } from './notifications';
 import { PUBLIC_APP_ORIGIN } from './app-origin';
 import { isLocalDevelopment, localOrigins, type DevelopmentEnv } from './development';
@@ -60,6 +61,8 @@ export default {
 		if (groupAccessPaused(env)) return;
 		ctx.waitUntil((async () => {
 			await drainReminderQueue(env);
+			try { await drainScheduleNotices(env); }
+			catch { console.error('Schedule notice Cron failed'); }
 			await drainPushQueue(env);
 		})());
 	},

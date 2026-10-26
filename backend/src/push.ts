@@ -177,6 +177,24 @@ export async function queueGroupUserNotice(env: PushEnv, groupId: string, recipi
 	).bind(groupId, notice.kind, notice.body, now, recipientUserId, dedupeKey, actorUserId).run();
 }
 
+function validScheduleNoticeSql(nowExpression:string):string {
+	return `EXISTS(SELECT 1 FROM group_schedules plan JOIN active_group_members m
+		ON m.group_id=plan.group_id AND m.user_id=push_deliveries.recipient_user_id
+		WHERE plan.id=push_deliveries.schedule_id AND plan.group_id=push_deliveries.group_id
+		AND (m.id=plan.manager_member_id OR EXISTS(SELECT 1 FROM group_schedule_participants p
+			WHERE p.schedule_id=plan.id AND p.member_id=m.id))
+		AND ((push_deliveries.kind='schedule_confirmed' AND plan.state='confirmed')
+			OR (push_deliveries.kind='schedule_cancelled' AND plan.state='cancelled')
+			OR (push_deliveries.kind NOT IN ('schedule_confirmed','schedule_cancelled') AND plan.state='open'))
+		AND (push_deliveries.kind NOT IN ('schedule_deadline','schedule_reminder')
+			OR plan.response_deadline>${nowExpression})
+		AND (push_deliveries.kind!='schedule_reminder' OR EXISTS(
+			SELECT 1 FROM group_schedule_participants p JOIN group_schedule_options o
+			ON o.schedule_id=p.schedule_id AND o.cancelled_at IS NULL
+			LEFT JOIN group_schedule_votes v ON v.option_id=o.id AND v.member_id=p.member_id
+			WHERE p.schedule_id=plan.id AND p.member_id=m.id AND v.response IS NULL)))`;
+}
+
 export async function drainPushQueue(env: PushEnv): Promise<void> {
 	if (!configured(env)) return;
 	await env.DB.prepare(
@@ -187,7 +205,8 @@ export async function drainPushQueue(env: PushEnv): Promise<void> {
 		     AND (push_deliveries.recipient_user_id IS NULL OR m.user_id = push_deliveries.recipient_user_id)))
 		 OR (scope = 'personal' AND NOT EXISTS (
 		   SELECT 1 FROM push_subscriptions s WHERE s.id = push_deliveries.subscription_id
-		     AND s.user_id = push_deliveries.recipient_user_id))`,
+		     AND s.user_id = push_deliveries.recipient_user_id))
+		 OR (schedule_id IS NOT NULL AND NOT (${validScheduleNoticeSql("strftime('%Y-%m-%dT%H:%M:%fZ','now')")}))`,
 	).run();
 	const now = new Date().toISOString();
 	const rows = await env.DB.prepare(
@@ -202,7 +221,8 @@ export async function drainPushQueue(env: PushEnv): Promise<void> {
 			 WHERE s.id=push_deliveries.subscription_id AND m.group_id=push_deliveries.group_id
 			 AND (push_deliveries.recipient_user_id IS NULL OR m.user_id=push_deliveries.recipient_user_id)))
 			AND (reminder_id IS NULL OR EXISTS(SELECT 1 FROM event_reminders r
-			 WHERE r.id=push_deliveries.reminder_id AND r.event_start_at>?3 AND (${validReminderSql()})))`)
+			 WHERE r.id=push_deliveries.reminder_id AND r.event_start_at>?3 AND (${validReminderSql()})))
+			AND (schedule_id IS NULL OR (${validScheduleNoticeSql('?3')}))`)
 			.bind(new Date(Date.now() + 5 * 60_000).toISOString(), item.delivery_id, now).run();
 		if (!claimed.meta.changes) return;
 		const result = await deliver(env, item, { groupId:item.group_id, targetPath:item.target_path || undefined, kind:item.kind, body:item.body });

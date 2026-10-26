@@ -223,6 +223,7 @@ const app = {
   monthPrefix,
   status,
   requestJson,
+  getCurrentUserId:() => currentUser?.id,
   postJson,
   QrScanner,
   qrcode,
@@ -426,6 +427,7 @@ async function startApp(user) {
   const reminderDate = notificationParams.get("date");
   const reminderEventId = notificationParams.get("eventId");
   const notificationWishId = notificationParams.get("wishId");
+  const notificationScheduleId = notificationParams.get('scheduleId');
   if (inviteFromUrl?.trim()) {
     $("group-invite-code").value = inviteFromUrl.trim().slice(0, 40);
     setActivePage("group");
@@ -448,13 +450,15 @@ async function startApp(user) {
     if (groupFromUrl && state.groups.some((group) => group.groupId === groupFromUrl)) {
       setActivePage("group");
       shared.openCalendar(groupFromUrl, { date:reminderDate,
-        eventId:reminderKind === "shared" ? reminderEventId : null, wishId:notificationWishId });
+        eventId:reminderKind === "shared" ? reminderEventId : null, wishId:notificationWishId,
+        scheduleId:notificationScheduleId });
       const cleanUrl = new URL(window.location.href);
       cleanUrl.searchParams.delete("group");
       cleanUrl.searchParams.delete("reminder");
       cleanUrl.searchParams.delete("date");
       cleanUrl.searchParams.delete("eventId");
       cleanUrl.searchParams.delete("wishId");
+      cleanUrl.searchParams.delete('scheduleId');
       window.history.replaceState(window.history.state, "", cleanUrl);
     }
   }
