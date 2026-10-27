@@ -476,13 +476,20 @@ async function searchAvailability(db:D1Database, body:JsonRecord, user:SessionUs
 	if (!member) return jsonResponse({error:'グループへの参加情報を確認できません'},401);
 	const rawIds=body.userIds;
 	const first=body.startDate, last=body.endDate, duration=body.durationMinutes;
+	const windowStart=body.windowStart===undefined ? 540 : body.windowStart;
+	const windowEnd=body.windowEnd===undefined ? 1320 : body.windowEnd;
+	const excludePast=body.excludePast===true;
 	const minimum=body.minimumParticipants===undefined ? rawIds instanceof Array ? rawIds.length : 0 : body.minimumParticipants;
 	if (!Array.isArray(rawIds) || rawIds.length<2 || rawIds.length>20 ||
 		rawIds.some(id=>!stringValue(id,64)) || new Set(rawIds).size!==rawIds.length ||
 		!validDate(first) || !validDate(last) || first>last ||
 		(Date.parse(last+'T00:00:00Z')-Date.parse(first+'T00:00:00Z'))/86400000>13 ||
 		!Number.isInteger(duration) || (duration as number)<60 || (duration as number)>360 || (duration as number)%30!==0 ||
-		!Number.isInteger(minimum) || (minimum as number)<1 || (minimum as number)>rawIds.length)
+		!Number.isInteger(minimum) || (minimum as number)<1 || (minimum as number)>rawIds.length ||
+		!Number.isInteger(windowStart) || !Number.isInteger(windowEnd) ||
+		(windowStart as number)<0 || (windowEnd as number)>1440 ||
+		(windowStart as number)%30!==0 || (windowEnd as number)%30!==0 ||
+		(windowEnd as number)-(windowStart as number)<(duration as number))
 		return jsonResponse({error:'2人以上のメンバー、14日以内の期間、1〜6時間を30分単位で指定してください'},400);
 	const userIds=rawIds as string[];
 	const selected=await db.prepare(`SELECT user_id,id FROM active_group_members WHERE group_id=? AND user_id IN (${userIds.map(()=>'?').join(',')})`)
@@ -506,17 +513,23 @@ async function searchAvailability(db:D1Database, body:JsonRecord, user:SessionUs
 		return jsonResponse({error:'検索中にメンバー構成が変わりました。もう一度お試しください'},409);
 	const days=[];
 	const unknownByDate=new Map<string,Set<string>>();
+	const nowParts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tokyo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
+	const part=(type:string)=>nowParts.find(item=>item.type===type)?.value || '';
+	const today=`${part('year')}-${part('month')}-${part('day')}`;
+	const currentMinute=Number(part('hour'))*60+Number(part('minute'));
 	for (let date=first;date<=last;date=nextDate(date)) {
 		const unknown=userIds.filter(id=>unconfirmed.get(date.slice(0,7))?.has(id) ||
 			unconfirmed.get(nextDate(date,-1).slice(0,7))?.has(id));
 		unknownByDate.set(date,new Set(unknown));
 		days.push({date,unconfirmedUserIds:unknown,
-			slots:candidateSlots(busy,userIds,date,duration as number).map(([start,end])=>
+		slots:(excludePast && date<today ? [] : candidateSlots(busy,userIds,date,duration as number,
+			windowStart as number,windowEnd as number,excludePast && date===today?currentMinute:0)).map(([start,end])=>
 				({start:formatMinute(start),end:formatMinute(end),needsConfirmation:unknown.length>0}))});
 	}
 	return jsonResponse({startDate:first,endDate:last,durationMinutes:duration,minimumParticipants:minimum,days,
 		recommendations:rankAvailability(availability.hard,availability.tentative,userIds,days.map(day=>day.date),
-			duration as number,minimum as number,unknownByDate)});
+			duration as number,minimum as number,unknownByDate,5,windowStart as number,windowEnd as number,
+			excludePast?today:'',excludePast?currentMinute:0)});
 }
 
 async function syncCalendar(env: SharedEnv, ctx: ExecutionContext, body: JsonRecord, user: SessionUser): Promise<Response> {
