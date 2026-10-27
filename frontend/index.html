@@ -67,141 +67,8 @@
         <p class="status error" id="legacy-error" hidden role="alert"></p>
       </div>
 
-      <section class="page-panel" id="page-shift" aria-labelledby="shift-page-title">
-        <div class="page-heading">
-          <h2 id="shift-page-title">シフト</h2>
-          <p>勤務予定と予想給料</p>
-        </div>
-        <div class="layout-two">
-          <article class="card calendar-card">
-            <div class="month-bar">
-              <h3 class="month-title" id="shift-month-label"></h3>
-              <nav class="month-nav" aria-label="シフトの月移動">
-                <button class="icon-button" id="shift-previous" type="button" aria-label="前月">‹</button>
-                <button class="icon-button" id="shift-next" type="button" aria-label="次月">›</button>
-              </nav>
-            </div>
-            <div class="calendar" id="shift-calendar" data-month-label="shift-month-label" role="grid" aria-label="月間シフトカレンダー">
-              <div class="weekday" role="columnheader">日</div><div class="weekday" role="columnheader">月</div><div class="weekday" role="columnheader">火</div><div class="weekday" role="columnheader">水</div><div class="weekday" role="columnheader">木</div><div class="weekday" role="columnheader">金</div><div class="weekday" role="columnheader">土</div>
-            </div>
-            <p class="calendar-note">日付を選択してシフトを登録・編集できます。</p>
-          </article>
-
-          <div class="side-stack">
-            <article class="card">
-              <h3>今月の勤務と給料</h3>
-              <dl class="summary-list">
-                <div class="summary-row"><dt>合計実働時間</dt><dd id="shift-hours">0時間</dd></div>
-                <div class="summary-row emphasis"><dt>月の予想給料</dt><dd id="shift-month-wage">—</dd></div>
-                <div class="summary-row"><dt id="shift-day-label">選択日の給料</dt><dd id="shift-day-wage">—</dd></div>
-              </dl>
-            </article>
-
-            <article class="card">
-              <h3>シフト登録</h3>
-              <p class="card-description" id="shift-date"></p>
-              <form id="shift-form">
-                <div class="form-stack">
-                  <div class="time-pair">
-                    <label>出勤時間<span class="time-input-row"><input id="shift-start" type="text" inputmode="numeric" autocomplete="off" placeholder="17:30" pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]" maxlength="5" title="HH:MM形式で入力（例：17:30）" required /><input id="shift-start-picker" type="time" aria-label="出勤時間を選択" /></span></label>
-                    <label>退勤時間<span class="time-input-row"><input id="shift-end" type="text" inputmode="numeric" autocomplete="off" placeholder="22:00" pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]" maxlength="5" title="HH:MM形式で入力（例：22:00）" required /><input id="shift-end-picker" type="time" aria-label="退勤時間を選択" /></span></label>
-                  </div>
-                  <label>休憩時間<span class="input-with-unit"><input id="shift-break" type="number" min="0" step="1" inputmode="numeric" value="0" required /><span class="unit">分</span></span></label>
-                </div>
-                <p class="status error" id="shift-error" hidden aria-live="polite"></p>
-                <div class="actions">
-                  <button class="action-button primary" id="save-shift" type="submit">シフトを登録</button>
-                  <button class="action-button danger" id="delete-shift" type="button" hidden>削除</button>
-                </div>
-              </form>
-            </article>
-
-            <article class="card">
-              <h3>時給</h3>
-              <p class="card-description">時給を設定すると月の予想給料を計算します。</p>
-              <label>時給<span class="input-with-unit"><input id="hourly" type="number" min="0" step="1" inputmode="numeric" placeholder="例：1200" /><span class="unit">円</span></span></label>
-              <div class="status" id="wage-status" aria-live="polite"><strong>時給を入力してください</strong><p>勤務時間はシフトカレンダーから集計します。</p></div>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="page-panel" id="page-my" aria-label="カレンダー" hidden>
-        <div class="page-heading my-heading">
-          <p>個人予定と家計簿</p>
-        </div>
-        <nav class="segmented my-view-tabs" role="tablist" aria-label="マイの表示">
-          <button id="my-tab-calendar" type="button" role="tab" aria-selected="true" aria-controls="page-calendar" data-my-view="calendar">予定</button>
-          <button id="my-tab-budget" type="button" role="tab" aria-selected="false" aria-controls="page-budget" data-my-view="budget">家計簿</button>
-        </nav>
-
-      <section class="my-panel" id="page-budget" role="tabpanel" aria-labelledby="my-tab-budget" hidden>
-        <div class="page-heading">
-          <h2 id="budget-page-title">家計簿</h2>
-          <p>支出と予算の状況</p>
-        </div>
-        <div class="metrics" aria-label="今月の家計簿集計">
-          <article class="metric"><div class="metric-label">今月あと使える金額</div><p class="metric-value"><span id="remaining">—</span><small>円</small></p></article>
-          <article class="metric"><div class="metric-label">1日平均使用可能額</div><p class="metric-value"><span id="daily">—</span><small>円</small></p></article>
-          <article class="metric"><div class="metric-label" id="expense-month-total-label">今月の支出合計</div><p class="metric-value"><span id="expense-month-total">¥0</span></p></article>
-        </div>
-        <div class="layout-two">
-          <article class="card calendar-card">
-            <div class="month-bar">
-              <h3 class="month-title" id="expense-month-label"></h3>
-              <nav class="month-nav" aria-label="支出カレンダーの月移動">
-                <button class="icon-button" id="expense-previous" type="button" aria-label="前月">‹</button>
-                <button class="icon-button" id="expense-next" type="button" aria-label="次月">›</button>
-              </nav>
-            </div>
-            <div class="calendar" id="expense-calendar" data-month-label="expense-month-label" role="grid" aria-label="月間支出カレンダー">
-              <div class="weekday" role="columnheader">日</div><div class="weekday" role="columnheader">月</div><div class="weekday" role="columnheader">火</div><div class="weekday" role="columnheader">水</div><div class="weekday" role="columnheader">木</div><div class="weekday" role="columnheader">金</div><div class="weekday" role="columnheader">土</div>
-            </div>
-            <p class="calendar-note">日付を選ぶと、その日の支出を確認できます。</p>
-          </article>
-
-          <div class="side-stack">
-            <article class="card">
-              <h3 class="selected-date-title" id="expense-date"></h3>
-              <ul class="expense-list" id="expense-list"></ul>
-              <div class="daily-total"><span>本日の合計</span><strong id="expense-day-total">¥0</strong></div>
-            </article>
-
-            <article class="card">
-              <h3 id="expense-form-title">支出を追加</h3>
-              <form id="expense-form" class="form-stack">
-                <label>金額<span class="input-with-unit"><input id="expense-amount" type="number" min="1" step="1" inputmode="numeric" placeholder="例：850" required /><span class="unit">円</span></span></label>
-                <label>カテゴリ<select id="expense-category" required>
-                  <option>食費</option><option>交通</option><option>娯楽</option><option>買い物</option><option>交際費</option><option>固定費</option><option>その他</option>
-                </select></label>
-                <label>内容・メモ<input id="expense-note" type="text" maxlength="80" placeholder="例：昼ごはん" /></label>
-                <div class="actions">
-                  <button class="action-button primary" id="save-expense" type="submit">支出を追加</button>
-                  <button class="action-button" id="cancel-expense-edit" type="button" hidden>編集をやめる</button>
-                </div>
-              </form>
-            </article>
-
-            <article class="card">
-              <h3>家計簿の設定</h3>
-              <form id="budget-form" class="form-stack">
-                <label>今月の収入見込み
-                  <span class="segmented" role="group" aria-label="収入見込みの入力方法">
-                    <button id="auto-income" type="button" aria-pressed="true">シフトから自動</button>
-                    <button id="manual-income" type="button" aria-pressed="false">手動入力</button>
-                  </span>
-                  <span class="input-with-unit"><input id="income" type="number" min="0" step="1" inputmode="numeric" placeholder="例：80000" /><span class="unit">円</span></span>
-                </label>
-                <label>固定費<span class="input-with-unit"><input id="fixed" type="number" min="0" inputmode="numeric" placeholder="例：20000" required /><span class="unit">円</span></span></label>
-                <label>目標貯金額<span class="input-with-unit"><input id="saving" type="number" min="0" inputmode="numeric" placeholder="例：10000" required /><span class="unit">円</span></span></label>
-              </form>
-              <div class="status" id="budget-status" aria-live="polite"><strong>予算を計算できます</strong><p>収入見込み・固定費・目標貯金額を入力してください。</p></div>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section class="my-panel" id="page-calendar" role="tabpanel" aria-labelledby="my-tab-calendar" hidden>
+      <section class="page-panel" id="page-my" aria-labelledby="agenda-page-title" hidden>
+      <section class="my-panel" id="page-calendar" aria-labelledby="agenda-page-title">
         <div class="card personal-sync-consent" id="personal-sync-consent" hidden>
           <h2>新しいカレンダー同期を始めますか？</h2>
           <p>同意すると、これから登録する個人予定がこのアカウントの新しいカレンダーに保存され、PC・スマホ間で同期されます。</p>
@@ -310,7 +177,7 @@
           <div id="group-list" class="group-list" aria-label="参加中のグループ"></div>
           <article class="card" id="group-card">
             <h3>グループを追加</h3>
-            <p class="card-description">グループを作成するか、招待コードで別のグループに参加できます。個人予定の詳細は本人が同意した同期APIにのみ送信し、グループ同期APIには含めません。同意後もグループには時間帯と「予定あり」のみが表示されます。シフトは時間帯のみ共有され、勤務先・給与情報や家計簿は他のメンバーに送信されません。旧予定は自動移行されません。</p>
+            <p class="card-description">グループを作成するか、招待コードで参加できます。個人予定の詳細は本人が同意した同期APIにのみ送信し、グループ同期APIには含めません。共有画面には時間帯と「予定あり」のみ表示し、勤務先・給与・家計簿は共有しません。旧予定は自動移行されません。</p>
             <div class="card-stack">
               <form id="create-group-form" class="form-stack">
                 <label>グループ名<input id="group-name" type="text" maxlength="60" placeholder="例：家族" required /></label>
@@ -340,29 +207,8 @@
             <button class="group-back-link" id="back-to-groups" type="button">← グループ一覧</button>
             <div class="group-calendar-heading"><span id="group-calendar-icon" class="group-icon-placeholder" aria-hidden="true">🌿</span><div><h3 class="group-calendar-name" id="group-calendar-name"></h3><p>共有カレンダー</p></div></div>
           </header>
-          <section class="group-action-block" aria-labelledby="group-actions-title">
-            <div><h3 id="group-actions-title" class="group-block-title">アクション</h3><p>遊びたい日から、共有予定へ。</p></div>
-            <div class="group-calendar-actions">
-              <button class="action-button primary" id="add-group-wish" type="button">＋ 遊びたい日を追加</button>
-              <button class="action-button" id="refresh-group-events" type="button">最新情報を取得</button>
-            </div>
-          </section>
           <p class="status safe" id="group-calendar-status" hidden role="status"></p>
           <p class="status error" id="group-calendar-error" hidden aria-live="polite"></p>
-          <section class="group-info-block" aria-labelledby="group-info-title">
-          <h3 class="group-block-title" id="group-info-title">みんなの情報</h3>
-          <div class="group-info-grid">
-          <article class="card group-status-section" id="group-status-section" hidden>
-            <h3>みんなの今やりたいこと</h3>
-            <div class="group-status-list" id="group-status-list"></div>
-          </article>
-          <article class="card group-wishes-section">
-            <h3>みんなの遊びたい日</h3>
-            <div class="group-wishes-list" id="group-wishes-list" aria-live="polite" tabindex="0" role="region" aria-label="みんなの遊びたい日の一覧"></div>
-            <p class="status error" id="group-wishes-error" hidden role="alert"></p>
-          </article>
-          </div>
-          </section>
           <section class="group-calendar-block" aria-labelledby="group-calendar-title">
           <div class="group-calendar-section-heading"><h3 class="group-block-title" id="group-calendar-title">共有カレンダー</h3><p>日付を選ぶと詳細を表示</p></div>
           <div class="group-calendar-legend" aria-label="予定の種類"><span class="legend-event">正式予定</span><span class="legend-tentative">仮予定</span><span class="legend-shift">シフト</span><span class="legend-busy">予定あり</span></div>
@@ -392,6 +238,27 @@
                 <div class="expense-list" id="group-shared-events"></div>
               </article>
             </div>
+          </div>
+          </section>
+          <section class="group-action-block" aria-labelledby="group-actions-title">
+            <div><h3 id="group-actions-title" class="group-block-title">アクション</h3><p>遊びたい日から、共有予定へ。</p></div>
+            <div class="group-calendar-actions">
+              <button class="action-button primary" id="add-group-wish" type="button">＋ 遊びたい日を追加</button>
+              <button class="action-button" id="refresh-group-events" type="button">最新情報を取得</button>
+            </div>
+          </section>
+          <section class="group-info-block" aria-labelledby="group-info-title">
+          <h3 class="group-block-title" id="group-info-title">みんなの情報</h3>
+          <div class="group-info-grid">
+          <article class="card group-status-section" id="group-status-section" hidden>
+            <h3>みんなの今やりたいこと</h3>
+            <div class="group-status-list" id="group-status-list"></div>
+          </article>
+          <article class="card group-wishes-section">
+            <h3>みんなの遊びたい日</h3>
+            <div class="group-wishes-list" id="group-wishes-list" aria-live="polite" tabindex="0" role="region" aria-label="みんなの遊びたい日の一覧"></div>
+            <p class="status error" id="group-wishes-error" hidden role="alert"></p>
+          </article>
           </div>
           </section>
         </div>
@@ -568,6 +435,138 @@
         </dialog>
       </section>
 
+      <section class="page-panel" id="page-money" aria-labelledby="money-page-title" hidden>
+        <div class="page-heading"><h2 id="money-page-title">お金</h2><p>家計簿とシフト・給与</p></div>
+        <nav class="segmented money-view-tabs" role="tablist" aria-label="お金の表示">
+          <button id="money-tab-budget" type="button" role="tab" aria-selected="true" aria-controls="page-budget" data-money-view="budget">家計簿</button>
+          <button id="money-tab-shift" type="button" role="tab" aria-selected="false" aria-controls="page-shift" data-money-view="shift">シフト・給与</button>
+        </nav>
+      <section class="money-panel" id="page-budget" role="tabpanel" aria-labelledby="money-tab-budget">
+        <div class="page-heading">
+          <h2 id="budget-page-title">家計簿</h2>
+          <p>支出と予算の状況</p>
+        </div>
+        <div class="metrics" aria-label="今月の家計簿集計">
+          <article class="metric"><div class="metric-label">今月あと使える金額</div><p class="metric-value"><span id="remaining">—</span><small>円</small></p></article>
+          <article class="metric"><div class="metric-label">1日平均使用可能額</div><p class="metric-value"><span id="daily">—</span><small>円</small></p></article>
+          <article class="metric"><div class="metric-label" id="expense-month-total-label">今月の支出合計</div><p class="metric-value"><span id="expense-month-total">¥0</span></p></article>
+        </div>
+        <div class="layout-two">
+          <article class="card calendar-card">
+            <div class="month-bar">
+              <h3 class="month-title" id="expense-month-label"></h3>
+              <nav class="month-nav" aria-label="支出カレンダーの月移動">
+                <button class="icon-button" id="expense-previous" type="button" aria-label="前月">‹</button>
+                <button class="icon-button" id="expense-next" type="button" aria-label="次月">›</button>
+              </nav>
+            </div>
+            <div class="calendar" id="expense-calendar" data-month-label="expense-month-label" role="grid" aria-label="月間支出カレンダー">
+              <div class="weekday" role="columnheader">日</div><div class="weekday" role="columnheader">月</div><div class="weekday" role="columnheader">火</div><div class="weekday" role="columnheader">水</div><div class="weekday" role="columnheader">木</div><div class="weekday" role="columnheader">金</div><div class="weekday" role="columnheader">土</div>
+            </div>
+            <p class="calendar-note">日付を選ぶと、その日の支出を確認できます。</p>
+          </article>
+
+          <div class="side-stack">
+            <article class="card">
+              <h3 class="selected-date-title" id="expense-date"></h3>
+              <ul class="expense-list" id="expense-list"></ul>
+              <div class="daily-total"><span>本日の合計</span><strong id="expense-day-total">¥0</strong></div>
+            </article>
+
+            <article class="card">
+              <h3 id="expense-form-title">支出を追加</h3>
+              <form id="expense-form" class="form-stack">
+                <label>金額<span class="input-with-unit"><input id="expense-amount" type="number" min="1" step="1" inputmode="numeric" placeholder="例：850" required /><span class="unit">円</span></span></label>
+                <label>カテゴリ<select id="expense-category" required>
+                  <option>食費</option><option>交通</option><option>娯楽</option><option>買い物</option><option>交際費</option><option>固定費</option><option>その他</option>
+                </select></label>
+                <label>内容・メモ<input id="expense-note" type="text" maxlength="80" placeholder="例：昼ごはん" /></label>
+                <div class="actions">
+                  <button class="action-button primary" id="save-expense" type="submit">支出を追加</button>
+                  <button class="action-button" id="cancel-expense-edit" type="button" hidden>編集をやめる</button>
+                </div>
+              </form>
+            </article>
+
+            <article class="card">
+              <h3>家計簿の設定</h3>
+              <form id="budget-form" class="form-stack">
+                <label>今月の収入見込み
+                  <span class="segmented" role="group" aria-label="収入見込みの入力方法">
+                    <button id="auto-income" type="button" aria-pressed="true">シフトから自動</button>
+                    <button id="manual-income" type="button" aria-pressed="false">手動入力</button>
+                  </span>
+                  <span class="input-with-unit"><input id="income" type="number" min="0" step="1" inputmode="numeric" placeholder="例：80000" /><span class="unit">円</span></span>
+                </label>
+                <label>固定費<span class="input-with-unit"><input id="fixed" type="number" min="0" inputmode="numeric" placeholder="例：20000" required /><span class="unit">円</span></span></label>
+                <label>目標貯金額<span class="input-with-unit"><input id="saving" type="number" min="0" inputmode="numeric" placeholder="例：10000" required /><span class="unit">円</span></span></label>
+              </form>
+              <div class="status" id="budget-status" aria-live="polite"><strong>予算を計算できます</strong><p>収入見込み・固定費・目標貯金額を入力してください。</p></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="money-panel" id="page-shift" role="tabpanel" aria-labelledby="money-tab-shift" hidden>
+        <div class="page-heading">
+          <h2 id="shift-page-title">シフト・給与</h2>
+          <p>勤務予定と予想給料</p>
+        </div>
+        <div class="layout-two">
+          <article class="card calendar-card">
+            <div class="month-bar">
+              <h3 class="month-title" id="shift-month-label"></h3>
+              <nav class="month-nav" aria-label="シフトの月移動">
+                <button class="icon-button" id="shift-previous" type="button" aria-label="前月">‹</button>
+                <button class="icon-button" id="shift-next" type="button" aria-label="次月">›</button>
+              </nav>
+            </div>
+            <div class="calendar" id="shift-calendar" data-month-label="shift-month-label" role="grid" aria-label="月間シフトカレンダー">
+              <div class="weekday" role="columnheader">日</div><div class="weekday" role="columnheader">月</div><div class="weekday" role="columnheader">火</div><div class="weekday" role="columnheader">水</div><div class="weekday" role="columnheader">木</div><div class="weekday" role="columnheader">金</div><div class="weekday" role="columnheader">土</div>
+            </div>
+            <p class="calendar-note">日付を選択してシフトを登録・編集できます。</p>
+          </article>
+
+          <div class="side-stack">
+            <article class="card">
+              <h3>今月の勤務と給料</h3>
+              <dl class="summary-list">
+                <div class="summary-row"><dt>合計実働時間</dt><dd id="shift-hours">0時間</dd></div>
+                <div class="summary-row emphasis"><dt>月の予想給料</dt><dd id="shift-month-wage">—</dd></div>
+                <div class="summary-row"><dt id="shift-day-label">選択日の給料</dt><dd id="shift-day-wage">—</dd></div>
+              </dl>
+            </article>
+
+            <article class="card">
+              <h3>シフト登録</h3>
+              <p class="card-description" id="shift-date"></p>
+              <form id="shift-form">
+                <div class="form-stack">
+                  <div class="time-pair">
+                    <label>出勤時間<span class="time-input-row"><input id="shift-start" type="text" inputmode="numeric" autocomplete="off" placeholder="17:30" pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]" maxlength="5" title="HH:MM形式で入力（例：17:30）" required /><input id="shift-start-picker" type="time" aria-label="出勤時間を選択" /></span></label>
+                    <label>退勤時間<span class="time-input-row"><input id="shift-end" type="text" inputmode="numeric" autocomplete="off" placeholder="22:00" pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]" maxlength="5" title="HH:MM形式で入力（例：22:00）" required /><input id="shift-end-picker" type="time" aria-label="退勤時間を選択" /></span></label>
+                  </div>
+                  <label>休憩時間<span class="input-with-unit"><input id="shift-break" type="number" min="0" step="1" inputmode="numeric" value="0" required /><span class="unit">分</span></span></label>
+                </div>
+                <p class="status error" id="shift-error" hidden aria-live="polite"></p>
+                <div class="actions">
+                  <button class="action-button primary" id="save-shift" type="submit">シフトを登録</button>
+                  <button class="action-button danger" id="delete-shift" type="button" hidden>削除</button>
+                </div>
+              </form>
+            </article>
+
+            <article class="card">
+              <h3>時給</h3>
+              <p class="card-description">時給を設定すると月の予想給料を計算します。</p>
+              <label>時給<span class="input-with-unit"><input id="hourly" type="number" min="0" step="1" inputmode="numeric" placeholder="例：1200" /><span class="unit">円</span></span></label>
+              <div class="status" id="wage-status" aria-live="polite"><strong>時給を入力してください</strong><p>勤務時間はシフトカレンダーから集計します。</p></div>
+            </article>
+          </div>
+        </div>
+      </section>
+      </section>
+
       <section class="page-panel" id="page-profile" aria-labelledby="profile-page-title" hidden>
         <div class="page-heading"><h2 id="profile-page-title">プロフィール</h2><p>アカウントと通知の設定</p></div>
         <div class="profile-layout">
@@ -620,24 +619,14 @@
     </main>
 
     <nav class="page-nav" aria-label="メインナビゲーション" hidden>
-      <button class="nav-button" type="button" data-page="shift" aria-current="page">
-        <span class="nav-symbol" aria-hidden="true">
-          <svg viewBox="0 0 32 32" focusable="false">
-            <rect class="nav-icon-fill" x="4" y="8" width="20" height="18" rx="4" />
-            <path d="M10 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M4 14h17M11 14v3h5v-3" />
-            <circle class="nav-icon-face" cx="23" cy="23" r="7" />
-            <path d="M23 19v4l2.5 1.5" />
-          </svg>
-        </span><span>シフト</span>
-      </button>
-      <button class="nav-button" type="button" data-page="my">
+      <button class="nav-button" type="button" data-page="my" aria-current="page">
         <span class="nav-symbol" aria-hidden="true">
           <svg viewBox="0 0 32 32" focusable="false">
             <rect class="nav-icon-fill" x="5" y="6" width="22" height="23" rx="4" />
             <path d="M5 13h22M11 3v6M21 3v6M10 18h2M20 18h2M10 24h2" />
             <path d="m18 23 2 2 4-4" />
           </svg>
-        </span><span>カレンダー</span>
+        </span><span>予定</span>
       </button>
       <button class="nav-button" type="button" data-page="group">
         <span class="nav-symbol" aria-hidden="true">
@@ -648,6 +637,16 @@
             <path class="nav-icon-fill" d="M9 27v-3a7 7 0 0 1 14 0v3Z" />
           </svg>
         </span><span>共有</span>
+      </button>
+      <button class="nav-button" type="button" data-page="money">
+        <span class="nav-symbol" aria-hidden="true">
+          <svg viewBox="0 0 32 32" focusable="false">
+            <rect class="nav-icon-fill" x="4" y="8" width="20" height="18" rx="4" />
+            <path d="M10 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M4 14h17M11 14v3h5v-3" />
+            <circle class="nav-icon-face" cx="23" cy="23" r="7" />
+            <path d="M23 19v4l2.5 1.5" />
+          </svg>
+        </span><span>お金</span>
       </button>
     </nav>
   </body>

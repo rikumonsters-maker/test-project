@@ -2,6 +2,7 @@ import { initShift } from "./shift.js";
 import { initBudget } from "./budget.js";
 import { initCalendar } from "./calendar.js";
 import { createPersonalSync } from "./personal-sync.mjs";
+import { activateMainPage, activateMoneyView } from "./navigation.mjs";
 import { parsePersonalBackup } from "./backup-import.mjs";
 import { initShared } from "./shared.js";
 import { initProfile } from "./profile.js";
@@ -243,31 +244,19 @@ app.scheduleBudget = budget.schedule;
 let profile = null;
 let notificationCenter = null;
 
-let activeMyView = "calendar";
+let activeMoneyView = "budget";
 
-function setMyView(viewName) {
-  activeMyView = viewName;
-  document.querySelectorAll("[data-my-view]").forEach((button) => {
-    const isActive = button.dataset.myView === viewName;
-    button.setAttribute("aria-selected", String(isActive));
-  });
-  $("page-calendar").hidden = viewName !== "calendar";
-  $("page-budget").hidden = viewName !== "budget";
-  if (viewName === "calendar") { calendar.render(); void personalSync?.sync(); }
-  if (viewName === "budget") budget.refresh();
+function setMoneyView(viewName) {
+  if (!activateMoneyView(document,viewName,{onBudget:()=>budget.refresh(),onShift:()=>{shift.renderCalendar();shift.renderSummary();}})) return;
+  activeMoneyView = viewName;
 }
 
 function setActivePage(pageName) {
-  document.querySelectorAll(".page-panel").forEach((panel) => {
-    panel.hidden = panel.id !== `page-${pageName}`;
-  });
-  document.querySelectorAll(".nav-button").forEach((button) => {
-    if (button.dataset.page === pageName) button.setAttribute("aria-current", "page");
-    else button.removeAttribute("aria-current");
-  });
-  if (pageName === "my") setMyView(activeMyView);
-  if (pageName === "group") shared.showHome();
-  if (pageName === "profile") void profile?.refresh();
+  if (!activateMainPage(document,pageName,{
+    onPlan:()=>{calendar.render();void personalSync?.sync();},
+    onMoney:()=>setMoneyView(activeMoneyView),
+    onProfile:()=>void profile?.refresh(),
+  })) return;
   window.scrollTo({ top:0, behavior:"instant" });
 }
 
@@ -387,8 +376,15 @@ async function startApp(user) {
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", () => setActivePage(button.dataset.page));
   });
-  document.querySelectorAll("[data-my-view]").forEach((button) => {
-    button.addEventListener("click", () => setMyView(button.dataset.myView));
+  document.querySelectorAll("[data-money-view]").forEach((button) => {
+    button.addEventListener("click", () => setMoneyView(button.dataset.moneyView));
+    button.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft","ArrowRight","Home","End"].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === "Home" ? "budget" : event.key === "End" ? "shift" : activeMoneyView === "budget" ? "shift" : "budget";
+      setMoneyView(next);
+      $(next === "budget" ? "money-tab-budget" : "money-tab-shift").focus();
+    });
   });
   shift.init();
   budget.init();
@@ -424,7 +420,7 @@ async function startApp(user) {
   $("legacy-import").hidden = !canTransferLegacy || !localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(dismissKey) === "1";
   $("import-legacy").addEventListener("click", () => void importLegacy());
   $("dismiss-legacy").addEventListener("click", () => { localStorage.setItem(dismissKey, "1"); $("legacy-import").hidden = true; });
-  if (!syncState.active && localStorage.getItem("daysync-personal-sync-deferred-" + user.id) !== "1") setActivePage("my");
+  setActivePage("my");
   const inviteFromUrl = new URLSearchParams(window.location.search).get("invite");
   const notificationParams = new URLSearchParams(window.location.search);
   const reminderKind = notificationParams.get("reminder");
@@ -444,7 +440,6 @@ async function startApp(user) {
     view.agendaMonth = new Date(Number(reminderDate.slice(0, 4)), Number(reminderDate.slice(5, 7)) - 1, 1);
     view.reminderEventId = reminderEventId;
     setActivePage("my");
-    setMyView("calendar");
     calendar.render();
     const cleanUrl = new URL(window.location.href);
     for (const key of ["reminder", "date", "eventId"]) cleanUrl.searchParams.delete(key);
