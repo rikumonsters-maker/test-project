@@ -22,6 +22,7 @@ describe('personal event sync opt-in and privacy',()=>{
   it('keeps the RC migration set on 0001-0010 plus 0012, with 0011 excluded',()=>{
     const names=Object.keys(migrations).map(file=>file.split('/').at(-1));
     expect(names).toContain('0012_personal_event_sync.sql');expect(names).not.toContain('0011_password_recovery.sql');
+    expect(names).toContain('0017_group_scheduling.sql');
   });
 
   it('pre-consent status and local initialization make no activation/import calls or data changes',async()=>{

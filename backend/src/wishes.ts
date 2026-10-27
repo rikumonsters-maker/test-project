@@ -41,22 +41,28 @@ async function isMember(db: D1Database, groupId: string, userId: string): Promis
 }
 
 async function list(db: D1Database, groupId: string, user: SessionUser): Promise<Response> {
-	const rows = await db.prepare(`SELECT w.id, w.group_id, w.user_id, w.wish_date, w.start_time, w.end_time,
+	const rows = await db.prepare(`SELECT w.id, w.group_id, w.user_id, w.manager_member_id, w.management_state,
+		manager.user_id AS manager_user_id, w.wish_date, w.start_time, w.end_time,
 		w.is_all_day, w.message, w.created_at, w.updated_at, u.display_name, u.profile_icon,
 		e.id AS event_id, e.status AS event_status,
+		(SELECT id FROM group_schedules s WHERE s.source_wish_id=w.id) AS schedule_id,
 		(SELECT COUNT(*) FROM group_availability_reactions r WHERE r.wish_id = w.id AND r.revoked_at IS NULL) AS reaction_count,
 		EXISTS(SELECT 1 FROM group_availability_reactions r WHERE r.wish_id = w.id AND r.revoked_at IS NULL AND r.user_id = ?2) AS reacted
 		FROM group_availability_wishes w JOIN users u ON u.id = w.user_id
-		LEFT JOIN shared_events e ON e.wish_id = w.id
-		WHERE w.group_id = ?1 ORDER BY w.wish_date, w.created_at, w.id`)
+		LEFT JOIN group_members manager ON manager.id=w.manager_member_id
+		LEFT JOIN shared_events e ON e.wish_id = w.id AND e.cancelled_at IS NULL
+		WHERE w.group_id = ?1 AND w.management_state!='closed' ORDER BY w.wish_date, w.created_at, w.id`)
 		.bind(groupId, user.id).all<{
-			id:string; group_id:string; user_id:string; wish_date:string; start_time:string; end_time:string;
+			id:string; group_id:string; user_id:string; manager_member_id:string|null; manager_user_id:string|null;
+			management_state:string; wish_date:string; start_time:string; end_time:string;
 			is_all_day:number; message:string; created_at:string; updated_at:string; display_name:string;
 			profile_icon:string; reaction_count:number; reacted:number; event_id:string | null; event_status:string | null;
+			schedule_id:string|null;
 		}>();
 	const interested = await db.prepare(`SELECT r.wish_id, r.user_id, u.display_name, u.profile_icon
 		FROM group_availability_reactions r JOIN group_availability_wishes w ON w.id = r.wish_id
-		JOIN users u ON u.id = r.user_id WHERE w.group_id = ?1 AND r.revoked_at IS NULL ORDER BY r.created_at, r.user_id`)
+		JOIN users u ON u.id = r.user_id JOIN active_group_members m ON m.group_id=w.group_id AND m.user_id=r.user_id
+		WHERE w.group_id = ?1 AND r.revoked_at IS NULL ORDER BY r.created_at, r.user_id`)
 		.bind(groupId).all<{ wish_id:string; user_id:string; display_name:string; profile_icon:string }>();
 	const byWish = new Map<string, { userId:string; displayName:string; profileIcon:string }[]>();
 	for (const person of interested.results || []) {
@@ -67,10 +73,11 @@ async function list(db: D1Database, groupId: string, user: SessionUser): Promise
 	return json({ wishes:(rows.results || []).map((row) => ({
 		id:row.id, groupId:row.group_id, userId:row.user_id, wishDate:row.wish_date,
 		start:row.start_time, end:row.end_time, isAllDay:Boolean(row.is_all_day), message:row.message,
-		ownerName:row.display_name, ownerIcon:row.profile_icon || '🌿', isOwn:row.user_id === user.id,
+		ownerName:row.display_name, ownerIcon:row.profile_icon || '🌿', isOwn:row.manager_user_id === user.id,
+		managerUserId:row.manager_user_id, managementState:row.management_state,scheduleId:row.schedule_id,
 		reactionCount:Number(row.reaction_count), reacted:Boolean(row.reacted),
-		interestedUsers:[{ userId:row.user_id, displayName:row.display_name, profileIcon:row.profile_icon || '🌿' }, ...(byWish.get(row.id) || [])],
-		participantCount:Number(row.reaction_count) + 1, eventId:row.event_id, eventStatus:row.event_status,
+		interestedUsers:[...(row.manager_user_id===row.user_id ? [{ userId:row.user_id, displayName:row.display_name, profileIcon:row.profile_icon || '🌿' }] : []), ...(byWish.get(row.id) || [])],
+		participantCount:Number(row.reaction_count) + Number(row.manager_user_id===row.user_id), eventId:row.event_id, eventStatus:row.event_status,
 		participantsInsufficient:row.event_status === 'tentative' && !Number(row.reaction_count),
 		createdAt:row.created_at, updatedAt:row.updated_at,
 	})) });
@@ -112,38 +119,57 @@ async function update(db: D1Database, groupId: string, body: Body, user: Session
 	const id = text(body.wishId, 64);
 	const input = wishInput(body);
 	if (!id || !input) return json({ error:'遊びたい日の入力内容を確認してください' }, 400);
-	const result = await db.prepare(`UPDATE group_availability_wishes SET wish_date = ?1, start_time = ?2,
-		end_time = ?3, is_all_day = ?4, message = ?5, updated_at = ?6
-		WHERE id = ?7 AND group_id = ?8 AND user_id = ?9`)
+	const results = await db.batch([db.prepare(`UPDATE group_availability_wishes SET wish_date = ?1, start_time = ?2,
+		end_time = ?3, is_all_day = ?4, message = ?5, updated_at = ?6,
+		management_version=management_version+1
+		WHERE id = ?7 AND group_id = ?8 AND manager_member_id=(SELECT id FROM active_group_members
+		WHERE group_id=?8 AND user_id=?9) AND management_state='open'`)
 		.bind(input.wishDate, input.start, input.end, Number(input.isAllDay), input.message,
-			new Date().toISOString(), id, groupId, user.id).run();
-	if (!result.meta.changes) return json({ error:'この遊びたい日を編集する権限がありません' }, 403);
-	await db.prepare(`UPDATE shared_events SET title = ?1, event_date = ?2, starts_at = ?3, ends_at = ?4,
-		all_day = ?5, updated_at = ?6 WHERE wish_id = ?7 AND status = 'tentative'`)
-		.bind(input.message || 'みんなで遊ぶ', input.wishDate, input.start, input.end, Number(input.isAllDay), new Date().toISOString(), id).run();
+			new Date().toISOString(), id, groupId, user.id),
+		db.prepare(`UPDATE shared_events SET title = ?1, event_date = ?2, starts_at = ?3, ends_at = ?4,
+		all_day = ?5, updated_at = ?6,management_version=management_version+1
+		WHERE wish_id = ?7 AND status = 'tentative' AND cancelled_at IS NULL AND EXISTS(
+		 SELECT 1 FROM group_availability_wishes w JOIN active_group_members m ON m.id=w.manager_member_id
+		 WHERE w.id=?7 AND w.group_id=?8 AND w.management_state='open' AND m.user_id=?9)`)
+		.bind(input.message || 'みんなで遊ぶ', input.wishDate, input.start, input.end,
+			Number(input.isAllDay), new Date().toISOString(), id,groupId,user.id),
+	]);
+	if (!results[0].meta.changes) return json({ error:'この遊びたい日を編集する権限がありません' }, 403);
 	return json({ ok:true });
 }
 
 async function remove(db: D1Database, groupId: string, body: Body, user: SessionUser): Promise<Response> {
 	const id = text(body.wishId, 64);
 	if (!id) return json({ error:'遊びたい日を指定してください' }, 400);
-	const owned = await db.prepare('SELECT 1 FROM group_availability_wishes WHERE id = ?1 AND group_id = ?2 AND user_id = ?3')
+	const owned = await db.prepare(`SELECT 1 FROM group_availability_wishes WHERE id = ?1 AND group_id = ?2
+		AND manager_member_id=(SELECT id FROM active_group_members WHERE group_id=?2 AND user_id=?3)
+		AND management_state='open'`)
 		.bind(id, groupId, user.id).first();
 	if (!owned) return json({ error:'この遊びたい日を削除する権限がありません' }, 403);
-	await db.prepare("DELETE FROM shared_events WHERE wish_id = ?1 AND status = 'tentative'").bind(id).run();
-	const result = await db.prepare('DELETE FROM group_availability_wishes WHERE id = ?1 AND group_id = ?2 AND user_id = ?3')
-		.bind(id, groupId, user.id).run();
-	return result.meta.changes ? json({ ok:true }) : json({ error:'この遊びたい日を削除する権限がありません' }, 403);
+	const now=new Date().toISOString();
+	const result = await db.batch([
+		db.prepare(`UPDATE group_availability_wishes SET management_state='closed',management_version=management_version+1,
+			updated_at=?4 WHERE id=?1 AND group_id=?2 AND manager_member_id=(SELECT id FROM active_group_members
+			WHERE group_id=?2 AND user_id=?3) AND management_state='open'`).bind(id,groupId,user.id,now),
+		db.prepare(`UPDATE shared_events SET cancelled_at=?2,management_version=management_version+1
+			WHERE wish_id=?1 AND status='tentative' AND cancelled_at IS NULL
+			AND EXISTS(SELECT 1 FROM group_availability_wishes w JOIN active_group_members m
+			  ON m.id=w.manager_member_id WHERE w.id=?1 AND w.management_state='closed' AND m.user_id=?3)`)
+			.bind(id,now,user.id),
+	]);
+	return result[0].meta.changes ? json({ ok:true }) : json({ error:'この遊びたい日を削除する権限がありません' }, 403);
 }
 
 async function reaction(env: PushEnv, ctx: ExecutionContext, groupId: string, body: Body, user: SessionUser, removeReaction: boolean): Promise<Response> {
 	const db = env.DB;
 	const id = text(body.wishId, 64);
 	if (!id) return json({ error:'遊びたい日を指定してください' }, 400);
-	const wish = await db.prepare('SELECT user_id FROM group_availability_wishes WHERE id = ?1 AND group_id = ?2')
-		.bind(id, groupId).first<{ user_id:string }>();
+	const wish = await db.prepare(`SELECT w.user_id,m.user_id AS manager_user_id FROM group_availability_wishes w
+		JOIN active_group_members m ON m.id=w.manager_member_id
+		WHERE w.id=?1 AND w.group_id=?2 AND w.management_state='open'`)
+		.bind(id, groupId).first<{ user_id:string;manager_user_id:string }>();
 	if (!wish) return json({ error:'遊びたい日が見つかりません' }, 404);
-	if (wish.user_id === user.id) return json({ error:'自分の遊びたい日には反応できません' }, 400);
+	if (wish.manager_user_id === user.id) return json({ error:'自分が管理する遊びたい日には反応できません' }, 400);
 	if (removeReaction) {
 		await db.prepare('DELETE FROM group_availability_reactions WHERE wish_id = ?1 AND user_id = ?2').bind(id, user.id).run();
 	} else {
@@ -156,14 +182,14 @@ async function reaction(env: PushEnv, ctx: ExecutionContext, groupId: string, bo
 				(id, group_id, created_by_member_id, title, event_date, starts_at, ends_at, all_day, note, created_at, updated_at, status, wish_id)
 				SELECT ?1, w.group_id, m.id, COALESCE(NULLIF(w.message, ''), 'みんなで遊ぶ'), w.wish_date,
 				w.start_time, w.end_time, w.is_all_day, '', ?2, ?2, 'tentative', w.id
-				FROM group_availability_wishes w JOIN active_group_members m ON m.group_id = w.group_id AND m.user_id = w.user_id
-				WHERE w.id = ?3 AND w.group_id = ?4`)
+				FROM group_availability_wishes w JOIN active_group_members m ON m.id=w.manager_member_id
+				WHERE w.id = ?3 AND w.group_id = ?4 AND w.management_state='open'`)
 				.bind(crypto.randomUUID(), new Date().toISOString(), id, groupId).run();
 		}
 		if (inserted.meta.changes) {
-			const owner = await db.prepare(`SELECT w.user_id, w.wish_date, u.display_name FROM group_availability_wishes w
-				JOIN users u ON u.id = w.user_id WHERE w.id = ?1 AND w.group_id = ?2`)
-				.bind(id, groupId).first<{ user_id:string; wish_date:string; display_name:string }>();
+			const owner = await db.prepare(`SELECT m.user_id, w.wish_date FROM group_availability_wishes w
+				JOIN active_group_members m ON m.id=w.manager_member_id WHERE w.id = ?1 AND w.group_id = ?2`)
+				.bind(id, groupId).first<{ user_id:string; wish_date:string }>();
 			if (owner && owner.user_id !== user.id && await isMember(db, groupId, owner.user_id)) {
 				await queueWishNotice(env, ctx, () => queueGroupUserNotice(env, groupId, owner.user_id, user.id, {
 					kind:'wish_interested', body:(user.displayName || 'メンバー') + 'さんがあなたの募集に「行きたい」と伝えています',
@@ -186,26 +212,36 @@ async function confirm(db: D1Database, groupId: string, body: Body, user: Sessio
 		!Array.isArray(participantIds) || participantIds.length < 2 || participantIds.length > 100 ||
 		participantIds.some((id) => typeof id !== 'string' || id.length > 64) || new Set(participantIds).size !== participantIds.length)
 		return json({ error:'共有予定の内容と参加者を確認してください' }, 400);
-	const wish = await db.prepare(`SELECT w.user_id, e.id AS event_id, e.status FROM group_availability_wishes w
-		JOIN shared_events e ON e.wish_id = w.id WHERE w.id = ?1 AND w.group_id = ?2`)
-		.bind(wishId, groupId).first<{ user_id:string; event_id:string; status:string }>();
-	if (!wish || wish.user_id !== user.id || wish.status !== 'tentative') return json({ error:'この仮予定を確定する権限がありません' }, 403);
+	const wish = await db.prepare(`SELECT w.user_id, manager.user_id AS manager_user_id,e.id AS event_id,e.status
+		FROM group_availability_wishes w JOIN active_group_members manager ON manager.id=w.manager_member_id
+		JOIN shared_events e ON e.wish_id=w.id AND e.cancelled_at IS NULL
+		WHERE w.id=?1 AND w.group_id=?2 AND w.management_state='open'`)
+		.bind(wishId, groupId).first<{ user_id:string;manager_user_id:string; event_id:string; status:string }>();
+	if (!wish || wish.manager_user_id !== user.id || wish.status !== 'tentative') return json({ error:'この仮予定を確定する権限がありません' }, 403);
 	const reactions = await db.prepare('SELECT user_id FROM group_availability_reactions WHERE wish_id = ?1 AND revoked_at IS NULL')
 		.bind(wishId).all<{ user_id:string }>();
 	const interestedIds = new Set([user.id, ...(reactions.results || []).map((row) => row.user_id)]);
 	if (interestedIds.size < 2) return json({ error:'参加者が不足しているため確定できません' }, 409);
-	if (!participantIds.includes(user.id)) return json({ error:'作成者を参加者に含めてください' }, 400);
+	if (!participantIds.includes(user.id)) return json({ error:'現在の管理者を参加者に含めてください' }, 400);
 	if (participantIds.some((id) => !interestedIds.has(id))) return json({ error:'参加表明していないユーザーを選択できません' }, 400);
 	const members = await db.prepare(`SELECT user_id FROM active_group_members WHERE group_id = ?1 AND user_id IN (${participantIds.map(() => '?').join(',')})`)
 		.bind(groupId, ...participantIds).all<{ user_id:string }>();
 	if ((members.results || []).length !== participantIds.length) return json({ error:'参加者にグループ外のユーザーが含まれています' }, 400);
 	const now = new Date().toISOString();
-	await db.batch([
-		db.prepare(`UPDATE shared_events SET title = ?1, event_date = ?2, starts_at = ?3, ends_at = ?4,
-			all_day = ?5, status = 'confirmed', updated_at = ?6 WHERE id = ?7 AND status = 'tentative'`)
-			.bind(title, eventDate, start, end, Number(allDay), now, wish.event_id),
-		...participantIds.map((id) => db.prepare('INSERT INTO shared_event_participants (event_id, user_id) VALUES (?1, ?2)').bind(wish.event_id, id)),
+	const results=await db.batch([
+			db.prepare(`UPDATE shared_events SET title = ?1, event_date = ?2, starts_at = ?3, ends_at = ?4,
+			all_day = ?5, status = 'confirmed', updated_at = ?6,management_version=management_version+1
+			WHERE id = ?7 AND status = 'tentative' AND cancelled_at IS NULL AND EXISTS(
+			 SELECT 1 FROM group_availability_wishes w JOIN active_group_members m ON m.id=w.manager_member_id
+			 WHERE w.id=?8 AND w.group_id=?9 AND w.management_state='open' AND m.user_id=?10)`)
+			.bind(title, eventDate, start, end, Number(allDay), now, wish.event_id,wishId,groupId,user.id),
+		...participantIds.map((id) => db.prepare(`INSERT INTO shared_event_participants (event_id, user_id)
+			SELECT ?1,?2 WHERE EXISTS(SELECT 1 FROM shared_events e JOIN group_availability_wishes w ON w.id=e.wish_id
+			JOIN active_group_members m ON m.id=w.manager_member_id
+			WHERE e.id=?1 AND e.status='confirmed' AND e.cancelled_at IS NULL AND m.user_id=?3)`)
+			.bind(wish.event_id,id,user.id)),
 	]);
+	if(!results[0].meta.changes) return json({error:'仮予定の状態または管理者が変わりました'},409);
 	return json({ ok:true, eventId:wish.event_id });
 }
 

@@ -17,6 +17,9 @@ import migration13 from '../migrations/0013_push_reminders.sql?raw';
 import migration14 from '../migrations/0014_in_app_notifications.sql?raw';
 import migration14a from '../migrations/0014a_group_leave_guard.sql?raw';
 import migration15 from '../migrations/0015_group_departures.sql?raw';
+import migration16 from '../migrations/0016_common_availability_coverage.sql?raw';
+import migration17 from '../migrations/0017_group_scheduling.sql?raw';
+import migration18 from '../migrations/0018_group_closure.sql?raw';
 import { applySQL } from './migration-helper';
 import { drainPushQueue, encryptPushPayload, handlePushRequest, notifyGroup, queueGroupNotice, type PushEnv } from '../src/push';
 import { handleSharedRequest } from '../src/shared';
@@ -193,6 +196,9 @@ beforeAll(async () => {
   await applySQL(env.DB, migration14);
   await applySQL(env.DB, migration14a);
   await applySQL(env.DB, migration15);
+  await applySQL(env.DB, migration16);
+  await applySQL(env.DB, migration17);
+  await applySQL(env.DB, migration18);
 });
 
 describe('DaySync authentication', () => {
@@ -1142,7 +1148,8 @@ describe('profile and device notifications', () => {
 
       // Advance the retry time in the isolated test D1 so the scheduled handler
       // can exercise the same due-delivery path without waiting for wall-clock backoff.
-      await env.DB.prepare('UPDATE push_deliveries SET next_attempt_at=?1 WHERE group_id=?2')
+      await env.DB.prepare(`UPDATE push_deliveries SET next_attempt_at=?1,
+        delivery_guard_version=delivery_guard_version+1 WHERE group_id=?2`)
         .bind('2000-01-01T00:00:00.000Z', group.groupId).run();
       const pending:Promise<unknown>[] = [];
       const ctx = { waitUntil:(task:Promise<unknown>) => { pending.push(task); } } as unknown as ExecutionContext;

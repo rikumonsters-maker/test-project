@@ -2,8 +2,11 @@ import { canManageSharedEventSql } from './group-permissions';
 import type { SessionUser } from './auth';
 import { drainPushQueue, queueGroupNotice, type PushEnv } from './push';
 import { handleWishRequest } from './wishes';
+import { handleScheduleRequest } from './schedules';
+import { queueScheduleNotice } from './schedule-notices';
 import { sharedReminderRefreshStatements } from './reminders';
 import { notificationPath } from './notifications';
+import { candidateSlots, combineBusyDays, formatMinute, freeIntervals, loadAvailabilityDays, loadBusyDays, nextDate, rankAvailability, unconfirmedByMonth } from './availability';
 
 type SharedEnv = PushEnv;
 
@@ -128,14 +131,19 @@ async function joinGroup(env: SharedEnv, ctx: ExecutionContext, body: JsonRecord
 	const inviteCode = stringValue(body.inviteCode, 40)?.toUpperCase();
 	const memberName = stringValue(body.memberName, 40) || user.displayName;
 	if (!inviteCode || !memberName) return jsonResponse({ error: '招待コードと表示名を入力してください' }, 400);
-	const group = await db.prepare('SELECT id, name, invite_code, group_icon, group_icon_color FROM groups WHERE invite_code = ?1').bind(inviteCode)
+	const group = await db.prepare('SELECT id, name, invite_code, group_icon, group_icon_color FROM groups WHERE invite_code = ?1 AND closed_at IS NULL').bind(inviteCode)
 		.first<{ id: string; name: string; invite_code: string; group_icon:string; group_icon_color:string }>();
 	if (!group) return jsonResponse({ error: '招待コードが見つかりません' }, 404);
 	const existing = await db.prepare('SELECT id, display_name FROM active_group_members WHERE group_id = ?1 AND user_id = ?2').bind(group.id, user.id).first<{ id:string; display_name:string }>();
 	if (existing) return jsonResponse(membershipResponse(group.id, group.name, group.invite_code, existing.id, existing.display_name, group.group_icon || 'friends', group.group_icon_color || 'green'));
 	const memberId = crypto.randomUUID();
 	const memberToken = token();
-	await db.prepare('INSERT INTO group_members (id, group_id, display_name, access_token, created_at, user_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)').bind(memberId, group.id, memberName, memberToken, new Date().toISOString(), user.id).run();
+	try {
+		await db.prepare('INSERT INTO group_members (id, group_id, display_name, access_token, created_at, user_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
+			.bind(memberId, group.id, memberName, memberToken, new Date().toISOString(), user.id).run();
+	} catch {
+		return jsonResponse({error:'グループの参加状態が変わりました。招待コードを確認してください。'},409);
+	}
 	await scheduleNotice(env, ctx, group.id, user.id, 'group_joined', `「${group.name}」に${memberName}さんが参加しました`,
 		'group-joined:'+memberId);
 	return jsonResponse(membershipResponse(group.id, group.name, group.invite_code, memberId, memberName, group.group_icon || 'friends', group.group_icon_color || 'green'), 201);
@@ -180,31 +188,91 @@ async function listGroupMembers(db: D1Database, body: JsonRecord, user: SessionU
 		userId:item.user_id, profileIcon:item.profile_icon, statusMessage:item.status_message || '', statusExpiresAt:item.status_expires_at })) });
 }
 
-async function leaveGroup(db: D1Database, body: JsonRecord, user: SessionUser): Promise<Response> {
+async function leaveGroup(env:SharedEnv,ctx:ExecutionContext, body: JsonRecord, user: SessionUser): Promise<Response> {
+	const db=env.DB;
 	const member = await requireMembership(db, body, user);
 	if (!member) return jsonResponse({ error:'グループへの参加情報を確認できません' }, 401);
+	const choice = body.exitChoice === 'close' || body.exitChoice === 'transfer' ? body.exitChoice : '';
+	const successor = choice === 'transfer' && typeof body.successorUserId === 'string' ? body.successorUserId : '';
+	if (choice === 'transfer' && (!successor || successor === user.id))
+		return jsonResponse({ error:'引き継ぎ先のメンバーを選んでください' }, 400);
+	const memberCount = await db.prepare(`SELECT COUNT(*) AS count FROM active_group_members
+		WHERE group_id=?1 AND user_id IS NOT NULL`).bind(member.group_id).first<{count:number}>();
+	if (Number(memberCount?.count) <= 1)
+		return jsonResponse({ error:'最後のメンバーは現在退出できません。グループの扱いが決まるまでお待ちください。',code:'LEAVE_REQUIRES_REVIEW' },409);
+	const unrelatedTentative=await db.prepare(`SELECT 1 FROM shared_events WHERE group_id=?1 AND created_by_member_id=?2
+		AND status='tentative' AND wish_id IS NULL AND cancelled_at IS NULL LIMIT 1`)
+		.bind(member.group_id,member.member_id).first();
+	if(unrelatedTentative) return jsonResponse({error:'あなたが作成した仮予定があるため退出できません。仮予定は削除されていません。',code:'LEAVE_REQUIRES_REVIEW'},409);
+	const open = await db.prepare(`SELECT
+		(SELECT COUNT(*) FROM group_availability_wishes WHERE group_id=?1 AND manager_member_id=?2 AND management_state='open') AS wishes,
+		(SELECT COUNT(*) FROM group_schedules WHERE group_id=?1 AND manager_member_id=?2 AND state='open') AS schedules`)
+		.bind(member.group_id,member.member_id).first<{wishes:number;schedules:number}>();
+	if (!choice && (Number(open?.wishes) || Number(open?.schedules)))
+		return jsonResponse({ error:Number(open?.wishes)>0
+			? '募集があるため退出には終了か他のメンバーへの引き継ぎを選んでください。'
+			: '進行中の日程調整があります。終了か他のメンバーへの引き継ぎを選んでください。',
+			code:'LEAVE_REQUIRES_CHOICE',wishes:Number(open?.wishes),schedules:Number(open?.schedules) },409);
+	const managedPlans=choice ? await db.prepare(`SELECT id FROM group_schedules
+		WHERE group_id=?1 AND manager_member_id=?2 AND state='open'`)
+		.bind(member.group_id,member.member_id).all<{id:string}>() : null;
 	const timestamp = new Date().toISOString();
+	const nonce = crypto.randomUUID();
 	// The eligibility check and revocation run in one D1 batch transaction.
 	// In particular, two simultaneous departures cannot remove the last member.
 	const departed = 'EXISTS (SELECT 1 FROM group_members WHERE id=?3 AND group_id=?2 AND departed_user_id=?1 AND user_id IS NULL AND left_at=?4)';
-	const binds = [user.id, member.group_id, member.member_id, timestamp];
-	const results = await db.batch([
+	const binds = [user.id, member.group_id, member.member_id, timestamp, choice, successor];
+	let results: D1Result[];
+	try { results = await db.batch([
 		db.prepare(`UPDATE group_members SET departed_user_id=user_id, user_id=NULL, left_at=?4, access_token=lower(hex(randomblob(32)))
 			WHERE user_id=?1 AND group_id=?2 AND id=?3 AND left_at IS NULL
 			AND EXISTS (SELECT 1 FROM active_group_members other WHERE other.group_id=?2 AND other.id<>?3 AND other.user_id IS NOT NULL)
-			AND NOT EXISTS (SELECT 1 FROM group_availability_wishes WHERE group_id=?2 AND user_id=?1)
-			AND NOT EXISTS (SELECT 1 FROM shared_events WHERE group_id=?2 AND created_by_member_id=?3 AND status='tentative')`).bind(...binds),
+			AND NOT EXISTS (SELECT 1 FROM shared_events WHERE group_id=?2 AND created_by_member_id=?3 AND status='tentative'
+			  AND cancelled_at IS NULL AND wish_id IS NULL)
+			AND (?5 IN ('close','transfer') OR (NOT EXISTS
+			  (SELECT 1 FROM group_availability_wishes WHERE group_id=?2 AND manager_member_id=?3 AND management_state='open')
+			  AND NOT EXISTS (SELECT 1 FROM group_schedules WHERE group_id=?2 AND manager_member_id=?3 AND state='open')))
+			AND (?5!='transfer' OR EXISTS (SELECT 1 FROM active_group_members other
+			  WHERE other.group_id=?2 AND other.user_id=?6 AND other.id<>?3))`).bind(...binds),
+		db.prepare(`UPDATE group_availability_wishes SET manager_member_id=(SELECT id FROM active_group_members
+			WHERE group_id=?2 AND user_id=?6), management_version=management_version+1, updated_at=?4
+			WHERE group_id=?2 AND manager_member_id=?3 AND management_state='open' AND ?5='transfer' AND ${departed}`)
+			.bind(...binds),
+		db.prepare(`UPDATE group_schedules SET manager_member_id=(SELECT id FROM active_group_members
+			WHERE group_id=?2 AND user_id=?6), version=version+1,updated_at=?4
+			WHERE group_id=?2 AND manager_member_id=?3 AND state='open' AND ?5='transfer' AND ${departed}`)
+			.bind(...binds),
+		db.prepare(`UPDATE group_availability_wishes SET management_state='closed',management_version=management_version+1,
+			updated_at=?4 WHERE group_id=?2 AND manager_member_id=?3 AND management_state='open' AND ?5='close' AND ${departed}`)
+			.bind(...binds.slice(0,5)),
+		db.prepare(`UPDATE group_schedules SET state='cancelled',version=version+1,updated_at=?4
+			WHERE group_id=?2 AND manager_member_id=?3 AND state='open' AND ?5='close' AND ${departed}`)
+			.bind(...binds.slice(0,5)),
+		db.prepare(`UPDATE shared_events SET cancelled_at=?4,management_version=management_version+1,updated_at=?4
+			WHERE group_id=?2 AND status='tentative' AND cancelled_at IS NULL AND wish_id IN
+			(SELECT id FROM group_availability_wishes WHERE group_id=?2 AND manager_member_id=?3
+			AND management_state='closed') AND ?5='close' AND ${departed}`).bind(...binds.slice(0,5)),
 		db.prepare(`UPDATE group_availability_reactions SET revoked_at=?4 WHERE user_id=?1 AND revoked_at IS NULL
-			AND wish_id IN (SELECT id FROM group_availability_wishes WHERE group_id=?2) AND ${departed}`).bind(...binds),
+			AND wish_id IN (SELECT id FROM group_availability_wishes WHERE group_id=?2) AND ${departed}`).bind(...binds.slice(0,4)),
 		db.prepare(`UPDATE shared_event_participants SET revoked_at=?4 WHERE user_id=?1 AND revoked_at IS NULL
-			AND event_id IN (SELECT id FROM shared_events WHERE group_id=?2) AND ${departed}`).bind(...binds),
+			AND event_id IN (SELECT id FROM shared_events WHERE group_id=?2) AND ${departed}`).bind(...binds.slice(0,4)),
 		db.prepare(`UPDATE in_app_notifications SET revoked_at=?4 WHERE user_id=?1 AND group_id=?2 AND revoked_at IS NULL
-			AND ${departed}`).bind(...binds),
+			AND ${departed}`).bind(...binds.slice(0,4)),
 		db.prepare(`DELETE FROM push_deliveries WHERE scope='group' AND group_id=?2
 			AND (recipient_user_id=?1 OR subscription_id IN (SELECT id FROM push_subscriptions WHERE user_id=?1))
-			AND ${departed}`).bind(...binds),
-		db.prepare(`DELETE FROM event_reminders WHERE scope='shared' AND user_id=?1 AND group_id=?2 AND ${departed}`).bind(...binds),
-	]);
+			AND ${departed}`).bind(...binds.slice(0,4)),
+		db.prepare(`DELETE FROM event_reminders WHERE scope='shared' AND user_id=?1 AND group_id=?2 AND ${departed}`).bind(...binds.slice(0,4)),
+		db.prepare(`INSERT INTO group_departure_assertions(nonce,valid) VALUES(?7, CASE WHEN ${departed}
+			AND NOT EXISTS (SELECT 1 FROM group_availability_wishes WHERE group_id=?2 AND manager_member_id=?3 AND management_state='open')
+			AND NOT EXISTS (SELECT 1 FROM group_schedules WHERE group_id=?2 AND manager_member_id=?3 AND state='open')
+			THEN 1 ELSE 0 END)`).bind(...binds,nonce),
+		db.prepare('DELETE FROM group_departure_assertions WHERE nonce=?1').bind(nonce),
+	]); } catch {
+		const active=await db.prepare(`SELECT COUNT(*) AS count FROM active_group_members
+			WHERE group_id=?1 AND user_id IS NOT NULL`).bind(member.group_id).first<{count:number}>();
+		if(Number(active?.count)<=1) return jsonResponse({error:'最後のメンバーは現在退出できません。',code:'LEAVE_REQUIRES_REVIEW'},409);
+		return jsonResponse({error:'退出条件が変わりました。グループ情報を更新してから再試行してください。',code:'LEAVE_REQUIRES_REVIEW'},409);
+	}
 	if (!results[0].meta.changes) {
 		const reason = await db.prepare(`SELECT
 			(SELECT COUNT(*) FROM active_group_members WHERE group_id=?1 AND user_id IS NOT NULL) AS members,
@@ -220,7 +288,89 @@ async function leaveGroup(db: D1Database, body: JsonRecord, user: SessionUser): 
 					: '退出条件を確認できませんでした。グループ情報を更新してください。';
 		return jsonResponse({ error, code:'LEAVE_REQUIRES_REVIEW' }, 409);
 	}
+	for(const plan of managedPlans?.results||[]) try {
+		const recipients=choice==='transfer' ? [successor] :
+			(await db.prepare(`SELECT m.user_id FROM group_schedule_participants p JOIN active_group_members m
+			ON m.id=p.member_id AND m.group_id=?2 WHERE p.schedule_id=?1`)
+			.bind(plan.id,member.group_id).all<{user_id:string}>()).results.map(row=>row.user_id);
+		await queueScheduleNotice(env,member.group_id,plan.id,recipients,
+			choice==='transfer'?'schedule_changed':'schedule_cancelled',`schedule-leave:${choice}:${plan.id}:${member.member_id}`);
+		ctx.waitUntil(drainPushQueue(env));
+	} catch { console.warn('Group departure notice could not be queued'); }
 	return jsonResponse({ ok:true });
+}
+
+async function leaveOptions(db:D1Database,body:JsonRecord,user:SessionUser):Promise<Response> {
+	const member=await requireMembership(db,body,user);
+	if(!member) return jsonResponse({error:'グループへの参加情報を確認できません'},401);
+	const work=await db.prepare(`SELECT
+		(SELECT COUNT(*) FROM group_availability_wishes WHERE group_id=?1 AND manager_member_id=?2 AND management_state='open') AS wishes,
+		(SELECT COUNT(*) FROM group_schedules WHERE group_id=?1 AND manager_member_id=?2 AND state='open') AS schedules,
+		(SELECT COUNT(*) FROM shared_events WHERE group_id=?1 AND created_by_member_id=?2
+		  AND status='tentative' AND cancelled_at IS NULL AND wish_id IS NULL) AS other_tentative`)
+		.bind(member.group_id,member.member_id).first<{wishes:number;schedules:number;other_tentative:number}>();
+	const others=await db.prepare(`SELECT m.user_id,COALESCE(u.display_name,m.display_name) AS display_name
+		FROM active_group_members m LEFT JOIN users u ON u.id=m.user_id
+		WHERE m.group_id=?1 AND m.user_id IS NOT NULL AND m.id<>?2 ORDER BY m.created_at,m.id`)
+		.bind(member.group_id,member.member_id).all<{user_id:string;display_name:string}>();
+	return jsonResponse({wishes:Number(work?.wishes||0),schedules:Number(work?.schedules||0),
+		otherTentative:Number(work?.other_tentative||0),
+		lastMember:others.results.length===0,groupName:member.group_name,
+		successors:others.results.map(row=>({userId:row.user_id,name:row.display_name}))});
+}
+
+async function closeGroup(db:D1Database,body:JsonRecord,user:SessionUser):Promise<Response> {
+	const groupId=stringValue(body.groupId,64);
+	if(!groupId)return jsonResponse({error:'グループを指定してください'},400);
+	const member=await requireMembership(db,body,user);
+	if(!member){
+		const previously=await db.prepare(`SELECT closed_at FROM groups WHERE id=?1 AND closed_at IS NOT NULL
+			AND closed_by_user_id=?2`).bind(groupId,user.id).first<{closed_at:string}>();
+		return previously?jsonResponse({ok:true,alreadyClosed:true}):
+			jsonResponse({error:'グループを削除する権限がありません'},403);
+	}
+	const active=await db.prepare(`SELECT COUNT(*) AS count FROM active_group_members
+		WHERE group_id=?1 AND user_id IS NOT NULL`).bind(groupId).first<{count:number}>();
+	if(Number(active?.count)!==1)return jsonResponse({error:'メンバー数が変わりました。グループ画面を更新してください。',
+		code:'GROUP_MEMBER_COUNT_CHANGED'},409);
+	const now=new Date().toISOString(),nonce=crypto.randomUUID();
+	const binds=[user.id,groupId,member.member_id,now];
+	try {
+		const result=await db.batch([
+			db.prepare(`UPDATE groups SET closed_at=?4,closed_by_user_id=?1,closed_by_member_id=?3,
+				management_version=management_version+1 WHERE id=?2 AND closed_at IS NULL
+				AND EXISTS(SELECT 1 FROM group_members m WHERE m.id=?3 AND m.group_id=?2
+				  AND m.user_id=?1 AND m.left_at IS NULL)
+				AND (SELECT COUNT(*) FROM group_members m WHERE m.group_id=?2
+				  AND m.user_id IS NOT NULL AND m.left_at IS NULL)=1`).bind(...binds),
+			db.prepare(`UPDATE group_members SET departed_user_id=COALESCE(departed_user_id,user_id),
+				user_id=NULL,left_at=?4,access_token=lower(hex(randomblob(32)))
+				WHERE group_id=?2 AND left_at IS NULL AND EXISTS(SELECT 1 FROM groups g
+				WHERE g.id=?2 AND g.closed_at=?4 AND g.closed_by_user_id=?1 AND g.closed_by_member_id=?3)`)
+				.bind(...binds),
+			db.prepare(`UPDATE in_app_notifications SET revoked_at=?4 WHERE group_id=?2 AND revoked_at IS NULL
+				AND EXISTS(SELECT 1 FROM groups g WHERE g.id=?2 AND g.closed_at=?4
+				AND g.closed_by_user_id=?1 AND g.closed_by_member_id=?3)`).bind(...binds),
+			db.prepare(`DELETE FROM push_deliveries WHERE scope='group' AND group_id=?2
+				AND EXISTS(SELECT 1 FROM groups g WHERE g.id=?2 AND g.closed_at=?4
+				AND g.closed_by_user_id=?1 AND g.closed_by_member_id=?3)`).bind(...binds),
+			db.prepare(`INSERT INTO group_closure_assertions(nonce,valid)
+				VALUES(?5,CASE WHEN EXISTS(SELECT 1 FROM groups g WHERE g.id=?2
+				  AND g.closed_at=?4 AND g.closed_by_user_id=?1 AND g.closed_by_member_id=?3)
+				AND NOT EXISTS(SELECT 1 FROM group_members m WHERE m.group_id=?2 AND m.left_at IS NULL)
+				THEN 1 ELSE 0 END)`).bind(...binds,nonce),
+			db.prepare('DELETE FROM group_closure_assertions WHERE nonce=?1').bind(nonce),
+		]);
+		if(!result[0].meta.changes)return jsonResponse({error:'メンバー数が変わりました。グループ画面を更新してください。',
+			code:'GROUP_MEMBER_COUNT_CHANGED'},409);
+	} catch {
+		const previously=await db.prepare(`SELECT closed_at FROM groups WHERE id=?1 AND closed_at IS NOT NULL
+			AND closed_by_user_id=?2`).bind(groupId,user.id).first<{closed_at:string}>();
+		if(previously)return jsonResponse({ok:true,alreadyClosed:true});
+		return jsonResponse({error:'グループの状態が変わりました。画面を更新して再確認してください。',
+			code:'GROUP_MEMBER_COUNT_CHANGED'},409);
+	}
+	return jsonResponse({ok:true,closedAt:now});
 }
 
 async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): Promise<Response> {
@@ -234,14 +384,14 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 		        CASE WHEN m.left_at IS NOT NULL THEN m.display_name ELSE COALESCE(u.display_name, m.display_name) END AS created_by_name
 		 FROM shared_events e JOIN group_members m ON m.id = e.created_by_member_id
 		 LEFT JOIN users u ON u.id = m.user_id
-		 WHERE e.group_id = ?1 AND e.event_date >= ?2 AND e.event_date < ?3
+		 WHERE e.group_id = ?1 AND e.event_date >= ?2 AND e.event_date < ?3 AND e.cancelled_at IS NULL
 		 ORDER BY e.event_date, e.all_day DESC, e.starts_at, e.created_at`,
 	).bind(member.group_id, `${month}-01`, `${month}-32`).all<{
 		id: string; title: string; event_date: string; starts_at: string; ends_at: string; all_day: number; note: string; status:string; wish_id:string | null; created_by_member_id: string; created_by_user_id:string | null; created_by_name: string; creator_left_at: string | null;
 	}>();
 	const otherBusy = await db.prepare(`SELECT DISTINCT e.id, e.event_date, e.starts_at, e.ends_at, e.all_day
-		FROM shared_events e JOIN group_members creator ON creator.id = e.created_by_member_id
-		WHERE e.group_id <> ?1 AND e.event_date >= ?2 AND e.event_date < ?3
+		 FROM shared_events e JOIN group_members creator ON creator.id = e.created_by_member_id
+		WHERE e.group_id <> ?1 AND e.event_date >= ?2 AND e.event_date < ?3 AND e.cancelled_at IS NULL
 		AND EXISTS (SELECT 1 FROM active_group_members viewer_member
 			WHERE viewer_member.group_id = ?1 AND viewer_member.user_id IS NOT NULL AND
 			((creator.left_at IS NULL AND viewer_member.user_id = creator.user_id) OR EXISTS
@@ -316,51 +466,57 @@ async function availability(db: D1Database, body: JsonRecord, user: SessionUser)
 	const target = await db.prepare('SELECT 1 FROM active_group_members WHERE group_id = ?1 AND user_id = ?2')
 		.bind(member.group_id, targetUserId).first();
 	if (!target) return jsonResponse({ error:'グループ外のメンバーは確認できません' }, 403);
-	const automatic = await db.prepare(`SELECT DISTINCT e.event_date, e.source_type, e.starts_at, e.ends_at, e.all_day
-		FROM member_calendar_entries e JOIN active_group_members m ON m.id = e.member_id
-		WHERE m.user_id = ?1 AND (e.source_type <> 'personal' OR NOT EXISTS (SELECT 1 FROM personal_sync_users s WHERE s.user_id=m.user_id))
-		AND (e.event_date = ?2 OR (e.event_date = date(?2, '-1 day')
-			AND e.source_type = 'shift' AND e.all_day = 0 AND e.ends_at <= e.starts_at))`)
-		.bind(targetUserId, date).all<{ event_date:string; source_type:string; starts_at:string; ends_at:string; all_day:number }>();
-	const shared = await db.prepare(`SELECT DISTINCT e.starts_at, e.ends_at, e.all_day
-		FROM shared_events e JOIN group_members creator ON creator.id = e.created_by_member_id
-		WHERE e.event_date = ?1 AND (e.group_id = ?2 OR (creator.left_at IS NULL AND creator.user_id = ?3) OR EXISTS
-			(SELECT 1 FROM shared_event_participants p WHERE p.event_id = e.id AND p.user_id = ?3 AND p.revoked_at IS NULL))`)
-		.bind(date, member.group_id, targetUserId).all<{ starts_at:string; ends_at:string; all_day:number }>();
-	const personal = await db.prepare(`SELECT e.starts_at,e.ends_at,e.all_day FROM personal_events e
-		JOIN personal_sync_users s ON s.user_id=e.user_id WHERE e.user_id=?1 AND e.event_date=?2 AND e.deleted=0`)
-		.bind(targetUserId,date).all<{starts_at:string;ends_at:string;all_day:number}>();
-	const intervals = [
-		...(automatic.results || []).map((entry): [number, number] => {
-			if (entry.all_day) return [0, 1440];
-			const start = Number(entry.starts_at.slice(0, 2)) * 60 + Number(entry.starts_at.slice(3));
-			const end = Number(entry.ends_at.slice(0, 2)) * 60 + Number(entry.ends_at.slice(3));
-			if (entry.source_type !== 'shift' || end > start) return [start, end];
-			return entry.event_date < date ? [0, end] : [start, 1440];
-		}),
-		...[...(shared.results || []), ...personal.results].map((entry): [number, number] => entry.all_day ? [0, 1440] :
-			[Number(entry.starts_at.slice(0, 2)) * 60 + Number(entry.starts_at.slice(3)),
-			 Number(entry.ends_at.slice(0, 2)) * 60 + Number(entry.ends_at.slice(3))]),
-	]
-		.filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end) && end > start)
-		.sort((a, b) => a[0] - b[0]);
-	const merged: [number, number][] = [];
-	for (const interval of intervals) {
-		const last = merged.at(-1);
-		if (last && interval[0] <= last[1]) last[1] = Math.max(last[1], interval[1]);
-		else merged.push([...interval]);
+	const busy=(await loadBusyDays(db,member.group_id,[targetUserId],date,date)).get(targetUserId)?.get(date) || [];
+	return jsonResponse({ date, busy:busy.map(([start,end])=>({start:formatMinute(start),end:formatMinute(end),label:'予定あり'})),
+		free:freeIntervals(busy).map(([start,end])=>({start:formatMinute(start),end:formatMinute(end)})) });
+}
+
+async function searchAvailability(db:D1Database, body:JsonRecord, user:SessionUser):Promise<Response> {
+	const member=await requireMembership(db,body,user);
+	if (!member) return jsonResponse({error:'グループへの参加情報を確認できません'},401);
+	const rawIds=body.userIds;
+	const first=body.startDate, last=body.endDate, duration=body.durationMinutes;
+	const minimum=body.minimumParticipants===undefined ? rawIds instanceof Array ? rawIds.length : 0 : body.minimumParticipants;
+	if (!Array.isArray(rawIds) || rawIds.length<2 || rawIds.length>20 ||
+		rawIds.some(id=>!stringValue(id,64)) || new Set(rawIds).size!==rawIds.length ||
+		!validDate(first) || !validDate(last) || first>last ||
+		(Date.parse(last+'T00:00:00Z')-Date.parse(first+'T00:00:00Z'))/86400000>13 ||
+		!Number.isInteger(duration) || (duration as number)<60 || (duration as number)>360 || (duration as number)%30!==0 ||
+		!Number.isInteger(minimum) || (minimum as number)<1 || (minimum as number)>rawIds.length)
+		return jsonResponse({error:'2人以上のメンバー、14日以内の期間、1〜6時間を30分単位で指定してください'},400);
+	const userIds=rawIds as string[];
+	const selected=await db.prepare(`SELECT user_id,id FROM active_group_members WHERE group_id=? AND user_id IN (${userIds.map(()=>'?').join(',')})`)
+		.bind(member.group_id,...userIds).all<{user_id:string;id:string}>();
+	if (selected.results.length!==userIds.length) return jsonResponse({error:'グループ外または退出済みのメンバーは選択できません'},403);
+	const memberIds=new Map(selected.results.map(row=>[row.user_id,row.id]));
+	const months=[...new Set(Array.from({length:14},(_,i)=>nextDate(first,i)).filter(date=>date<=last)
+		.flatMap(date=>[date.slice(0,7),nextDate(date,-1).slice(0,7)]))];
+	const [availability,unconfirmed]=await Promise.all([
+		loadAvailabilityDays(db,member.group_id,userIds,first,last),
+		unconfirmedByMonth(db,member.group_id,memberIds,months),
+	]);
+	const busy=combineBusyDays(availability);
+	// A selected member can leave while the range queries run. Never turn the
+	// missing rows into an apparently free slot, or answer a departed requester.
+	const current=await db.prepare(`SELECT user_id,id FROM active_group_members WHERE group_id=? AND user_id IN (${userIds.map(()=>'?').join(',')})`)
+		.bind(member.group_id,...userIds).all<{user_id:string;id:string}>();
+	if (current.results.length!==userIds.length || current.results.some(row=>memberIds.get(row.user_id)!==row.id) ||
+		!(await db.prepare('SELECT 1 FROM active_group_members WHERE id=? AND group_id=? AND user_id=?')
+			.bind(member.member_id,member.group_id,user.id).first()))
+		return jsonResponse({error:'検索中にメンバー構成が変わりました。もう一度お試しください'},409);
+	const days=[];
+	const unknownByDate=new Map<string,Set<string>>();
+	for (let date=first;date<=last;date=nextDate(date)) {
+		const unknown=userIds.filter(id=>unconfirmed.get(date.slice(0,7))?.has(id) ||
+			unconfirmed.get(nextDate(date,-1).slice(0,7))?.has(id));
+		unknownByDate.set(date,new Set(unknown));
+		days.push({date,unconfirmedUserIds:unknown,
+			slots:candidateSlots(busy,userIds,date,duration as number).map(([start,end])=>
+				({start:formatMinute(start),end:formatMinute(end),needsConfirmation:unknown.length>0}))});
 	}
-	const format = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
-	const free: [number, number][] = [];
-	let cursor = 9 * 60;
-	for (const [start, end] of merged) {
-		if (start > cursor) free.push([cursor, Math.min(start, 22 * 60)]);
-		cursor = Math.max(cursor, end);
-		if (cursor >= 22 * 60) break;
-	}
-	if (cursor < 22 * 60) free.push([cursor, 22 * 60]);
-	return jsonResponse({ date, busy:merged.map(([start, end]) => ({ start:format(start), end:format(end), label:'予定あり' })),
-		free:free.filter(([start, end]) => end > start).map(([start, end]) => ({ start:format(start), end:format(end) })) });
+	return jsonResponse({startDate:first,endDate:last,durationMinutes:duration,minimumParticipants:minimum,days,
+		recommendations:rankAvailability(availability.hard,availability.tentative,userIds,days.map(day=>day.date),
+			duration as number,minimum as number,unknownByDate)});
 }
 
 async function syncCalendar(env: SharedEnv, ctx: ExecutionContext, body: JsonRecord, user: SessionUser): Promise<Response> {
@@ -423,7 +579,13 @@ async function syncCalendar(env: SharedEnv, ctx: ExecutionContext, body: JsonRec
 		previous.delete(key);
 	}
 	if (previous.size) changed = true;
-	if (!added && !changed) return jsonResponse({ ok:true, count:entries.length });
+	const coverage=db.prepare(`INSERT INTO group_calendar_sync_coverage(group_id,member_id,month,synced_at)
+		VALUES(?1,?2,?3,?4) ON CONFLICT(group_id,member_id,month) DO UPDATE SET synced_at=excluded.synced_at`)
+		.bind(member.group_id,member.member_id,month,new Date().toISOString());
+	if (!added && !changed) {
+		await coverage.run();
+		return jsonResponse({ ok:true, count:entries.length });
+	}
 	const statements = [db.prepare(
 		`DELETE FROM member_calendar_entries WHERE group_id = ?1 AND member_id = ?2 AND event_date >= ?3 AND event_date < ?4
 		 AND source_type='shift' AND EXISTS(SELECT 1 FROM active_group_members WHERE id=?2 AND group_id=?1)`,
@@ -434,6 +596,7 @@ async function syncCalendar(env: SharedEnv, ctx: ExecutionContext, body: JsonRec
 			 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
 		).bind(member.group_id, member.member_id, entry.sourceType, entry.sourceId, entry.eventDate, entry.title, entry.start, entry.end, Number(entry.allDay), entry.note));
 	}
+	statements.push(coverage);
 	await db.batch(statements);
 	if (added || changed) await scheduleNotice(env, ctx, member.group_id, user.id,
 		added ? 'group_event_created' : 'group_event_updated', `「${member.group_name}」の共有予定が${added ? '追加' : '変更'}されました`,
@@ -478,7 +641,7 @@ async function updateEvent(env: SharedEnv, ctx: ExecutionContext, body: JsonReco
 	if (!id || !event) return jsonResponse({ error: '共有予定の入力内容を確認してください' }, 400);
 	const existingReminders = await db.prepare(`SELECT r.user_id,r.offset_minutes,r.time_zone FROM event_reminders r
 		JOIN shared_events e ON e.id=r.shared_event_id
-		WHERE r.scope='shared' AND r.group_id=?1 AND r.shared_event_id=?2 AND ${canManageSharedEventSql('e', '?3')} AND e.status='confirmed'`)
+		WHERE r.scope='shared' AND r.group_id=?1 AND r.shared_event_id=?2 AND ${canManageSharedEventSql('e', '?3')} AND e.status='confirmed' AND e.cancelled_at IS NULL`)
 		.bind(member.group_id,id,member.member_id).all<{user_id:string;offset_minutes:number;time_zone:string}>();
 	let reminderStatements:D1PreparedStatement[];
 	try {
@@ -491,8 +654,9 @@ async function updateEvent(env: SharedEnv, ctx: ExecutionContext, body: JsonReco
 	const result = await db.batch([
 		db.prepare(
 		`UPDATE shared_events AS e SET title = ?1, event_date = ?2, starts_at = ?3, ends_at = ?4, all_day = ?5, note = ?6, updated_at = ?7,
-		 management_version=management_version+1
-		 WHERE id = ?8 AND group_id = ?9 AND ${canManageSharedEventSql('e', '?10')}`,
+		 management_version=management_version+1,
+		 scheduling_write_version=CASE WHEN schedule_plan_id IS NOT NULL THEN scheduling_write_version+1 ELSE scheduling_write_version END
+		 WHERE id = ?8 AND group_id = ?9 AND e.cancelled_at IS NULL AND ${canManageSharedEventSql('e', '?10')}`,
 		).bind(event.title, event.eventDate, event.start, event.end, Number(event.allDay), event.note, timestamp, id, member.group_id, member.member_id),
 		...reminderStatements,
 	]);
@@ -502,20 +666,26 @@ async function updateEvent(env: SharedEnv, ctx: ExecutionContext, body: JsonReco
 	return jsonResponse({ ok:true });
 }
 
-async function deleteEvent(db: D1Database, body: JsonRecord, user: SessionUser): Promise<Response> {
+async function deleteEvent(env:SharedEnv,ctx:ExecutionContext, body: JsonRecord, user: SessionUser): Promise<Response> {
+	const db=env.DB;
 	const member = await requireMembership(db, body, user);
 	const id = stringValue(body.id, 64);
 	if (!member) return jsonResponse({ error: 'グループへの参加情報を確認できません' }, 401);
 	if (!id) return jsonResponse({ error: '予定を指定してください' }, 400);
+	const scheduled=await db.prepare(`SELECT e.schedule_plan_id FROM shared_events e
+		WHERE e.id=?1 AND e.group_id=?2 AND e.cancelled_at IS NULL AND ${canManageSharedEventSql('e','?3')}`)
+		.bind(id,member.group_id,member.member_id).first<{schedule_plan_id:string|null}>();
+	if(scheduled?.schedule_plan_id) return handleScheduleRequest(env,ctx,'/api/groups/schedules/cancel',
+		{groupId:member.group_id,scheduleId:scheduled.schedule_plan_id},user);
 	const result = await db.batch([
 		db.prepare(`INSERT INTO shared_event_delete_grants(event_id,actor_member_id)
-			SELECT e.id,?3 FROM shared_events e WHERE e.id=?1 AND e.group_id=?2 AND ${canManageSharedEventSql('e', '?3')}`)
+			SELECT e.id,?3 FROM shared_events e WHERE e.id=?1 AND e.group_id=?2 AND e.cancelled_at IS NULL AND ${canManageSharedEventSql('e', '?3')}`)
 			.bind(id,member.group_id,member.member_id),
 		db.prepare(`DELETE FROM push_deliveries WHERE reminder_id IN (
 			SELECT r.id FROM event_reminders r JOIN shared_events e ON e.id=r.shared_event_id
-			WHERE r.scope='shared' AND r.group_id=?1 AND r.shared_event_id=?2 AND ${canManageSharedEventSql('e', '?3')})`)
+			WHERE r.scope='shared' AND r.group_id=?1 AND r.shared_event_id=?2 AND e.cancelled_at IS NULL AND ${canManageSharedEventSql('e', '?3')})`)
 			.bind(member.group_id,id,member.member_id),
-		db.prepare(`DELETE FROM shared_events AS e WHERE id = ?1 AND group_id = ?2 AND ${canManageSharedEventSql('e', '?3')}`)
+		db.prepare(`DELETE FROM shared_events AS e WHERE id = ?1 AND group_id = ?2 AND e.cancelled_at IS NULL AND ${canManageSharedEventSql('e', '?3')}`)
 			.bind(id, member.group_id, member.member_id),
 	]);
 	if (!result[2].meta.changes) return jsonResponse({ error: 'この予定を削除する権限がありません' }, 403);
@@ -527,6 +697,7 @@ export async function handleSharedRequest(request: Request, env: SharedEnv, ctx:
 	const body = await readBody(request);
 	if (!body) return jsonResponse({ error: 'リクエスト本文は有効なJSONオブジェクトである必要があります' }, 400);
 	try {
+		if (pathname.startsWith('/api/groups/schedules/')) return await handleScheduleRequest(env,ctx,pathname,body,user);
 		if (pathname.startsWith('/api/groups/wishes/')) return await handleWishRequest(env, ctx, pathname, body, user);
 		if (pathname === '/api/groups/create') return await createGroup(env.DB, body, user);
 		if (pathname === '/api/groups/rename') return await renameGroup(env.DB, body, user);
@@ -535,13 +706,16 @@ export async function handleSharedRequest(request: Request, env: SharedEnv, ctx:
 		if (pathname === '/api/groups/mine') return await mine(env.DB, user);
 		if (pathname === '/api/groups/claim') return await claimLegacyMembership(env.DB, body, user);
 		if (pathname === '/api/groups/members/list') return await listGroupMembers(env.DB, body, user);
-		if (pathname === '/api/groups/leave') return await leaveGroup(env.DB, body, user);
+		if (pathname === '/api/groups/leave/options') return await leaveOptions(env.DB,body,user);
+		if (pathname === '/api/groups/leave') return await leaveGroup(env,ctx, body, user);
+		if (pathname === '/api/groups/delete') return await closeGroup(env.DB,body,user);
 		if (pathname === '/api/shared/events/list') return await listEvents(env.DB, body, user);
 		if (pathname === '/api/shared/availability') return await availability(env.DB, body, user);
+		if (pathname === '/api/shared/availability/search') return await searchAvailability(env.DB, body, user);
 		if (pathname === '/api/shared/calendar/sync') return await syncCalendar(env, ctx, body, user);
 		if (pathname === '/api/shared/events/create') return await createEvent(env, ctx, body, user);
 		if (pathname === '/api/shared/events/update') return await updateEvent(env, ctx, body, user);
-		if (pathname === '/api/shared/events/delete') return await deleteEvent(env.DB, body, user);
+		if (pathname === '/api/shared/events/delete') return await deleteEvent(env,ctx, body, user);
 		return jsonResponse({ error: 'APIが見つかりません' }, 404);
 	} catch (error) {
 		if (String(error).includes('inactive group membership')) return jsonResponse({error:'参加状態が変更されました。グループ情報を更新してください。'},409);

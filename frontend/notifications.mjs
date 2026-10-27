@@ -5,7 +5,7 @@ export function safeNotificationTarget(value) {
   try {
     const target = new URL(value, 'https://daysync.invalid');
     if (target.origin !== 'https://daysync.invalid' || target.pathname !== '/') return null;
-    const allowed = new Set(['group','date','eventId','wishId','reminder']);
+    const allowed = new Set(['group','date','eventId','wishId','scheduleId','reminder']);
     if ([...target.searchParams.keys()].some((key) => !allowed.has(key))) return null;
     return target.pathname + target.search;
   } catch { return null; }

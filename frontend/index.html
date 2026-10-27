@@ -384,6 +384,8 @@
                 <h3>メンバー</h3>
                 <ul class="group-member-list" id="group-members" aria-live="polite"></ul>
                 <p class="status error" id="group-members-error" hidden aria-live="polite"></p>
+                <button class="action-button common-availability-open" id="common-availability-open" type="button" aria-haspopup="dialog">共通空き時間を探す</button>
+                <button class="action-button common-availability-open" id="schedules-open" type="button" aria-haspopup="dialog">日程調整・投票を見る</button>
               </article>
               <article class="card">
                 <h3 id="group-date"></h3>
@@ -394,6 +396,31 @@
           </section>
         </div>
 
+        <dialog class="qr-dialog status-invite-dialog common-availability-dialog" id="common-availability-dialog" aria-labelledby="common-availability-title">
+          <button class="action-button qr-dialog-close" id="common-availability-close" type="button">閉じる</button>
+          <h3 id="common-availability-title">共通空き時間を探す</h3>
+          <p class="card-description">登録済みの個人予定・シフト・共有予定をもとに、9:00〜22:00の候補を探します。未確認のメンバーがいる候補は本人に確認してください。</p>
+          <form id="common-availability-form" class="form-stack">
+            <fieldset id="common-availability-members" class="participant-choices"><legend>メンバーを2人以上選択</legend></fieldset>
+            <div class="time-pair">
+              <label>開始日<input id="common-availability-start" type="date" required /></label>
+              <label>終了日<input id="common-availability-end" type="date" required /></label>
+            </div>
+            <label>必要時間<select id="common-availability-duration"></select></label>
+            <label>最低参加人数<select id="common-availability-minimum"></select></label>
+            <button class="action-button primary" id="common-availability-submit" type="submit">候補を探す</button>
+          </form>
+          <p class="status error" id="common-availability-error" role="alert" hidden></p>
+          <p id="common-availability-status" role="status" aria-live="polite"></p>
+          <div id="common-availability-recommendations" class="common-availability-results" role="region" aria-label="おすすめ日時"></div>
+          <div id="common-availability-results" class="common-availability-results" role="region" aria-label="共通空き時間の候補"></div>
+        </dialog>
+        <dialog class="qr-dialog status-invite-dialog schedules-dialog" id="schedules-dialog" aria-labelledby="schedules-title">
+          <button class="action-button qr-dialog-close" id="schedules-close" type="button">閉じる</button>
+          <h3 id="schedules-title">日程調整</h3>
+          <p class="status" id="schedules-status" role="status" aria-live="polite" hidden></p>
+          <div id="schedules-content" class="schedules-content"></div>
+        </dialog>
         <dialog class="qr-dialog group-manage-dialog" id="group-manage-dialog" aria-labelledby="group-manage-title">
           <button class="action-button qr-dialog-close" id="close-group-manage" type="button">閉じる</button>
           <h3 id="group-manage-title">グループ管理</h3>
@@ -403,6 +430,16 @@
             <button class="action-button" id="group-icon-change" type="button">グループアイコンを変更</button>
             <button class="action-button danger" id="group-manage-leave" type="button">グループから退出</button>
           </div>
+          <section id="group-leave-choices" class="form-stack" hidden aria-labelledby="group-leave-choices-title">
+            <h4 id="group-leave-choices-title">進行中の募集・日程調整</h4>
+            <p id="group-leave-choices-description"></p>
+            <label>引き継ぐメンバー<select id="group-leave-successor"></select></label>
+            <div class="actions">
+              <button class="action-button" id="group-leave-transfer" type="button">引き継いで退出</button>
+              <button class="action-button danger" id="group-leave-close" type="button">終了して退出</button>
+              <button class="action-button" id="group-leave-cancel" type="button">やめる</button>
+            </div>
+          </section>
           <section class="group-icon-picker" id="group-icon-picker" hidden aria-labelledby="group-icon-picker-title">
             <h4 id="group-icon-picker-title">グループアイコンを選択</h4>
             <p class="card-description">グループのみんなに同じアイコンが表示されます。</p>
@@ -424,6 +461,15 @@
           </form>
           <p class="status error" id="group-icon-error" hidden role="alert"></p>
           <p class="status safe" id="group-icon-status" hidden role="status"></p>
+        </dialog>
+        <dialog class="qr-dialog group-delete-dialog" id="group-delete-dialog" aria-labelledby="group-delete-title" aria-describedby="group-delete-description">
+          <h3 id="group-delete-title">あなたは最後のメンバーです</h3>
+          <p id="group-delete-description"></p>
+          <p class="status error" id="group-delete-error" hidden role="alert"></p>
+          <div class="actions">
+            <button class="action-button" id="group-delete-no" type="button">いいえ</button>
+            <button class="action-button danger" id="group-delete-yes" type="button">はい</button>
+          </div>
         </dialog>
         <dialog class="qr-dialog" id="group-invite-qr-dialog" aria-labelledby="group-invite-qr-title">
           <button class="action-button qr-dialog-close" id="close-group-invite-qr" type="button">閉じる</button>

@@ -8,6 +8,8 @@ test('notification links only navigate within the DaySync app', () => {
     '/?group=group-1&date=2026-11-15&wishId=wish-1');
   assert.equal(safeNotificationTarget('/?reminder=personal&eventId=event-1'),
     '/?reminder=personal&eventId=event-1');
+  assert.equal(safeNotificationTarget('/?group=group-1&scheduleId=schedule-1'),
+    '/?group=group-1&scheduleId=schedule-1');
   for (const value of ['https://evil.test/', '//evil.test/', '/other', '/?next=https://evil.test',
     'javascript:alert(1)', null]) assert.equal(safeNotificationTarget(value),null);
 });

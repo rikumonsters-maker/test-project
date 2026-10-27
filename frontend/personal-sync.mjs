@@ -8,7 +8,7 @@ function eventInput(event, date) {
 export function createPersonalSync({storage,key,state,requestJson,onChange=()=>{},onStatus=()=>{},isCurrent=()=>true,makeId=()=>crypto.randomUUID()}) {
   // v2 intentionally leaves every v1 metadata key untouched and never reads its migration or write queue.
   const metaKey=`${key}-personal-sync-v2`,backupKey=`${key}-personal-backup-v2`;
-  let meta=null,ready=false,active=false,working=null,inFlight=null,lastStatus='',rerun=false;
+  let meta=null,ready=false,active=false,working=null,inFlight=null,lastStatus='',rerun=false,needsSnapshot=false;
 
   function read() {const raw=storage.getItem(metaKey);return raw ? JSON.parse(raw):null;}
   function persist() {
@@ -67,6 +67,9 @@ export function createPersonalSync({storage,key,state,requestJson,onChange=()=>{
     meta=stored?.format===2 ? stored : freshMeta();
     meta.format=2;meta.restoreQueue ||= [];meta.queue ||= [];meta.records ||= {};meta.results ||= {};
     meta.active=true;active=true;ready=true;
+    // A saved cursor can outlive the device's event cache. Reconcile once on
+    // startup so an empty or incomplete cache cannot look like a successful sync.
+    needsSnapshot=meta.cursor>0;
     // This device has opted in elsewhere. Do not show its legacy local calendar as cloud data.
     if(stored?.format!==2) {persist();state.events={};onChange();}
     await sync();
@@ -117,6 +120,18 @@ export function createPersonalSync({storage,key,state,requestJson,onChange=()=>{
     try {
       await pull();
       if(!isCurrent()) return;
+      if(needsSnapshot) {
+        const snapshot=await requestJson('/api/personal/events',{method:'GET'});
+        if(!isCurrent()) return;
+        if(!Array.isArray(snapshot.events)) throw new Error('個人予定を読み込めませんでした');
+        const records=Object.fromEntries(snapshot.events.map(event=>[event.id,event]));
+        // Explicitly queued imports have only local IDs until the server accepts them.
+        for(const item of meta.restoreQueue) {
+          if(meta.records[item.localId]) records[item.localId]=meta.records[item.localId];
+        }
+        meta.records=records;
+        persist();publish();needsSnapshot=false;
+      }
       for(const item of [...meta.restoreQueue]) {
         const result=await requestJson('/api/personal/events/import',{payload:{sourceId:item.sourceId,event:item.event,restoreConfirmed:true}});
         if(!isCurrent()) return;
