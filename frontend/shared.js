@@ -950,6 +950,7 @@ export function initShared(app) {
     if (!activeGroup()) return;
     resetCache();
     renderCalendar();
+    commonAvailability?.invalidate(activeGroupId);
   }
   async function openSharedReminder(event) {
     const group = activeGroup();
@@ -1035,6 +1036,7 @@ export function initShared(app) {
     return entries;
   }
   function markDirty(month, options = {}) {
+    if (activeGroupId) commonAvailability?.invalidate(activeGroupId);
     for (const group of memberships()) {
       const pending = (state.pendingGroupMonths[group.groupId] ||= {});
       pending[month] = (Number(pending[month]) || 0) + 1;
@@ -1065,6 +1067,7 @@ export function initShared(app) {
           if (shiftRevision !== undefined && state.pendingGroupShiftMonths?.[group.groupId]?.[month] === shiftRevision) delete state.pendingGroupShiftMonths[group.groupId][month];
           saveState();
           if (activeGroupId === group.groupId && month === monthKey(view.groupMonth)) void refreshCurrentMonth();
+          commonAvailability?.invalidate(group.groupId);
           setStatus("個人予定の詳細は本人専用の同期APIにのみ送信し、グループ同期APIには含めません。シフトは時間帯のみ共有されます。", "safe");
         } catch (error) {
           setStatus(`予定を同期できませんでした。次回起動時に再試行します。${error.message}`, "error");
@@ -1088,6 +1091,7 @@ export function initShared(app) {
     try {
       const data = await requestJson(path, { payload });
       state.groups.push(data.membership);
+      commonAvailability?.invalidate(data.membership.groupId);
       const pending = (state.pendingGroupMonths[data.membership.groupId] ||= {});
       for (const month of monthsWithData()) {
         pending[month] = 1;
@@ -1124,6 +1128,7 @@ export function initShared(app) {
     await performLeave(group,{});
   }
   function completeGroupDeletion(group) {
+    commonAvailability?.invalidate(group.groupId);
     state.groups=state.groups.filter(item=>item.groupId!==group.groupId);
     delete state.pendingGroupMonths[group.groupId];
     if(state.pendingGroupShiftMonths)delete state.pendingGroupShiftMonths[group.groupId];
@@ -1138,6 +1143,7 @@ export function initShared(app) {
     setImageBusy(true);
     try {
       await requestJson("/api/groups/leave", { payload:{...credentials(group),...extra} });
+      commonAvailability?.invalidate(group.groupId);
       state.groups = state.groups.filter((item) => item.groupId !== group.groupId);
       delete state.pendingGroupMonths[group.groupId];
       if (state.pendingGroupShiftMonths) delete state.pendingGroupShiftMonths[group.groupId];
@@ -1155,7 +1161,7 @@ export function initShared(app) {
       onMemberChanged:()=>setError('メンバー数が変わりました。もう一度「グループから退出」を押してください。','group-icon-error')});
     schedules=initSchedules({$,requestJson,activeGroup,getCurrentUserId:app.getCurrentUserId,
       onConfirmed:refreshCurrentMonth});
-    commonAvailability = initCommonAvailability({ $, requestJson, activeGroup,
+    commonAvailability = initCommonAvailability({ $, requestJson, activeGroup, getCurrentUserId:app.getCurrentUserId,
       onSchedule:prefill=>void schedules.openCreate(prefill) });
     sharedEventEditor = initSharedEventEditor({ $, requestJson, activeGroup, onSaved:refreshCurrentMonth });
     sharedReminderControls = initReminderControls($("shared-reminder-controls"));

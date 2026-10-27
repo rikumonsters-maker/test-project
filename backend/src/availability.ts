@@ -26,23 +26,24 @@ export function mergeIntervals(intervals:Interval[]):Interval[] {
   return merged;
 }
 
-export function freeIntervals(busy:Interval[]):Interval[] {
+export function freeIntervals(busy:Interval[], windowStart=540, windowEnd=1320):Interval[] {
   const free:Interval[]=[];
-  let cursor=540; // Keep the existing availability hours: 09:00–22:00.
+  let cursor=windowStart;
   for (const [start,end] of mergeIntervals(busy)) {
-    if (start>cursor && cursor<1320) free.push([cursor,Math.min(start,1320)]);
+    if (start>cursor && cursor<windowEnd) free.push([cursor,Math.min(start,windowEnd)]);
     cursor=Math.max(cursor,end);
-    if (cursor>=1320) break;
+    if (cursor>=windowEnd) break;
   }
-  if (cursor<1320) free.push([cursor,1320]);
+  if (cursor<windowEnd) free.push([cursor,windowEnd]);
   return free.filter(([start,end])=>end>start);
 }
 
-export function candidateSlots(days:BusyDays, userIds:string[], date:string, durationMinutes:number):Interval[] {
+export function candidateSlots(days:BusyDays, userIds:string[], date:string, durationMinutes:number,
+  windowStart=540,windowEnd=1320,notBefore=0):Interval[] {
   const allBusy=mergeIntervals(userIds.flatMap(id=>days.get(id)?.get(date) || []));
   const slots:Interval[]=[];
-  for (const [freeStart,freeEnd] of freeIntervals(allBusy)) {
-    for (let start=Math.ceil(freeStart/30)*30;start+durationMinutes<=freeEnd;start+=30)
+  for (const [freeStart,freeEnd] of freeIntervals(allBusy,windowStart,windowEnd)) {
+    for (let start=Math.ceil(Math.max(freeStart,notBefore)/30)*30;start+durationMinutes<=freeEnd;start+=30)
       slots.push([start,start+durationMinutes]);
   }
   return slots;
@@ -112,9 +113,11 @@ export type RankedSlot={date:string;start:string;end:string;hardConflictCount:nu
   unconfirmedCount:number;registeredClearCount:number;meetsMinimum:boolean;allRegisteredClear:boolean;reason:string};
 
 export function rankAvailability(hard:BusyDays,tentative:BusyDays,userIds:string[],dates:string[],
-  durationMinutes:number,minimumParticipants:number,unknownByDate:Map<string,Set<string>>,limit=5):RankedSlot[] {
+  durationMinutes:number,minimumParticipants:number,unknownByDate:Map<string,Set<string>>,limit=5,
+  windowStart=540,windowEnd=1320,notBeforeDate='',notBeforeMinute=0):RankedSlot[] {
   const ranked:RankedSlot[]=[];
-  for (const date of dates) for (let start=540;start+durationMinutes<=1320;start+=30) {
+  for (const date of dates) for (let start=windowStart;start+durationMinutes<=windowEnd;start+=30) {
+    if (notBeforeDate && (date<notBeforeDate || (date===notBeforeDate && start<notBeforeMinute))) continue;
     const end=start+durationMinutes;
     let hardCount=0,tentativeCount=0,unknownCount=0,clearCount=0;
     for (const id of userIds) {

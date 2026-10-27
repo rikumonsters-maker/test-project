@@ -109,10 +109,11 @@ function status(element, type, icon, headingText, message) {
   content.append(heading, text);
   element.replaceChildren(iconNode, content);
 }
-async function requestJson(path, { method = "POST", payload } = {}) {
+async function requestJson(path, { method = "POST", payload, signal } = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     credentials:"include",
+    signal,
     headers:{ "Content-Type":"application/json" },
     body:payload === undefined ? undefined : JSON.stringify(payload),
   });
@@ -286,6 +287,7 @@ function showAuth(mode = "login") {
   authError();
 }
 function showExpiredSession() {
+  window.dispatchEvent(new Event("daysync:logout"));
   currentUser = null;
   activeStorageKey = null;
   setTheme("system");
@@ -337,6 +339,7 @@ async function startApp(user) {
   const syncUserId = user.id;
   personalSync = createPersonalSync({ storage:localStorage, key:activeStorageKey, state, requestJson,
     isCurrent:() => currentUser?.id === syncUserId,
+    onDataChange:() => window.dispatchEvent(new Event("daysync:availability-changed")),
     onChange:() => {
       try {saveState();} catch {$("personal-sync-status").textContent="端末の保存領域が不足しています。バックアップを保存してください。";}
       calendar.render();
@@ -402,6 +405,7 @@ async function startApp(user) {
       $("account-icon").textContent = icon || "🌿";
     },
     onLogout:() => {
+      window.dispatchEvent(new Event("daysync:logout"));
       notificationCenter?.stop();
       currentUser = null;
       activeStorageKey = null;

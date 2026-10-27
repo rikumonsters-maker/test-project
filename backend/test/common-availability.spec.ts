@@ -50,6 +50,10 @@ describe('common availability Phase 1',()=>{
     expect((await search(owner,ids,{durationMinutes:75})).status).toBe(400);
     expect((await search(owner,[owner.id,outsider.id])).status).toBe(403);
     expect((await search(outsider,ids)).status).toBe(401);
+    expect((await search(owner,ids,{windowStart:1300,windowEnd:1320})).status).toBe(400);
+    const hours=await search(owner,ids,{windowStart:600,windowEnd:780,excludePast:true});
+    expect(hours.status).toBe(200);
+    expect(hours.data.days[0].slots.every((slot:{start:string;end:string})=>slot.start>='10:00'&&slot.end<='13:00')).toBe(true);
   });
 
   it('marks missing calendar coverage as unconfirmed, including an empty shift month',async()=>{

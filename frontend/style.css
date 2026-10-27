@@ -232,7 +232,14 @@ button:disabled { opacity:.6; cursor:wait; }
 .common-availability-dialog { width:min(92vw,560px); max-height:calc(100dvh - 24px); }
 .common-availability-dialog input[type="date"],.common-availability-dialog select { min-height:44px; }
 .common-availability-choice { min-height:44px; padding:6px 4px; overflow-wrap:anywhere; }
-.common-availability-results { max-height:min(45dvh,440px); overflow-y:auto; margin-top:14px; }
+.common-availability-results { margin-top:14px; overflow-wrap:anywhere; }
+.common-availability-toolbar { display:flex; justify-content:flex-end; margin-top:10px; }
+.common-availability-toolbar button { min-height:44px; }
+.common-availability-ranked { display:grid; gap:8px; padding-left:24px; }
+.common-availability-ranked li { padding:10px; border:1px solid var(--line); border-radius:9px; }
+.common-availability-ranked p { margin:5px 0; font-size:.88rem; color:var(--muted); }
+.common-availability-ranked button { min-height:44px; margin-top:5px; }
+.common-availability-dialog #common-availability-form { margin-top:18px; border-top:1px solid var(--line); padding-top:14px; }
 .common-availability-day { margin-top:9px; padding:8px 11px; border:1px solid var(--line); border-radius:9px; }
 .common-availability-day summary { min-height:44px; align-content:center; cursor:pointer; font-weight:700; }
 .common-availability-caution { margin:7px 0; color:var(--muted); font-size:.88rem; }

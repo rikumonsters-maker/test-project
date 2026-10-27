@@ -5,7 +5,7 @@ function eventInput(event, date) {
   return {date,title,start:allDay?'':start,end:allDay?'':end,allDay:Boolean(allDay),note,extra:{...other,...(extra||{})}};
 }
 
-export function createPersonalSync({storage,key,state,requestJson,onChange=()=>{},onStatus=()=>{},isCurrent=()=>true,makeId=()=>crypto.randomUUID()}) {
+export function createPersonalSync({storage,key,state,requestJson,onChange=()=>{},onDataChange=()=>{},onStatus=()=>{},isCurrent=()=>true,makeId=()=>crypto.randomUUID()}) {
   // v2 intentionally leaves every v1 metadata key untouched and never reads its migration or write queue.
   const metaKey=`${key}-personal-sync-v2`,backupKey=`${key}-personal-backup-v2`;
   let meta=null,ready=false,active=false,working=null,inFlight=null,lastStatus='',rerun=false,needsSnapshot=false;
@@ -111,6 +111,7 @@ export function createPersonalSync({storage,key,state,requestJson,onChange=()=>{
         if(!existing || event.version>=existing.version) meta.records[event.id]=event;
       }
       meta.cursor=result.cursor;more=result.hasMore;persist();publish();
+      if(result.events.length) onDataChange();
     }
   }
 
@@ -131,6 +132,7 @@ export function createPersonalSync({storage,key,state,requestJson,onChange=()=>{
         }
         meta.records=records;
         persist();publish();needsSnapshot=false;
+        onDataChange();
       }
       for(const item of [...meta.restoreQueue]) {
         const result=await requestJson('/api/personal/events/import',{payload:{sourceId:item.sourceId,event:item.event,restoreConfirmed:true}});
