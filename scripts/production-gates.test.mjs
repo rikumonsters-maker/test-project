@@ -1,23 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { exactProduction, currentProjectDeploymentId, verifiedProduction } from './production-gates.mjs';
+import { projectAccountMatches, readProductionDomain, verifiedProduction } from './production-gates.mjs';
 
 const sha='a'.repeat(40);
 const domain='daysync-app.vercel.app';
-test('production deployment must match merge commit and target', () => {
-  const deployment={id:'correct',target:'production',state:'READY',meta:{githubCommitSha:sha}};
-  assert.equal(exactProduction({deployments:[{...deployment,id:'preview',target:null},deployment]},sha)?.id,'correct');
-  assert.equal(exactProduction({deployments:[deployment]},'b'.repeat(40)),undefined);
+const project='prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q';
+const team='team_gy2kSXviLMPSR1WLoWaNhrks';
+test('Production read uses the official domain directly', async () => {
+  const expected=`https://api.vercel.com/v13/deployments/${domain}?teamId=${team}`;
+  const detail={id:'dpl_production'};
+  const actual=await readProductionDomain(domain,team,'synthetic',async url=>{
+    assert.equal(url,expected);
+    return {ok:true,json:async()=>detail};
+  });
+  assert.equal(actual,detail);
 });
-test('deployment detail must be READY target SHA and official domain', () => {
-  const detail={target:'production',meta:{githubCommitSha:sha},alias:[domain]};
-  assert.equal(verifiedProduction(detail,sha,domain),true);
-  assert.equal(verifiedProduction({...detail,target:'preview'},sha,domain),false);
-  assert.equal(verifiedProduction({...detail,alias:['other.example']},sha,domain),false);
+test('official domain resolves to the older Production even when latestDeployment is Preview', () => {
+  const current={id:project,accountId:team,latestDeployment:{id:'dpl_preview'}};
+  const detail={id:'dpl_production',project:{id:project},target:'production',state:'READY',
+    meta:{githubCommitSha:sha},alias:[domain]};
+  assert.equal(projectAccountMatches(current,project,team),true);
+  assert.equal(verifiedProduction(detail,sha,domain,project),true);
+  assert.equal(verifiedProduction({...detail,target:null},sha,domain,project),false);
+  assert.equal(verifiedProduction({...detail,state:'BUILDING'},sha,domain,project),false);
+  assert.equal(verifiedProduction({...detail,meta:{githubCommitSha:'b'.repeat(40)}},sha,domain,project),false);
+  assert.equal(verifiedProduction({...detail,project:{id:'prj_other'}},sha,domain,project),false);
+  assert.equal(verifiedProduction({...detail,alias:['other.example']},sha,domain,project),false);
 });
-test('project-scoped lookup rejects wrong project or team', () => {
-  const current={id:'prj_expected',accountId:'team_expected',latestDeployment:{id:'dpl_latest'}};
-  assert.equal(currentProjectDeploymentId(current,'prj_expected','team_expected'),'dpl_latest');
-  assert.throws(()=>currentProjectDeploymentId(current,'prj_other','team_expected'));
-  assert.throws(()=>currentProjectDeploymentId(current,'prj_expected','team_other'));
+test('project lookup rejects wrong project or team', () => {
+  const current={id:project,accountId:team};
+  assert.throws(()=>projectAccountMatches(current,'prj_other',team));
+  assert.throws(()=>projectAccountMatches(current,project,'team_other'));
 });

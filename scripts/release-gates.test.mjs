@@ -29,11 +29,16 @@ test('main protection requires pinned CI and Vercel app sources', () => {
   assert.equal(mainProtected({...protection,required_status_checks:{...protection.required_status_checks,strict:false}}),false);
 });
 
-test('Vercel authentication error and wrong Preview SHA fail the gate', async () => {
-  const url='https://preview.example.vercel.app/';
-  await assert.rejects(previewFromVercel(head,url,'synthetic',async()=>({ok:false,status:401})),/HTTP 401/);
-  const response=async()=>({ok:true,json:async()=>({url:'preview.example.vercel.app',target:null,state:'READY',
-    project:{id:'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q'},meta:{githubCommitSha:'b'.repeat(40)}})});
-  assert.equal(await previewFromVercel(head,url,'synthetic',response),false);
-  assert.equal(await previewFromVercel('b'.repeat(40),url,'synthetic',response),true);
+test('Preview accepts its immutable URL and assigned branch alias only', async () => {
+  const immutable='test-project-36lf4f3m7-fff-7e58.vercel.app';
+  const branch='test-project-git-feature-example-fff-7e58.vercel.app';
+  const deployment={url:immutable,alias:[branch],target:null,state:'READY',
+    project:{id:'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q'},meta:{githubCommitSha:head}};
+  const response=async()=>({ok:true,json:async()=>deployment});
+  assert.equal(await previewFromVercel(head,`https://${immutable}/`,'synthetic',response),true);
+  assert.equal(await previewFromVercel(head,`https://${branch}/`,'synthetic',response),true);
+  assert.equal(await previewFromVercel(head,'https://other.vercel.app/','synthetic',response),false);
+  assert.equal(await previewFromVercel('b'.repeat(40),`https://${branch}/`,'synthetic',response),false);
+  assert.equal(await previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,project:{id:'prj_other'}})})),false);
+  assert.equal(await previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,target:'production'})})),false);
 });
