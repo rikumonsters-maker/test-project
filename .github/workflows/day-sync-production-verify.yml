@@ -21,9 +21,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Verify the requested commit is current main
+        run: test "$EXPECTED_SHA" = "$(git rev-parse HEAD)"
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha || github.event.deployment.sha || github.sha }}
       - run: node scripts/verify-production.mjs
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_READ_TOKEN }}

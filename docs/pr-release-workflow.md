@@ -25,7 +25,7 @@ Backend、migration、Worker 設定、認証、プライバシー、通知、権
 
 Vercel の既存 GitHub 連携に Production deploy を任せ、二重デプロイしない。`DaySync Production Verify` は merge commit の SHA を使って Vercel Production が READY、同じ SHA、正式ドメイン `daysync-app.vercel.app` へ割り当て済み、HTTP 200 を確認する。GitHub Actions の `GITHUB_TOKEN` によるマージ後は `push` ワークフローが起動しない場合があるため、Vercel App が発行する Production `deployment_status` と15分ごとの `schedule` を独立したトリガーとして使う。`workflow_dispatch` は信頼済み main のワークフローから Secret の認証を手動で検証するためにも用意する。失敗したらチェックを失敗として記録し、追加 deploy や Worker rollback を自動実行しない。認証済みの画面操作、実機確認、ログ監視は別途行い、未実施なら未検証と報告する。
 
-初回導入後、`gh workflow run 'DaySync Production Verify' --repo rikumonsters-maker/test-project --ref main -f expected_sha=<mainのSHA>` で main 上の信頼済みコードから `VERCEL_READ_TOKEN` の実際の読み取りを確認する。Secret の値は表示せず、Actions のジョブ結果だけを見る。`deployment_status` のpayloadに対象SHAがない、または対象外の環境なら公開成功と判定しない。
+初回導入後、`gh workflow run 'DaySync Production Verify' --repo rikumonsters-maker/test-project --ref main -f expected_sha=<mainのSHA>` で main 上の信頼済みコードから `VERCEL_READ_TOKEN` の実際の読み取りを確認する。検証対象 SHA は実行時の最新 main と一致しなければ失敗する。Secret の値は表示せず、Actions のジョブ結果だけを見る。`deployment_status` のpayloadに対象SHAがない、または対象外の環境なら公開成功と判定しない。
 
 `workflow_dispatch` を自動マージ直後に呼ぶ方式は、GitHub の auto-merge が将来のチェック完了を待つ場合にマージコミットがまだ存在せず、単独では確実ではない。GitHub App の書き込みトークンなら `push` 連鎖を起動できるが、追加の高権限秘密鍵を要する。このため現段階では使わず、Vercel App の `deployment_status` と main 上の定期実行を採用する。定期実行にはGitHub側の遅延があり得るため、Productionの検証結果が出るまで公開成功と報告しない。
 
