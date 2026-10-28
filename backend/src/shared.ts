@@ -457,6 +457,57 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 	) });
 }
 
+async function namedBusySharing(db:D1Database, body:JsonRecord, user:SessionUser, method:string):Promise<Response> {
+	const member=await requireMembership(db,body,user);
+	if(!member)return jsonResponse({error:'グループにアクセスできません'},403);
+	if(method==='GET') {
+		const row=await db.prepare('SELECT enabled FROM group_named_busy_sharing WHERE group_id=? AND user_id=?')
+			.bind(member.group_id,user.id).first<{enabled:number}>();
+		return jsonResponse({enabled:row?.enabled===1});
+	}
+	if(typeof body.enabled!=='boolean')return jsonResponse({error:'共有設定が不正です'},400);
+	await db.prepare(`INSERT INTO group_named_busy_sharing(group_id,user_id,enabled,updated_at) VALUES(?,?,?,?)
+		ON CONFLICT(group_id,user_id) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at`)
+		.bind(member.group_id,user.id,body.enabled?1:0,new Date().toISOString()).run();
+	return jsonResponse({enabled:body.enabled});
+}
+
+async function memberTimeline(db:D1Database, body:JsonRecord, user:SessionUser):Promise<Response> {
+	const member=await requireMembership(db,body,user);
+	if(!member)return jsonResponse({error:'グループにアクセスできません'},403);
+	if(!validDate(body.date))return jsonResponse({error:'日付が不正です'},400);
+	const date=body.date;
+	const rows=await db.prepare(`SELECT m.id,m.user_id,COALESCE(u.display_name,m.display_name) AS name,
+		COALESCE(s.enabled,0) AS enabled FROM active_group_members m JOIN users u ON u.id=m.user_id
+		LEFT JOIN group_named_busy_sharing s ON s.group_id=m.group_id AND s.user_id=m.user_id
+		WHERE m.group_id=? ORDER BY m.created_at,m.id`).bind(member.group_id)
+		.all<{id:string;user_id:string;name:string;enabled:number}>();
+	const sharing=rows.results.filter(row=>row.enabled===1);
+	const months=[...new Set([date.slice(0,7),nextDate(date,-1).slice(0,7)])];
+	let hard=new Map<string,Map<string,[number,number][]>>(),tentative=new Map<string,Map<string,[number,number][]>>();
+	let unknown=new Map<string,Set<string>>();
+	if(sharing.length) {
+		const ids=sharing.map(row=>row.user_id);
+		({hard,tentative}=await loadAvailabilityDays(db,member.group_id,ids,date,date));
+		unknown=await unconfirmedByMonth(db,member.group_id,new Map(sharing.map(row=>[row.user_id,row.id])),months);
+	}
+	// Recheck membership and consent after the range queries, so a concurrent opt-out or departure cannot leak stale intervals.
+	const current=await db.prepare(`SELECT m.id,m.user_id,COALESCE(s.enabled,0) AS enabled FROM active_group_members m
+		LEFT JOIN group_named_busy_sharing s ON s.group_id=m.group_id AND s.user_id=m.user_id WHERE m.group_id=?`)
+		.bind(member.group_id).all<{id:string;user_id:string;enabled:number}>();
+	const state=new Map(current.results.map(row=>[row.user_id,row]));
+	if(!(await db.prepare('SELECT 1 FROM active_group_members WHERE id=? AND user_id=?').bind(member.member_id,user.id).first()))
+		return jsonResponse({error:'グループへのアクセスが変わりました'},409);
+	const members=rows.results.filter(row=>state.get(row.user_id)?.id===row.id).map(row=>{
+		const enabled=row.enabled===1&&state.get(row.user_id)?.enabled===1;
+		if(!enabled)return {name:row.name,sharing:false,status:'not_shared',busy:[],tentative:[]};
+		const uncertain=months.some(month=>unknown.get(month)?.has(row.user_id));
+		const intervals=(source:typeof hard)=>source.get(row.user_id)?.get(date)?.map(([start,end])=>({start:formatMinute(start),end:formatMinute(end),allDay:start===0&&end===1440}))||[];
+		return {name:row.name,sharing:true,status:uncertain?'unconfirmed':'registered_only',busy:intervals(hard),tentative:intervals(tentative)};
+	});
+	return jsonResponse({date,members});
+}
+
 async function availability(db: D1Database, body: JsonRecord, user: SessionUser): Promise<Response> {
 	const member = await requireMembership(db, body, user);
 	const targetUserId = stringValue(body.userId, 64);
@@ -526,10 +577,12 @@ async function searchAvailability(db:D1Database, body:JsonRecord, user:SessionUs
 			windowStart as number,windowEnd as number,excludePast && date===today?currentMinute:0)).map(([start,end])=>
 				({start:formatMinute(start),end:formatMinute(end),needsConfirmation:unknown.length>0}))});
 	}
-	return jsonResponse({startDate:first,endDate:last,durationMinutes:duration,minimumParticipants:minimum,days,
-		recommendations:rankAvailability(availability.hard,availability.tentative,userIds,days.map(day=>day.date),
-			duration as number,minimum as number,unknownByDate,5,windowStart as number,windowEnd as number,
-			excludePast?today:'',excludePast?currentMinute:0)});
+	const timelineSlots=rankAvailability(availability.hard,availability.tentative,userIds,days.map(day=>day.date),
+		duration as number,minimum as number,unknownByDate,700,windowStart as number,windowEnd as number,
+		excludePast?today:'',excludePast?currentMinute:0);
+	return jsonResponse({startDate:first,endDate:last,durationMinutes:duration,minimumParticipants:minimum,
+		days:days.map(day=>({...day,timelineSlots:timelineSlots.filter(slot=>slot.date===day.date).sort((a,b)=>a.start.localeCompare(b.start))})),
+		recommendations:timelineSlots.filter(slot=>slot.meetsMinimum).slice(0,5)});
 }
 
 async function syncCalendar(env: SharedEnv, ctx: ExecutionContext, body: JsonRecord, user: SessionUser): Promise<Response> {
@@ -723,6 +776,9 @@ export async function handleSharedRequest(request: Request, env: SharedEnv, ctx:
 		if (pathname === '/api/groups/leave') return await leaveGroup(env,ctx, body, user);
 		if (pathname === '/api/groups/delete') return await closeGroup(env.DB,body,user);
 		if (pathname === '/api/shared/events/list') return await listEvents(env.DB, body, user);
+		if (pathname === '/api/shared/named-busy/setting') return await namedBusySharing(env.DB,body,user,'GET');
+		if (pathname === '/api/shared/named-busy/update') return await namedBusySharing(env.DB,body,user,'POST');
+		if (pathname === '/api/shared/named-busy/timeline') return await memberTimeline(env.DB,body,user);
 		if (pathname === '/api/shared/availability') return await availability(env.DB, body, user);
 		if (pathname === '/api/shared/availability/search') return await searchAvailability(env.DB, body, user);
 		if (pathname === '/api/shared/calendar/sync') return await syncCalendar(env, ctx, body, user);

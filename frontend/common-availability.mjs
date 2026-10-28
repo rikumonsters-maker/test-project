@@ -1,4 +1,5 @@
 import {createAvailabilityRunner} from './common-availability-runner.mjs';
+import {renderAvailabilityCards} from './availability-presentation.mjs';
 
 const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value;
 const addDays=(value,days)=>new Date(Date.parse(`${value}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
@@ -49,7 +50,7 @@ export function initCommonAvailability({$,requestJson,activeGroup,getCurrentUser
   }
   const runner=createAvailabilityRunner({request:(query,signal)=>requestJson('/api/shared/availability/search',{payload:query,signal}),
     loading:()=>{setError();status.textContent='候補を計算しています…';results.replaceChildren();recommendations.replaceChildren();},
-    show:(data,query)=>{if(dialog.open&&activeGroup()?.groupId===query.groupId){lastSelection=query;render(data);}},
+    show:(data,query)=>{if(dialog.open&&activeGroup()?.groupId===query.groupId){lastSelection=query;renderCards(data,query);}},
     fail:cause=>{status.textContent='';clearView();setError(cause?.status===401||cause?.status===403?'このグループの空き時間を表示する権限がありません。':cause?.message||'候補を取得できませんでした。更新ボタンから再試行してください。');}});
   function render(data){
     results.replaceChildren();recommendations.replaceChildren();
@@ -68,6 +69,14 @@ export function initCommonAvailability({$,requestJson,activeGroup,getCurrentUser
       const summary=document.createElement('summary');summary.textContent=`${day.date}　${day.slots.length}件${day.unconfirmedUserIds.length?'・要確認':''}`;section.append(summary);
       if(day.unconfirmedUserIds.length){const caution=document.createElement('p');caution.className='common-availability-caution';caution.textContent=`空き時間が未確認: ${day.unconfirmedUserIds.map(id=>names.get(id)||'選択メンバー').join('、')}。本人に確認してください。`;section.append(caution);}
       const list=document.createElement('ul');list.className='common-availability-slots';for(const slot of day.slots){const row=document.createElement('li');row.textContent=`${slot.start}〜${slot.end}　${slot.needsConfirmation?'要確認':'登録済み予定では空き候補'}`;list.append(row);}section.append(list);results.append(section);}
+  }
+  function renderCards(data,query){
+    renderAvailabilityCards({data,query,recommendations,results,onSchedule:slot=>{
+      const selection=lastSelection;close();onSchedule?.({participantUserIds:selection?.userIds||[],
+        minimumParticipants:selection?.minimumParticipants||2,
+        options:[{date:slot.date,start:slot.start,end:slot.end}]});
+    }});
+    status.textContent=(data.days||[]).some(day=>day.slots?.length)?'登録済み予定の空き候補です。参加の承諾は本人に確認してください。':'条件に合う候補はありません。';
   }
   async function open(){const group=activeGroup();if(!group)return;runner.close();memberController?.abort();memberController=new AbortController();openedGroupId=group.groupId;runner.open(getCurrentUserId());
     const current=++memberGeneration;names.clear();members.replaceChildren();clearView();openedDate=tokyoToday();

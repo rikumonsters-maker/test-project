@@ -43,6 +43,21 @@ beforeAll(async()=>{
 });
 
 describe('common availability Phase 1',()=>{
+  it('keeps named busy intervals off until per-group consent and revokes them immediately',async()=>{
+    const endpoint='/api/shared/named-busy/timeline';
+    const before=await api(owner,endpoint,{groupId,date:day});
+    expect(before.status).toBe(200);
+    expect(before.data.members.find((row:any)=>row.name==='Member')).toMatchObject({sharing:false,busy:[]});
+    expect((await api(outsider,endpoint,{groupId,date:day})).status).toBe(403);
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:true})).status).toBe(200);
+    const enabled=await api(owner,endpoint,{groupId,date:day});
+    expect(enabled.data.members.find((row:any)=>row.name==='Member').sharing).toBe(true);
+    expect(JSON.stringify(enabled.data)).not.toContain('PRIVATE_SHARED_TITLE');
+    expect(JSON.stringify(enabled.data)).not.toContain('PRIVATE_SHARED_NOTE');
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(200);
+    expect((await api(owner,endpoint,{groupId,date:day})).data.members.find((row:any)=>row.name==='Member'))
+      .toMatchObject({sharing:false,busy:[]});
+  });
   it('rejects invalid ranges, durations, outsiders and departed members',async()=>{
     const ids=[owner.id,member.id];
     expect((await search(owner,ids,{endDate:'2030-10-16'})).status).toBe(400);

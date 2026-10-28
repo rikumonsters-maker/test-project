@@ -1,5 +1,6 @@
 import { canManageSharedEvent, initSharedEventEditor } from './shared-event-editor.mjs';
 import { initCommonAvailability } from './common-availability.mjs';
+import { initMemberTimeline } from './member-timeline.mjs';
 import { initSchedules } from './schedules.mjs';
 import { createInviteUrl } from './config.mjs';
 import { initReminderControls } from './reminder-controls.mjs';
@@ -52,6 +53,7 @@ export function initShared(app) {
   let wishClientRequestId = null;
   let sharedEventEditor = null;
   let commonAvailability = null;
+  const memberTimeline=initMemberTimeline({$,requestJson,activeGroup:()=>activeGroup()});
   let schedules = null;
   let sharedReminderControls = null;
   let sharedReminderEvent = null;
@@ -856,6 +858,7 @@ export function initShared(app) {
     renderSelectedDate();
   }
   function renderSelectedDate() {
+    if(activeGroup()&&!$("group-calendar-view").hidden)void memberTimeline.show(view.groupDate);
     const container = $("group-shared-events");
     container.replaceChildren();
     $("group-date").textContent = dateLabel.format(parseDate(view.groupDate));
