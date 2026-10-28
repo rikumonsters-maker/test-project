@@ -1,0 +1,29 @@
+name: DaySync Frontend Auto Merge
+on:
+  workflow_run:
+    workflows: [DaySync CI]
+    types: [completed]
+permissions:
+  contents: write
+  pull-requests: write
+  deployments: read
+  checks: read
+  statuses: read
+jobs:
+  arm:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      # This trusted workflow runs from main. Never checkout or execute PR code here.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/arm-frontend-auto-merge.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
