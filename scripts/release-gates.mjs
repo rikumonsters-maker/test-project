@@ -26,8 +26,31 @@ export async function previewFromVercel(sha,url,token,request=fetch) {
   const item = await vercelJson(`/v13/deployments/${encodeURIComponent(host)}?teamId=team_gy2kSXviLMPSR1WLoWaNhrks`,
     token, 'Preview deployment', request);
   const assigned = item.url === host || (Array.isArray(item.alias) && item.alias.includes(host));
-  return item.meta?.githubCommitSha === sha && assigned && item.state === 'READY' &&
-    (item.target === null || item.target === 'preview') &&
-    (item.project?.id === 'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q' ||
-      item.projectId === 'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q');
+  const statePresent = typeof item.state === 'string';
+  const readyStatePresent = typeof item.readyState === 'string';
+  const stateConflicts = statePresent && readyStatePresent && item.state !== item.readyState;
+  const requiredFieldsPresent = Boolean(typeof item.id === 'string' && typeof item.url === 'string' &&
+    typeof item.meta?.githubCommitSha === 'string' &&
+    (typeof item.project?.id === 'string' || typeof item.projectId === 'string') &&
+    Object.hasOwn(item,'target') && (statePresent || readyStatePresent));
+  const flags = {
+    projectMatches: item.project?.id === 'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q' ||
+      item.projectId === 'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q',
+    shaMatches: item.meta?.githubCommitSha === sha,
+    targetMatches: item.target === null || item.target === 'preview',
+    urlMatches: assigned,
+    stateMatches: item.state === 'READY',
+    readyStateMatches: item.readyState === 'READY',
+    requiredFieldsPresent,
+    stateConflicts,
+  };
+  console.log(`Preview verification flags: ${JSON.stringify(flags)}`);
+  if (!requiredFieldsPresent || stateConflicts) throw new Error('Preview response is incomplete or has conflicting states.');
+  if (!flags.projectMatches || !flags.shaMatches || !flags.targetMatches || !flags.urlMatches)
+    throw new Error('Preview deployment identity does not match the PR.');
+  const normalizedState = statePresent ? item.state : item.readyState;
+  if (!['READY','BUILDING','QUEUED','INITIALIZING','ERROR','CANCELED','BLOCKED'].includes(normalizedState))
+    throw new Error('Preview deployment has an unrecognized state.');
+  if (['ERROR','CANCELED','BLOCKED'].includes(normalizedState)) throw new Error('Preview deployment failed.');
+  return normalizedState === 'READY';
 }

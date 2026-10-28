@@ -30,14 +30,17 @@ test('main must report protected through the Contents-readable branch endpoint',
 test('Preview accepts its immutable URL and assigned branch alias only', async () => {
   const immutable='test-project-36lf4f3m7-fff-7e58.vercel.app';
   const branch='test-project-git-feature-example-fff-7e58.vercel.app';
-  const deployment={url:immutable,alias:[branch],target:null,state:'READY',
+  const deployment={id:'dpl_synthetic',url:immutable,alias:[branch],target:null,state:'READY',
     project:{id:'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q'},meta:{githubCommitSha:head}};
   const response=async()=>({ok:true,json:async()=>deployment});
   assert.equal(await previewFromVercel(head,`https://${immutable}/`,'synthetic',response),true);
   assert.equal(await previewFromVercel(head,`https://${branch}/`,'synthetic',response),true);
-  assert.equal(await previewFromVercel(head,'https://other.vercel.app/','synthetic',response),false);
-  assert.equal(await previewFromVercel('b'.repeat(40),`https://${branch}/`,'synthetic',response),false);
-  assert.equal(await previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,project:{id:'prj_other'}})})),false);
-  assert.equal(await previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,target:'production'})})),false);
-  assert.equal(await previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,target:undefined})})),false);
+  await assert.rejects(previewFromVercel(head,'https://other.vercel.app/','synthetic',response),/identity/);
+  await assert.rejects(previewFromVercel('b'.repeat(40),`https://${branch}/`,'synthetic',response),/identity/);
+  await assert.rejects(previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,project:{id:'prj_other'}})})),/identity/);
+  await assert.rejects(previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,target:'production'})})),/identity/);
+  await assert.rejects(previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,target:undefined})})),/identity/);
+  assert.equal(await previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,state:undefined,readyState:'READY'})})),true);
+  await assert.rejects(previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,readyState:'BUILDING'})})),/conflicting states/);
+  await assert.rejects(previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,meta:undefined})})),/incomplete/);
 });
