@@ -15,7 +15,7 @@ Vercel プロジェクト `test-project` の GitHub 連携を維持し、Product
 3. PowerShell 内での例：`& .\scripts\new-draft-pr.ps1 -Paths @('frontend/budget.js','frontend/style.css') -Title '変更の題名' -Summary '変更内容' -Risks '公開上のリスク' -CommitMessage '変更を説明するコミット'`。事前確認だけなら `-ValidateOnly` を使う。
 4. PR 本文と差分を確認する。Preview は本番 Worker に API を転送するため、本番データを変更する操作テストを行わない。iPhone 実機など自動化できない確認は未検証として記録する。
 
-`DaySync Frontend Auto Merge` は、同じリポジトリの `feature/` にある明示的に opt-in した Draft PR だけを対象とする。Frontend 以外の差分があれば停止する。CI 3件、Vercel Check、対象 SHA の Preview deployment の成功、main の保護を確認して Ready にし、`gh pr merge --auto --match-head-commit` を設定する。PR の head が変われば停止する。GitHub の保護を迂回しない。
+`DaySync Frontend Auto Merge` は、同じリポジトリの `feature/` にある明示的に opt-in した Draft PR だけを対象とする。Frontend 以外の差分があれば停止する。CI 3件、Vercel Check、対象 SHA の Preview deployment の成功を GitHub と Vercel API の両方で照合し、main の保護を確認して Ready にし、`gh pr merge --auto --match-head-commit` を設定する。Vercel API が401/403ならマージしない。PR の head が変われば停止する。GitHub の保護を迂回しない。
 
 ## Backend・D1 の変更
 
@@ -23,7 +23,11 @@ Backend、migration、Worker 設定、認証、プライバシー、通知、権
 
 ## マージ後
 
-Vercel の既存 GitHub 連携に Production deploy を任せ、二重デプロイしない。`DaySync Production Verify` は merge commit の SHA を使って Vercel Production が READY、同じ SHA、正式ドメイン `daysync-app.vercel.app` へ割り当て済み、HTTP 200 を確認する。失敗したらチェックを失敗として記録し、追加 deploy や Worker rollback を自動実行しない。認証済みの画面操作、実機確認、ログ監視は別途行い、未実施なら未検証と報告する。
+Vercel の既存 GitHub 連携に Production deploy を任せ、二重デプロイしない。`DaySync Production Verify` は merge commit の SHA を使って Vercel Production が READY、同じ SHA、正式ドメイン `daysync-app.vercel.app` へ割り当て済み、HTTP 200 を確認する。GitHub Actions の `GITHUB_TOKEN` によるマージ後は `push` ワークフローが起動しない場合があるため、Vercel App が発行する Production `deployment_status` と15分ごとの `schedule` を独立したトリガーとして使う。`workflow_dispatch` は信頼済み main のワークフローから Secret の認証を手動で検証するためにも用意する。失敗したらチェックを失敗として記録し、追加 deploy や Worker rollback を自動実行しない。認証済みの画面操作、実機確認、ログ監視は別途行い、未実施なら未検証と報告する。
+
+初回導入後、`gh workflow run 'DaySync Production Verify' --repo rikumonsters-maker/test-project --ref main -f expected_sha=<mainのSHA>` で main 上の信頼済みコードから `VERCEL_READ_TOKEN` の実際の読み取りを確認する。Secret の値は表示せず、Actions のジョブ結果だけを見る。`deployment_status` のpayloadに対象SHAがない、または対象外の環境なら公開成功と判定しない。
+
+`workflow_dispatch` を自動マージ直後に呼ぶ方式は、GitHub の auto-merge が将来のチェック完了を待つ場合にマージコミットがまだ存在せず、単独では確実ではない。GitHub App の書き込みトークンなら `push` 連鎖を起動できるが、追加の高権限秘密鍵を要する。このため現段階では使わず、Vercel App の `deployment_status` と main 上の定期実行を採用する。定期実行にはGitHub側の遅延があり得るため、Productionの検証結果が出るまで公開成功と報告しない。
 
 ## 失敗時の停止条件
 

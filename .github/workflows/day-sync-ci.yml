@@ -48,3 +48,4 @@ jobs:
         with:
           node-version: '24'
       - run: node scripts/check-pr-safety.mjs "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
+      - run: node --test scripts/*.test.mjs

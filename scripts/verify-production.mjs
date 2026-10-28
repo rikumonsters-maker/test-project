@@ -1,3 +1,5 @@
+import { exactProduction, verifiedProduction } from './production-gates.mjs';
+
 const sha=process.env.EXPECTED_SHA;
 const token=process.env.VERCEL_TOKEN;
 const project='prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q';
@@ -14,14 +16,14 @@ async function vercel(path) {
 let deployment;
 for(let attempt=0;attempt<60;attempt++) {
   const list=await vercel(`/v6/deployments?projectId=${project}&teamId=${team}&target=production&limit=10`);
-  deployment=(list.deployments||[]).find(item=>item.meta?.githubCommitSha===sha && item.target==='production');
+  deployment=exactProduction(list,sha);
   if (deployment?.state==='ERROR' || deployment?.state==='CANCELED') throw new Error('Production deployment failed.');
   if (deployment?.state==='READY') break;
   await sleep(10000);
 }
 if (deployment?.state!=='READY') throw new Error('Production did not become READY for the expected merge commit.');
 const detail=await vercel(`/v13/deployments/${encodeURIComponent(deployment.id)}?teamId=${team}`);
-if (detail.meta?.githubCommitSha!==sha || !detail.alias?.includes(domain))
+if (!verifiedProduction(detail,sha,domain))
   throw new Error('Production commit or official domain alias does not match the deployment.');
 const response=await fetch(`https://${domain}/`,{redirect:'follow'});
 if (response.status!==200) throw new Error(`Official domain returned HTTP ${response.status}`);
