@@ -451,6 +451,29 @@
           <article class="metric"><div class="metric-label">1日平均使用可能額</div><p class="metric-value"><span id="daily">—</span><small>円</small></p></article>
           <article class="metric"><div class="metric-label" id="expense-month-total-label">今月の支出合計</div><p class="metric-value"><span id="expense-month-total">¥0</span></p></article>
         </div>
+        <section class="card expense-charts" aria-labelledby="expense-charts-title">
+          <h3 id="expense-charts-title">支出の見える化</h3>
+          <p class="card-description">記録済みの支出から集計します。カテゴリや月の金額は一覧でも確認できます。</p>
+          <div class="expense-chart-grid">
+            <div class="expense-chart-section">
+              <h4>カテゴリ別の内訳</h4>
+              <div class="expense-donut-wrap">
+                <svg id="expense-donut" viewBox="0 0 128 128" role="img" aria-label="カテゴリ別支出"></svg>
+                <div class="expense-donut-center"><small>支出合計</small><strong id="expense-donut-total">¥0</strong></div>
+              </div>
+              <p id="expense-chart-empty" class="chart-note">この月の支出記録はありません。</p>
+              <ul id="expense-category-chart-list" class="chart-category-list" aria-label="カテゴリ別の金額と割合"></ul>
+            </div>
+            <div class="expense-chart-section">
+              <h4>直近6か月の支出</h4>
+              <ul id="expense-trend-bars" class="chart-trend" aria-label="月別の記録済み支出"></ul>
+              <h4>収入見込みと支出</h4>
+              <div class="chart-comparison-values"><span>収入見込み <strong id="expense-income-forecast">未設定</strong></span><span>記録済み支出 <strong id="expense-income-spent">¥0</strong></span></div>
+              <div id="expense-income-comparison" class="chart-comparison" aria-hidden="true" hidden><span id="expense-income-bar" class="chart-income-bar"></span><span id="expense-spent-bar" class="chart-spent-bar"></span></div>
+              <p id="expense-income-note" class="chart-note">収入見込みは未設定です。</p>
+            </div>
+          </div>
+        </section>
         <div class="layout-two">
           <article class="card calendar-card">
             <div class="month-bar">
