@@ -31,6 +31,12 @@ Vercel の既存 GitHub 連携に Production deploy を任せ、二重デプロ�
 
 ## 失敗時の停止条件
 
+### Vercel API が 404 を返した場合
+
+Production 検証は対象 Project を `GET /v9/projects/{projectId}` で読み、`latestDeployment` を `GET /v13/deployments/{id}` で取得する。Preview は GitHub の deployment status に記録された URL を使い、同じ単一 Deployment API で確認する。Team 全体の Deployment 一覧へのアクセスは要求しない。HTTP エラー時は呼び出し段階とステータスだけを Actions ログに記録し、トークンやレスポンス本文は記録しない。
+
+Secret の実 API 読み取りは、修正 PR が main に入った後で、main の `DaySync Production Verify` を `workflow_dispatch` して確認する。Project 読み取りが 404 の場合は Vercel のトークンの対象 Team が `fff-7e58` か、Project `test-project` の読み取り権限があるかをダッシュボードで確認する。Deployment 読み取りだけが 404 の場合は Deployment の読み取り権限を確認する。いずれも、認証が成功するまで Frontend の自動マージを有効と判定しない。権限を広げる場合は必要な読み取り範囲だけを選び、Secret を GitHub 上で更新して同じ dispatch を再実行する。
+
 - テスト、型チェック、dry-run、秘密情報のパス検査の失敗
 - PR head の変更、merge conflict、チェック失敗・未確認、Preview の不一致
 - main 保護の欠落、GitHub/Vercel 権限不足

@@ -32,7 +32,8 @@ test('main protection requires pinned CI and Vercel app sources', () => {
 test('Vercel authentication error and wrong Preview SHA fail the gate', async () => {
   const url='https://preview.example.vercel.app/';
   await assert.rejects(previewFromVercel(head,url,'synthetic',async()=>({ok:false,status:401})),/HTTP 401/);
-  const response=async()=>({ok:true,json:async()=>({deployments:[{url:'preview.example.vercel.app',target:null,state:'READY',meta:{githubCommitSha:'b'.repeat(40)}}]})});
+  const response=async()=>({ok:true,json:async()=>({url:'preview.example.vercel.app',target:null,state:'READY',
+    project:{id:'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q'},meta:{githubCommitSha:'b'.repeat(40)}})});
   assert.equal(await previewFromVercel(head,url,'synthetic',response),false);
   assert.equal(await previewFromVercel('b'.repeat(40),url,'synthetic',response),true);
 });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { exactProduction, verifiedProduction } from './production-gates.mjs';
+import { exactProduction, currentProjectDeploymentId, verifiedProduction } from './production-gates.mjs';
 
 const sha='a'.repeat(40);
 const domain='daysync-app.vercel.app';
@@ -14,4 +14,10 @@ test('deployment detail must be READY target SHA and official domain', () => {
   assert.equal(verifiedProduction(detail,sha,domain),true);
   assert.equal(verifiedProduction({...detail,target:'preview'},sha,domain),false);
   assert.equal(verifiedProduction({...detail,alias:['other.example']},sha,domain),false);
+});
+test('project-scoped lookup rejects wrong project or team', () => {
+  const current={id:'prj_expected',accountId:'team_expected',latestDeployment:{id:'dpl_latest'}};
+  assert.equal(currentProjectDeploymentId(current,'prj_expected','team_expected'),'dpl_latest');
+  assert.throws(()=>currentProjectDeploymentId(current,'prj_other','team_expected'));
+  assert.throws(()=>currentProjectDeploymentId(current,'prj_expected','team_other'));
 });

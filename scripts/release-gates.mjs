@@ -22,11 +22,12 @@ export function mainProtected(protection) {
 }
 
 export async function previewFromVercel(sha,url,token,request=fetch) {
-  const response = await request('https://api.vercel.com/v6/deployments?projectId=prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q&teamId=team_gy2kSXviLMPSR1WLoWaNhrks&limit=20',
-    { headers:{ Authorization:`Bearer ${token}` } });
-  if (!response.ok) throw new Error(`Vercel Preview read API returned HTTP ${response.status}`);
-  const data = await response.json();
   const host = new URL(url).hostname;
-  return (data.deployments || []).some(item => item.meta?.githubCommitSha === sha &&
-    item.url === host && item.state === 'READY' && item.target !== 'production');
+  const response = await request(`https://api.vercel.com/v13/deployments/${encodeURIComponent(host)}?teamId=team_gy2kSXviLMPSR1WLoWaNhrks`,
+    { headers:{ Authorization:`Bearer ${token}` } });
+  if (!response.ok) throw new Error(`Vercel Preview deployment read returned HTTP ${response.status}`);
+  const item = await response.json();
+  return item.meta?.githubCommitSha === sha && item.url === host && item.state === 'READY' &&
+    item.target !== 'production' && (item.project?.id === 'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q' ||
+      item.projectId === 'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q');
 }
