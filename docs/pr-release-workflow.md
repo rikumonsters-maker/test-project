@@ -35,6 +35,8 @@ Vercel の既存 GitHub 連携に Production deploy を任せ、二重デプロ�
 
 Production 検証は対象 Project を `GET /v9/projects/{projectId}` で読み、Team の所属を照合した後、正式ドメイン `daysync-app.vercel.app` を `GET /v13/deployments/{idOrUrl}` に指定して現在割り当てられた Production を直接取得する。`latestDeployment` は Preview の場合があるため判定に使わない。Preview は GitHub の deployment status に記録された URL を使い、単一 Deployment API で取得する。Deployment 固有 URL または返却された alias との完全一致に加え、Project、SHA、READY、非 Production を確認する。Team 全体の Deployment 一覧へのアクセスは要求しない。HTTP エラー時は呼び出し段階とステータスだけを Actions ログに記録し、トークンやレスポンス本文は記録しない。
 
+Production の状態は `state` または `readyState` を確認する。両方ある場合は一致を要求する。必須フィールドの欠落・状態の矛盾・Project/target/alias の不一致は即時失敗し、Actions には照合結果の真偽値だけを記録する。SHA がまだ旧コミットを指す場合だけ一定時間待ち、対象 SHA の READY が確認できなければ失敗する。
+
 Secret の実 API 読み取りは、修正 PR が main に入った後で、main の `DaySync Production Verify` を `workflow_dispatch` して確認する。Project 読み取りが 404 の場合は Vercel のトークンの対象 Team が `fff-7e58` か、Project `test-project` の読み取り権限があるかをダッシュボードで確認する。Deployment 読み取りだけが 404 の場合は Deployment の読み取り権限を確認する。いずれも、認証が成功するまで Frontend の自動マージを有効と判定しない。権限を広げる場合は必要な読み取り範囲だけを選び、Secret を GitHub 上で更新して同じ dispatch を再実行する。
 
 - テスト、型チェック、dry-run、秘密情報のパス検査の失敗

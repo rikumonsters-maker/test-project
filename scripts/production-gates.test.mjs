@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { projectAccountMatches, readProductionDomain, verifiedProduction } from './production-gates.mjs';
+import { inspectProduction, productionDecision, projectAccountMatches, readProductionDomain, verifiedProduction } from './production-gates.mjs';
 
 const sha='a'.repeat(40);
 const domain='daysync-app.vercel.app';
@@ -31,4 +31,34 @@ test('project lookup rejects wrong project or team', () => {
   const current={id:project,accountId:team};
   assert.throws(()=>projectAccountMatches(current,'prj_other',team));
   assert.throws(()=>projectAccountMatches(current,project,'team_other'));
+});
+
+test('state and readyState variants preserve strict Production matching', () => {
+  const base={id:'dpl_expected',project:{id:project},target:'production',
+    meta:{githubCommitSha:sha},alias:[domain]};
+  assert.equal(verifiedProduction({...base,state:'READY'},sha,domain,project),true);
+  assert.equal(verifiedProduction({...base,readyState:'READY'},sha,domain,project),true);
+  assert.equal(verifiedProduction({...base,state:'READY',readyState:'READY'},sha,domain,project),true);
+  const conflict=inspectProduction({...base,state:'BUILDING',readyState:'READY'},sha,domain,project);
+  assert.equal(conflict.stateConflicts,true);
+  assert.equal(verifiedProduction({...base,state:'BUILDING',readyState:'READY'},sha,domain,project),false);
+  assert.equal(verifiedProduction({...base,state:'READY',readyState:'BUILDING'},sha,domain,project),false);
+  assert.throws(()=>productionDecision(conflict),/conflicting states/);
+  assert.equal(productionDecision(inspectProduction({...base,readyState:'READY'},sha,domain,project)),'ready');
+  assert.equal(productionDecision(inspectProduction({...base,state:'BUILDING'},sha,domain,project)),'retry');
+});
+
+test('missing required fields and mismatched identity cannot be READY', () => {
+  const base={id:'dpl_expected',project:{id:project},target:'production',state:'READY',
+    meta:{githubCommitSha:sha},alias:[domain]};
+  for (const detail of [
+    {...base,meta:undefined}, {...base,alias:undefined}, {...base,state:undefined},
+    {...base,project:{id:'prj_wrong'}}, {...base,meta:{githubCommitSha:'b'.repeat(40)}},
+    {...base,target:null},
+  ]) assert.equal(verifiedProduction(detail,sha,domain,project),false);
+  assert.equal(inspectProduction({...base,meta:undefined},sha,domain,project).requiredFieldsPresent,false);
+  assert.equal(inspectProduction({...base,alias:undefined},sha,domain,project).requiredFieldsPresent,false);
+  assert.throws(()=>productionDecision(inspectProduction({...base,alias:undefined},sha,domain,project)),/incomplete/);
+  assert.throws(()=>productionDecision(inspectProduction({...base,meta:undefined},sha,domain,project)),/incomplete/);
+  assert.throws(()=>productionDecision(inspectProduction({...base,project:{id:'prj_wrong'}},sha,domain,project)),/expected Production project/);
 });

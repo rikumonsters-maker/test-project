@@ -1,4 +1,4 @@
-import { projectAccountMatches, readProductionDomain, verifiedProduction } from './production-gates.mjs';
+import { inspectProduction, productionDecision, projectAccountMatches, readProductionDomain, verifiedProduction } from './production-gates.mjs';
 import { vercelJson } from './vercel-read.mjs';
 
 const sha=process.env.EXPECTED_SHA;
@@ -10,16 +10,30 @@ if (!/^[0-9a-f]{40}$/.test(sha || '')) throw new Error('Expected merge commit SH
 if (!token) throw new Error('VERCEL_READ_TOKEN is not configured; exact deployment and domain assignment cannot be verified.');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const current=await vercelJson(`/v9/projects/${project}?teamId=${team}`,token,'project');
+console.log(`Vercel project flags: ${JSON.stringify({
+  projectMatches:current.id===project,
+  teamMatches:current.accountId===team,
+})}`);
 projectAccountMatches(current,project,team);
 let deployment;
+let lastDiagnostic;
 for(let attempt=0;attempt<60;attempt++) {
   // latestDeployment may be a Preview. Resolve the official Production alias directly.
   deployment=await readProductionDomain(domain,team,token);
-  if (deployment.project?.id!==project || deployment.target!=='production')
-    throw new Error('Official domain did not resolve to the expected Production project.');
-  if (deployment.meta?.githubCommitSha===sha && ['ERROR','CANCELED'].includes(deployment.state))
-    throw new Error('Production deployment failed.');
-  if (verifiedProduction(deployment,sha,domain,project)) break;
+  const result=inspectProduction(deployment,sha,domain,project);
+  const diagnostic=JSON.stringify({
+    projectMatches:result.projectMatches,
+    teamMatches:true, // The project endpoint's accountId was checked above.
+    shaMatches:result.shaMatches,
+    targetMatches:result.targetMatches,
+    stateMatches:result.stateMatches,
+    readyStateMatches:result.readyStateMatches,
+    aliasMatches:result.aliasMatches,
+    requiredFieldsPresent:result.requiredFieldsPresent,
+    stateConflicts:result.stateConflicts,
+  });
+  if (diagnostic!==lastDiagnostic) { console.log(`Production verification flags: ${diagnostic}`); lastDiagnostic=diagnostic; }
+  if (productionDecision(result)==='ready') break;
   await sleep(10000);
 }
 if (!verifiedProduction(deployment,sha,domain,project))
