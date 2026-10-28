@@ -17,6 +17,8 @@ Vercel プロジェクト `test-project` の GitHub 連携を維持し、Product
 
 `DaySync Frontend Auto Merge` は、同じリポジトリの `feature/` にある明示的に opt-in した Draft PR だけを対象とする。Frontend 以外の差分があれば停止する。CI 3件、Vercel Check、対象 SHA の Preview deployment の成功を GitHub と Vercel API の両方で照合し、main の保護を確認して Ready にし、`gh pr merge --auto --match-head-commit` を設定する。Vercel API が401/403ならマージしない。PR の head が変われば停止する。GitHub の保護を迂回しない。
 
+`GITHUB_TOKEN` には branch protection の詳細を読む Administration 権限がない。自動化は Contents 読み取りで取得できる main の `protected` を確認し、CI 3件と Vercel Check を別途確認する。最終的な必須チェック・レビュー・最新 main への追従は GitHub の保護付き `--auto` に強制させる。詳細保護設定の管理・変更はこのワークフローで行わない。
+
 ## Backend・D1 の変更
 
 Backend、migration、Worker 設定、認証、プライバシー、通知、権限の変更は自動マージ対象外。まず本番 Worker・D1 と候補コードを照合し、旧 Frontend との互換性、migration の対象 SQL と順序、ロールバック可能性を確認する。D1 migration `0011` を意図せず適用しない。0018 非対応 Worker へ戻さない。データ削除、破壊的 migration、公開範囲の拡大、同意変更が必要なら公開を停止する。安全な Worker 先行公開などが確立した変更だけを、別途検証済みの手順で進める。

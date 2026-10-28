@@ -15,12 +15,10 @@ export function checkGate(checks) {
   return REQUIRED_CHECKS.every(name => passed.has(name)) ? 'ready' : 'pending';
 }
 
-export function mainProtected(protection) {
-  const status = protection.required_status_checks;
-  const required = new Set(status?.contexts || []);
-  const sources = new Map((status?.checks || []).map(check => [check.context,check.app_id]));
-  return Boolean(protection.enforce_admins?.enabled && protection.required_pull_request_reviews && status?.strict &&
-    REQUIRED_CHECKS.every(name => required.has(name) && sources.get(name) === (name === 'Vercel' ? 8329 : 15368)));
+export function mainProtected(branch) {
+  // GITHUB_TOKEN has Contents read, but not Administration read for /protection.
+  // GitHub itself enforces required checks and reviews when --auto is armed.
+  return branch.protected === true && /^[0-9a-f]{40}$/.test(branch.commit?.sha || '');
 }
 
 export async function previewFromVercel(sha,url,token,request=fetch) {
