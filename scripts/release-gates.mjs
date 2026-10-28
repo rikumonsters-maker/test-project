@@ -29,6 +29,7 @@ export async function previewFromVercel(sha,url,token,request=fetch) {
     token, 'Preview deployment', request);
   const assigned = item.url === host || (Array.isArray(item.alias) && item.alias.includes(host));
   return item.meta?.githubCommitSha === sha && assigned && item.state === 'READY' &&
-    item.target !== 'production' && (item.project?.id === 'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q' ||
+    (item.target === null || item.target === 'preview') &&
+    (item.project?.id === 'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q' ||
       item.projectId === 'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q');
 }

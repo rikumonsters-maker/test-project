@@ -41,4 +41,5 @@ test('Preview accepts its immutable URL and assigned branch alias only', async (
   assert.equal(await previewFromVercel('b'.repeat(40),`https://${branch}/`,'synthetic',response),false);
   assert.equal(await previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,project:{id:'prj_other'}})})),false);
   assert.equal(await previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,target:'production'})})),false);
+  assert.equal(await previewFromVercel(head,`https://${branch}/`,'synthetic',async()=>({ok:true,json:async()=>({...deployment,target:undefined})})),false);
 });
