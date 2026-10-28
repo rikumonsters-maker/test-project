@@ -21,6 +21,7 @@ if (!files.length || files.some(file => !file.startsWith('frontend/'))) {
   console.log('Backend, migration, settings, or non-frontend files require a separate release gate.');
   process.exit(0);
 }
+if (!process.env.VERCEL_READ_TOKEN) throw new Error('Production verification secret is missing; auto-merge is stopped.');
 const protection = JSON.parse(gh('api',`repos/${repo}/branches/main/protection`));
 const required = new Set(protection.required_status_checks?.contexts || []);
 const needed = ['day-sync-frontend','day-sync-backend','day-sync-security','Vercel'];

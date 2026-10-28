@@ -25,5 +25,6 @@ jobs:
       - run: node scripts/arm-frontend-auto-merge.mjs
         env:
           GH_TOKEN: ${{ github.token }}
+          VERCEL_READ_TOKEN: ${{ secrets.VERCEL_READ_TOKEN }}
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
           RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}

@@ -6,7 +6,7 @@
 
 GitHub の `main` 保護には pull request 必須、管理者にも適用、最新 main への追従、少なくとも `day-sync-frontend`、`day-sync-backend`、`day-sync-security`、`Vercel` の成功を要求する。保護がない状態では `gh pr merge --auto` を呼ばない。
 
-Vercel プロジェクト `test-project` の GitHub 連携を維持し、Production branch は `main`、Root Directory は `frontend` とする。Production 用の `VERCEL_READ_TOKEN` は GitHub Actions Secret としてのみ保存し、Vercel の Deployment とドメインを読み取れる最小権限にする。値をソース、コマンド引数、ログへ記録しない。
+Vercel プロジェクト `test-project` の GitHub 連携を維持し、Production branch は `main`、Root Directory は `frontend` とする。Production 用の `VERCEL_READ_TOKEN` は GitHub Actions Secret としてのみ保存し、Vercel の Deployment とドメインを読み取れる最小権限にする。値をソース、コマンド引数、ログへ記録しない。Secret 名が未設定なら自動マージは停止する。
 
 ## 機能開発を終えたとき
 
