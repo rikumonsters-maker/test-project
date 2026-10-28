@@ -1,11 +1,11 @@
 {
   "required_status_checks": {
     "strict": true,
-    "contexts": [
-      "day-sync-frontend",
-      "day-sync-backend",
-      "day-sync-security",
-      "Vercel"
+    "checks": [
+      { "context": "day-sync-frontend", "app_id": 15368 },
+      { "context": "day-sync-backend", "app_id": 15368 },
+      { "context": "day-sync-security", "app_id": 15368 },
+      { "context": "Vercel", "app_id": 8329 }
     ]
   },
   "enforce_admins": true,
