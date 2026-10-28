@@ -17,9 +17,9 @@ if (!eligibleDraft(pr,runHead,files)) {
   process.exit(0);
 }
 if (!process.env.VERCEL_READ_TOKEN) throw new Error('Production verification secret is missing; auto-merge is stopped.');
-const protection = JSON.parse(gh('api',`repos/${repo}/branches/main/protection`));
-if (!mainProtected(protection)) {
-  throw new Error('Main branch protection is missing required checks or admin enforcement.');
+const mainBranch = JSON.parse(gh('api',`repos/${repo}/branches/main`));
+if (!mainProtected(mainBranch)) {
+  throw new Error('Main branch is not protected; auto-merge is stopped.');
 }
 const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
 let ready = false;

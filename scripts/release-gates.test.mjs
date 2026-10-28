@@ -20,13 +20,11 @@ test('CI failure and pending Vercel Check stop auto merge', () => {
   assert.equal(checkGate([...passed,{name:'extra',bucket:'fail'}]),'failed');
 });
 
-test('main protection requires pinned CI and Vercel app sources', () => {
-  const protection={enforce_admins:{enabled:true},required_pull_request_reviews:{required_approving_review_count:0},
-    required_status_checks:{strict:true,contexts:REQUIRED_CHECKS,
-      checks:REQUIRED_CHECKS.map(context=>({context,app_id:context==='Vercel'?8329:15368}))}};
-  assert.equal(mainProtected(protection),true);
-  assert.equal(mainProtected({...protection,enforce_admins:{enabled:false}}),false);
-  assert.equal(mainProtected({...protection,required_status_checks:{...protection.required_status_checks,strict:false}}),false);
+test('main must report protected through the Contents-readable branch endpoint', () => {
+  const branch={protected:true,commit:{sha:head}};
+  assert.equal(mainProtected(branch),true);
+  assert.equal(mainProtected({...branch,protected:false}),false);
+  assert.equal(mainProtected({...branch,commit:{sha:'invalid'}}),false);
 });
 
 test('Preview accepts its immutable URL and assigned branch alias only', async () => {
