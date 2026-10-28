@@ -1,5 +1,7 @@
 # DaySync 開発プロジェクト
 
+現在のPR作成、Frontend自動マージ、本番反映後の確認手順は [docs/pr-release-workflow.md](docs/pr-release-workflow.md) を参照してください。以下は初期統合時の記録であり、現行の本番設定を表すものではありません。
+
 このフォルダは Frontend と Cloudflare Worker Backend を一緒に開発するための作業ツリーです。Git の基点は 2026-10-20 に確認した GitHub `main` の `945a7617a4ebca3bfd90170956ec26b11537ca74` です。統合作業は未コミットです。
 
 ## 構成
