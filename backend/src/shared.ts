@@ -461,14 +461,14 @@ async function namedBusySharing(db:D1Database, body:JsonRecord, user:SessionUser
 	const member=await requireMembership(db,body,user);
 	if(!member)return jsonResponse({error:'グループにアクセスできません'},403);
 	if(method==='GET') {
-		const row=await db.prepare('SELECT enabled FROM group_named_busy_sharing WHERE group_id=? AND user_id=?')
-			.bind(member.group_id,user.id).first<{enabled:number}>();
+		const row=await db.prepare('SELECT enabled FROM group_named_busy_sharing WHERE member_id=?')
+			.bind(member.member_id).first<{enabled:number}>();
 		return jsonResponse({enabled:row?.enabled===1});
 	}
 	if(typeof body.enabled!=='boolean')return jsonResponse({error:'共有設定が不正です'},400);
-	await db.prepare(`INSERT INTO group_named_busy_sharing(group_id,user_id,enabled,updated_at) VALUES(?,?,?,?)
-		ON CONFLICT(group_id,user_id) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at`)
-		.bind(member.group_id,user.id,body.enabled?1:0,new Date().toISOString()).run();
+	await db.prepare(`INSERT INTO group_named_busy_sharing(member_id,enabled,updated_at) VALUES(?,?,?)
+		ON CONFLICT(member_id) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at`)
+		.bind(member.member_id,body.enabled?1:0,new Date().toISOString()).run();
 	return jsonResponse({enabled:body.enabled});
 }
 
@@ -479,7 +479,7 @@ async function memberTimeline(db:D1Database, body:JsonRecord, user:SessionUser):
 	const date=body.date;
 	const rows=await db.prepare(`SELECT m.id,m.user_id,COALESCE(u.display_name,m.display_name) AS name,
 		COALESCE(s.enabled,0) AS enabled FROM active_group_members m JOIN users u ON u.id=m.user_id
-		LEFT JOIN group_named_busy_sharing s ON s.group_id=m.group_id AND s.user_id=m.user_id
+		LEFT JOIN group_named_busy_sharing s ON s.member_id=m.id
 		WHERE m.group_id=? ORDER BY m.created_at,m.id`).bind(member.group_id)
 		.all<{id:string;user_id:string;name:string;enabled:number}>();
 	const sharing=rows.results.filter(row=>row.enabled===1);
@@ -493,7 +493,7 @@ async function memberTimeline(db:D1Database, body:JsonRecord, user:SessionUser):
 	}
 	// Recheck membership and consent after the range queries, so a concurrent opt-out or departure cannot leak stale intervals.
 	const current=await db.prepare(`SELECT m.id,m.user_id,COALESCE(s.enabled,0) AS enabled FROM active_group_members m
-		LEFT JOIN group_named_busy_sharing s ON s.group_id=m.group_id AND s.user_id=m.user_id WHERE m.group_id=?`)
+		LEFT JOIN group_named_busy_sharing s ON s.member_id=m.id WHERE m.group_id=?`)
 		.bind(member.group_id).all<{id:string;user_id:string;enabled:number}>();
 	const state=new Map(current.results.map(row=>[row.user_id,row]));
 	if(!(await db.prepare('SELECT 1 FROM active_group_members WHERE id=? AND user_id=?').bind(member.member_id,user.id).first()))

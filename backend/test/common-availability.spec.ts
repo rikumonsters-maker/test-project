@@ -122,6 +122,7 @@ describe('common availability Phase 1',()=>{
   });
 
   it('does not expose a departed member or revive old coverage on rejoin',async()=>{
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:true})).status).toBe(200);
     await db.prepare('UPDATE group_members SET left_at=?1,departed_user_id=user_id,user_id=NULL WHERE id=?2')
       .bind('2030-10-03',memberId).run();
     expect((await search(owner,[owner.id,member.id])).status).toBe(403);
@@ -132,5 +133,7 @@ describe('common availability Phase 1',()=>{
     const after=await search(owner,[owner.id,member.id]);
     expect(after.status).toBe(200);
     expect(after.data.days[0].unconfirmedUserIds).toEqual([member.id]);
+    expect((await api(owner,'/api/shared/named-busy/timeline',{groupId,date:day})).data.members
+      .find((row:any)=>row.name==='Member')).toMatchObject({sharing:false,busy:[]});
   });
 });
