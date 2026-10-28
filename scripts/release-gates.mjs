@@ -1,3 +1,5 @@
+import { vercelJson } from './vercel-read.mjs';
+
 export const REQUIRED_CHECKS = ['day-sync-frontend','day-sync-backend','day-sync-security','Vercel'];
 
 export function eligibleDraft(pr,runHead,files) {
@@ -22,11 +24,12 @@ export function mainProtected(protection) {
 }
 
 export async function previewFromVercel(sha,url,token,request=fetch) {
-  const response = await request('https://api.vercel.com/v6/deployments?projectId=prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q&teamId=team_gy2kSXviLMPSR1WLoWaNhrks&limit=20',
-    { headers:{ Authorization:`Bearer ${token}` } });
-  if (!response.ok) throw new Error(`Vercel Preview read API returned HTTP ${response.status}`);
-  const data = await response.json();
   const host = new URL(url).hostname;
-  return (data.deployments || []).some(item => item.meta?.githubCommitSha === sha &&
-    item.url === host && item.state === 'READY' && item.target !== 'production');
+  const item = await vercelJson(`/v13/deployments/${encodeURIComponent(host)}?teamId=team_gy2kSXviLMPSR1WLoWaNhrks`,
+    token, 'Preview deployment', request);
+  const assigned = item.url === host || (Array.isArray(item.alias) && item.alias.includes(host));
+  return item.meta?.githubCommitSha === sha && assigned && item.state === 'READY' &&
+    (item.target === null || item.target === 'preview') &&
+    (item.project?.id === 'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q' ||
+      item.projectId === 'prj_kcPA0cRQ96Wqtw3gNJSywQAOTC0q');
 }
