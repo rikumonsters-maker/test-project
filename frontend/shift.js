@@ -1,3 +1,5 @@
+import { shiftIncomeForMonth } from "./budget-charts.mjs";
+
 export function initShift(app) {
   const { $, state, view, dateKey, parseDate, formatMoney, formatHours, changeMonth, status, postJson, renderMonthCalendar, bindTimeInput } = app;
 
@@ -69,7 +71,7 @@ export function initShift(app) {
       const result = await postJson("/api/wage", { hourly:Number(hourly), hours:minutes / 60 });
       if (request !== view.wageRequest) return;
       view.wageEstimate = Number(result.wage);
-      if (state.incomeMode === "auto") $("income").value = String(Math.round(view.wageEstimate));
+      if (state.incomeMode === "auto") $("income").value = String(Math.round(shiftIncomeForMonth(state.shifts,state.hourly,view.budgetMonth) || 0));
       renderSummary();
       status($("wage-status"), "safe", "✓", "予想給料を計算しました", "今月のシフト合計を反映しています。");
       app.scheduleBudget?.();
