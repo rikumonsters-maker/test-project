@@ -23,6 +23,7 @@ if (!mainProtected(mainBranch)) {
 }
 const sleep = ms => new Promise(resolve => setTimeout(resolve,ms));
 let ready = false;
+let lastGateFlags;
 for (let attempt=0;attempt<60;attempt++) {
   const fresh = JSON.parse(gh('pr','view',String(prNumber),'-R',repo,'--json','headRefOid,state,isDraft'));
   if (fresh.headRefOid !== runHead || fresh.state !== 'OPEN' || !fresh.isDraft) throw new Error('PR changed during verification.');
@@ -32,11 +33,17 @@ for (let attempt=0;attempt<60;attempt++) {
   const checksPassed=gate === 'ready';
   const deployments = JSON.parse(gh('api',`repos/${repo}/deployments?sha=${runHead}&per_page=20`));
   let previewReady = false;
-  for (const deployment of deployments.filter(item => item.environment === 'Preview' && item.sha === runHead)) {
+  let successfulStatusFound = false;
+  const matchingDeployments=deployments.filter(item => item.environment === 'Preview' && item.sha === runHead);
+  for (const deployment of matchingDeployments) {
     const statuses = JSON.parse(gh('api',`repos/${repo}/deployments/${deployment.id}/statuses?per_page=1`));
-    if (statuses[0]?.state === 'success' && statuses[0]?.environment_url && checksPassed)
+    if (statuses[0]?.state === 'success' && statuses[0]?.environment_url && checksPassed) {
+      successfulStatusFound = true;
       previewReady = await previewFromVercel(runHead,statuses[0].environment_url,process.env.VERCEL_READ_TOKEN);
+    }
   }
+  const gateFlags=JSON.stringify({checksPassed,matchingDeploymentFound:matchingDeployments.length>0,successfulStatusFound,previewReady});
+  if (gateFlags!==lastGateFlags) { console.log(`Auto-merge gate flags: ${gateFlags}`); lastGateFlags=gateFlags; }
   if (checksPassed && previewReady) { ready=true; break; }
   await sleep(10000);
 }

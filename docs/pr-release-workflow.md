@@ -19,6 +19,8 @@ Vercel プロジェクト `test-project` の GitHub 連携を維持し、Product
 
 `GITHUB_TOKEN` には branch protection の詳細を読む Administration 権限がない。自動化は Contents 読み取りで取得できる main の `protected` を確認し、CI 3件と Vercel Check を別途確認する。最終的な必須チェック・レビュー・最新 main への追従は GitHub の保護付き `--auto` に強制させる。詳細保護設定の管理・変更はこのワークフローで行わない。
 
+Preview の Vercel 応答は `state` と `readyState` のいずれかで READY を確認し、両方ある場合は一致を要求する。Project、SHA、target、URL、必須フィールドの不一致は即時停止する。CI が完了しても Ready に進まない場合、Actions ログにはチェック・GitHub Deployment・Preview 照合の真偽値だけを記録する。トークン、ヘッダー、レスポンス本文、URL は診断ログに含めない。
+
 ## Backend・D1 の変更
 
 Backend、migration、Worker 設定、認証、プライバシー、通知、権限の変更は自動マージ対象外。まず本番 Worker・D1 と候補コードを照合し、旧 Frontend との互換性、migration の対象 SQL と順序、ロールバック可能性を確認する。D1 migration `0011` を意図せず適用しない。0018 非対応 Worker へ戻さない。データ削除、破壊的 migration、公開範囲の拡大、同意変更が必要なら公開を停止する。安全な Worker 先行公開などが確立した変更だけを、別途検証済みの手順で進める。
