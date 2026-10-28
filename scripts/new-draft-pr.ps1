@@ -37,7 +37,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Existing staged changes must be reviewed separately.' }
   foreach ($path in $Paths) {
     if ([IO.Path]::IsPathRooted($path) -or $path -match '(^|[\\/])\.\.?([\\/]|$)' -or
-      $path -match '(^|[\\/])(\.local-legacy-archive|\.wrangler|node_modules|\.git)([\\/]|$)|(^|[\\/])(?:\.env|\.dev\.vars)|\.(?:sqlite|sqlite3|db|dpapi|pem|p12)$' -or
+      $path -match '(^|[\\/])(\.local-legacy-archive|\.wrangler[^\\/]*|node_modules|\.git)([\\/]|$)|(^|[\\/])(?:\.env|\.dev\.vars)|\.(?:sqlite|sqlite3|db|dpapi|pem|p12)$' -or
       (!(Test-Path -LiteralPath $path -PathType Leaf) -and !(git ls-files --error-unmatch -- $path 2>$null))) { throw "Unsafe or missing explicit file path: $path" }
   }
   & git add -- @Paths; if ($LASTEXITCODE -ne 0) { throw 'Git staging failed.' }
