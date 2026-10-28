@@ -1,0 +1,8 @@
+{
+  "kind": "daysync-synthetic-release-test",
+  "version": 1,
+  "sample": {
+    "label": "synthetic-only",
+    "count": 0
+  }
+}
