@@ -263,6 +263,10 @@ button:disabled { opacity:.6; cursor:wait; }
 .member-timeline-consent { display:flex; align-items:center; gap:8px; min-height:44px; overflow-wrap:anywhere; }
 .member-timeline-row { min-width:0; padding:10px 0; border-top:1px solid var(--line); overflow-wrap:anywhere; }
 .member-timeline-row p { margin:5px 0; font-size:.83rem; color:var(--muted); }
+.member-timeline-details { min-width:0; border-top:1px solid var(--line); }
+.member-timeline-details > summary { min-height:44px; display:list-item; padding:12px 4px; cursor:pointer; font-weight:700; overflow-wrap:anywhere; }
+.member-timeline-details > summary:focus-visible { outline:2px solid var(--accent-border); outline-offset:2px; }
+.member-timeline-details[open] > summary { margin-bottom:8px; }
 @media (max-width:520px) { .common-availability-dialog { width:calc(100vw - 16px); padding:16px; } .common-availability-dialog .time-pair { grid-template-columns:1fr; } }
 .schedules-dialog { width:min(94vw,620px); max-height:calc(100dvh - 16px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y:auto; }
 .schedules-content { display:grid; gap:12px; padding-bottom:16px; }

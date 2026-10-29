@@ -236,12 +236,15 @@
               <article class="card">
                 <h3 id="group-date"></h3>
                 <div class="expense-list" id="group-shared-events"></div>
-                <section class="member-timeline" aria-labelledby="member-timeline-title">
-                  <h4 id="member-timeline-title">メンバー別の予定時間</h4>
+                <section class="member-timeline" aria-label="名前付き予定時間の共有設定">
                   <label class="member-timeline-consent"><input id="member-timeline-consent" type="checkbox" />このグループのメンバーに、自分の予定が入っている時間帯を名前付きで表示する</label>
                   <p class="card-description">初期状態は非共有です。予定のタイトルやメモは共有されません。</p>
-                  <div class="member-timeline-axis" aria-hidden="true"><span>9:00</span><span>13:00</span><span>18:00</span><span>22:00</span></div>
-                  <div id="member-timeline" role="region" aria-label="メンバー別の予定時間" aria-live="polite"></div>
+                  <p id="member-timeline-setting-status" class="status error" role="alert" hidden></p>
+                  <details id="member-timeline-details" class="member-timeline-details">
+                    <summary id="member-timeline-title">メンバー別の時間帯を比較</summary>
+                    <div class="member-timeline-axis" aria-hidden="true"><span>9:00</span><span>13:00</span><span>18:00</span><span>22:00</span></div>
+                    <div id="member-timeline" role="region" aria-labelledby="member-timeline-title" aria-live="polite"></div>
+                  </details>
                 </section>
               </article>
             </div>
