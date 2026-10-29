@@ -1,6 +1,7 @@
 import { canManageSharedEvent, initSharedEventEditor } from './shared-event-editor.mjs';
 import { initCommonAvailability } from './common-availability.mjs';
 import { initMemberTimeline } from './member-timeline.mjs';
+import { busyAgendaName } from './busy-display.mjs';
 import { initSchedules } from './schedules.mjs';
 import { createInviteUrl } from './config.mjs';
 import { initReminderControls } from './reminder-controls.mjs';
@@ -53,7 +54,7 @@ export function initShared(app) {
   let wishClientRequestId = null;
   let sharedEventEditor = null;
   let commonAvailability = null;
-  const memberTimeline=initMemberTimeline({$,requestJson,activeGroup:()=>activeGroup()});
+  const memberTimeline=initMemberTimeline({$,requestJson,activeGroup:()=>activeGroup(),onConsentChanged:()=>void refreshCurrentMonth()});
   let schedules = null;
   let sharedReminderControls = null;
   let sharedReminderEvent = null;
@@ -886,7 +887,7 @@ export function initShared(app) {
         const details = document.createElement("div");
         details.className = "agenda-event-details";
         const title = document.createElement("strong");
-        title.textContent = event.sourceType === "shift" ? "シフト" : event.sourceType === "busy" ? "予定あり" : event.title;
+        title.textContent = event.sourceType === "shift" ? "シフト" : event.sourceType === "busy" ? busyAgendaName(event) : event.title;
         const time = document.createElement("span");
         time.textContent = event.allDay ? "終日" : `${event.start}-${event.end}`;
         const author = document.createElement("span");

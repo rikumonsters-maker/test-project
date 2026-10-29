@@ -10,7 +10,7 @@ export function timelineSegments(intervals,from=540,to=1320){
 }
 const time=n=>`${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
 
-export function initMemberTimeline({$,requestJson,activeGroup}){
+export function initMemberTimeline({$,requestJson,activeGroup,onConsentChanged}){
   const root=$('member-timeline'),toggle=$('member-timeline-consent');
   let generation=0,groupId=null,date=null,loadedAt=0;
   const clear=()=>{generation++;groupId=null;date=null;loadedAt=0;root.replaceChildren();toggle.checked=false;};
@@ -59,7 +59,11 @@ export function initMemberTimeline({$,requestJson,activeGroup}){
     const next=toggle.checked,group=activeGroup();if(!group)return;
     generation++;root.textContent='共有設定を更新中…';
     toggle.disabled=true;
-    try{await requestJson('/api/shared/named-busy/update',{payload:{groupId:group.groupId,enabled:next}});await show(date,true);}
+    try{
+      await requestJson('/api/shared/named-busy/update',{payload:{groupId:group.groupId,enabled:next}});
+      onConsentChanged?.();
+      await show(date,true);
+    }
     catch{toggle.checked=!next;root.textContent='共有設定を変更できませんでした';}
     finally{toggle.disabled=false;}
   });

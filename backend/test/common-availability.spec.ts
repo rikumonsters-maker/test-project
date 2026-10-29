@@ -44,17 +44,28 @@ beforeAll(async()=>{
 
 describe('common availability Phase 1',()=>{
   it('keeps named busy intervals off until per-group consent and revokes them immediately',async()=>{
+    await db.prepare(`INSERT INTO member_calendar_entries(group_id,member_id,source_type,source_id,event_date,title,starts_at,ends_at,note)
+      VALUES(?,?,'shift',?,?,?,'13:00','15:00',?)`)
+      .bind(groupId,memberId,crypto.randomUUID(),day,'PRIVATE_EMPLOYER','PRIVATE_SHIFT_NOTE').run();
+    const list=()=>api(owner,'/api/shared/events/list',{groupId,month:day.slice(0,7)});
+    const anonymous=(await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00');
+    expect(anonymous.busyDisplayName).toBeUndefined();
     const endpoint='/api/shared/named-busy/timeline';
     const before=await api(owner,endpoint,{groupId,date:day});
     expect(before.status).toBe(200);
     expect(before.data.members.find((row:any)=>row.name==='Member')).toMatchObject({sharing:false,busy:[]});
     expect((await api(outsider,endpoint,{groupId,date:day})).status).toBe(403);
     expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:true})).status).toBe(200);
+    const named=(await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00');
+    expect(named.busyDisplayName).toBe('Member');
+    expect(JSON.stringify(named)).not.toContain('PRIVATE_EMPLOYER');
+    expect(JSON.stringify(named)).not.toContain('PRIVATE_SHIFT_NOTE');
     const enabled=await api(owner,endpoint,{groupId,date:day});
     expect(enabled.data.members.find((row:any)=>row.name==='Member').sharing).toBe(true);
     expect(JSON.stringify(enabled.data)).not.toContain('PRIVATE_SHARED_TITLE');
     expect(JSON.stringify(enabled.data)).not.toContain('PRIVATE_SHARED_NOTE');
     expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(200);
+    expect((await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00').busyDisplayName).toBeUndefined();
     expect((await api(owner,endpoint,{groupId,date:day})).data.members.find((row:any)=>row.name==='Member'))
       .toMatchObject({sharing:false,busy:[]});
   });
@@ -116,6 +127,13 @@ describe('common availability Phase 1',()=>{
     expect(starts).not.toContain('13:00');
     for (const privateText of ['PRIVATE_EMPLOYER','PRIVATE_PAY','PRIVATE_PERSONAL_TITLE','PRIVATE_PERSONAL_NOTE','PRIVATE_SHARED_TITLE','PRIVATE_SHARED_NOTE'])
       expect(JSON.stringify(result.data)).not.toContain(privateText);
+    expect((await api(owner,'/api/shared/named-busy/update',{groupId,enabled:true})).status).toBe(200);
+    const namedPersonal=await api(member,'/api/shared/events/list',{groupId,month:day.slice(0,7)});
+    const busyPersonal=namedPersonal.data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='11:00'&&event.end==='12:00');
+    expect(busyPersonal.busyDisplayName).toBe('Owner');
+    expect(JSON.stringify(namedPersonal.data)).not.toContain('PRIVATE_PERSONAL_TITLE');
+    expect(JSON.stringify(namedPersonal.data)).not.toContain('PRIVATE_PERSONAL_NOTE');
+    expect((await api(owner,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(200);
     const single=await api(owner,'/api/shared/availability',{groupId,userId:member.id,date:day});
     expect(single.status).toBe(200);
     expect(single.data.busy).toContainEqual({start:'00:00',end:'10:00',label:'予定あり'});
