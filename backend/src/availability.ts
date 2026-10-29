@@ -50,7 +50,8 @@ export function candidateSlots(days:BusyDays, userIds:string[], date:string, dur
 }
 
 // Read only time columns. Neither private event text nor shift pay reaches this module.
-export async function loadAvailabilityDays(db:D1Database, groupId:string, userIds:string[], first:string, last:string):Promise<{hard:BusyDays;tentative:BusyDays}> {
+export async function loadAvailabilityDays(db:D1Database, groupId:string, userIds:string[], first:string, last:string,
+  namedTimeline=false):Promise<{hard:BusyDays;tentative:BusyDays}> {
   const slots=userIds.map(()=>'?').join(',');
   const [automatic,shared,personal]=await Promise.all([
     db.prepare(`SELECT DISTINCT m.user_id,e.event_date,e.source_type,e.starts_at,e.ends_at,e.all_day
@@ -66,8 +67,10 @@ export async function loadAvailabilityDays(db:D1Database, groupId:string, userId
       AND e.status IN ('confirmed','tentative') AND (e.group_id=?
         OR (creator.left_at IS NULL AND creator.user_id=target.user_id)
         OR EXISTS (SELECT 1 FROM shared_event_participants p WHERE p.event_id=e.id
-          AND p.user_id=target.user_id AND p.revoked_at IS NULL))`)
-      .bind(groupId,...userIds,first,last,groupId).all<TimedRow>(),
+          AND p.user_id=target.user_id AND p.revoked_at IS NULL))
+      AND (?=0 OR (e.group_id=? AND EXISTS (SELECT 1 FROM shared_event_participants p
+        WHERE p.event_id=e.id AND p.user_id=target.user_id AND p.revoked_at IS NULL)))`)
+      .bind(groupId,...userIds,first,last,groupId,namedTimeline?1:0,groupId).all<TimedRow>(),
     db.prepare(`SELECT e.user_id,e.event_date,e.starts_at,e.ends_at,e.all_day
       FROM personal_events e JOIN personal_sync_users s ON s.user_id=e.user_id
       WHERE e.user_id IN (${slots}) AND e.event_date BETWEEN ? AND ? AND e.deleted=0`)

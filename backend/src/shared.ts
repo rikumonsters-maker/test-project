@@ -494,7 +494,9 @@ async function memberTimeline(db:D1Database, body:JsonRecord, user:SessionUser):
 	let unknown=new Map<string,Set<string>>();
 	if(sharing.length) {
 		const ids=sharing.map(row=>row.user_id);
-		({hard,tentative}=await loadAvailabilityDays(db,member.group_id,ids,date,date));
+		// Named rows may contain only this group's explicit participants. Other-group
+		// shared events remain anonymous in /events/list, even when the member opts in.
+		({hard,tentative}=await loadAvailabilityDays(db,member.group_id,ids,date,date,true));
 		unknown=await unconfirmedByMonth(db,member.group_id,new Map(sharing.map(row=>[row.user_id,row.id])),months);
 	}
 	// Recheck membership and consent after the range queries, so a concurrent opt-out or departure cannot leak stale intervals.

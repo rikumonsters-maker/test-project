@@ -43,6 +43,12 @@ beforeAll(async()=>{
 });
 
 describe('common availability Phase 1',()=>{
+  it('0019 is additive, defaults to no consent, and preserves foreign keys',async()=>{
+    const row=await db.prepare('SELECT COUNT(*) AS count FROM group_named_busy_sharing').first<{count:number}>();
+    expect(row?.count).toBe(0);
+    const integrity=await db.prepare('PRAGMA foreign_key_check').all();
+    expect(integrity.results).toEqual([]);
+  });
   it('keeps named busy intervals off until per-group consent and revokes them immediately',async()=>{
     await db.prepare(`INSERT INTO member_calendar_entries(group_id,member_id,source_type,source_id,event_date,title,starts_at,ends_at,note)
       VALUES(?,?,'shift',?,?,?,'13:00','15:00',?)`)
@@ -68,6 +74,36 @@ describe('common availability Phase 1',()=>{
     expect((await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00').busyDisplayName).toBeUndefined();
     expect((await api(owner,endpoint,{groupId,date:day})).data.members.find((row:any)=>row.name==='Member'))
       .toMatchObject({sharing:false,busy:[]});
+  });
+  it('never carries named busy consent into another group',async()=>{
+    const otherGroup=crypto.randomUUID(),otherOwnerMember=crypto.randomUUID(),otherMember=crypto.randomUUID(),otherEvent=crypto.randomUUID();
+    await db.batch([
+      db.prepare("INSERT INTO groups(id,name,invite_code,created_at) VALUES(?,'Other group',?,'2030-01-01')")
+        .bind(otherGroup,crypto.randomUUID()),
+      db.prepare("INSERT INTO group_members(id,group_id,user_id,display_name,access_token,created_at) VALUES(?,?,?,'Owner',?,'2030-01-01')")
+        .bind(otherOwnerMember,otherGroup,owner.id,crypto.randomUUID()),
+      db.prepare("INSERT INTO group_members(id,group_id,user_id,display_name,access_token,created_at) VALUES(?,?,?,'Member',?,'2030-01-01')")
+        .bind(otherMember,otherGroup,member.id,crypto.randomUUID()),
+      db.prepare("INSERT INTO member_calendar_entries(group_id,member_id,source_type,source_id,event_date,title,starts_at,ends_at) VALUES(?,?,'shift',?,?,'PRIVATE_OTHER_EMPLOYER','17:00','19:00')")
+        .bind(otherGroup,otherMember,crypto.randomUUID(),day),
+      db.prepare("INSERT INTO shared_events(id,group_id,created_by_member_id,title,event_date,starts_at,ends_at,created_at,updated_at) VALUES(?,?,?,'PRIVATE_OTHER_GROUP_EVENT',?,'18:00','20:00','2030-01-01','2030-01-01')")
+        .bind(otherEvent,otherGroup,otherMember,day),
+      db.prepare('INSERT INTO shared_event_participants(event_id,user_id) VALUES(?,?)').bind(otherEvent,member.id),
+    ]);
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:true})).status).toBe(200);
+    const otherList=await api(owner,'/api/shared/events/list',{groupId:otherGroup,month:day.slice(0,7)});
+    const otherBusy=otherList.data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='17:00');
+    expect(otherBusy.busyDisplayName).toBeUndefined();
+    expect(JSON.stringify(otherList.data)).not.toContain('PRIVATE_OTHER_EMPLOYER');
+    const otherTimeline=await api(owner,'/api/shared/named-busy/timeline',{groupId:otherGroup,date:day});
+    expect(otherTimeline.data.members.find((row:any)=>row.name==='Member')).toMatchObject({sharing:false,busy:[]});
+    const firstTimeline=await api(owner,'/api/shared/named-busy/timeline',{groupId,date:day});
+    expect(firstTimeline.data.members.find((row:any)=>row.name==='Member').busy).not.toContainEqual({start:'18:00',end:'20:00',allDay:false});
+    const firstList=await api(owner,'/api/shared/events/list',{groupId,month:day.slice(0,7)});
+    const anonymousOther=firstList.data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='18:00'&&event.end==='20:00');
+    expect(anonymousOther.busyDisplayName).toBeUndefined();
+    expect(JSON.stringify(firstList.data)).not.toContain('PRIVATE_OTHER_GROUP_EVENT');
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(200);
   });
   it('rejects invalid ranges, durations, outsiders and departed members',async()=>{
     const ids=[owner.id,member.id];

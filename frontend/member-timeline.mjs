@@ -51,7 +51,7 @@ export function initMemberTimeline({$,requestJson,activeGroup,onConsentChanged})
         const label=document.createElement('p');
         if(!member.sharing)label.textContent='共有していない';
         else if(member.status==='unconfirmed')label.textContent='同期状況が未確認。表示された時間以外も空きとは限りません';
-        else label.textContent='登録済み予定に競合なしの時間も、参加の承諾とは別です';
+        else label.textContent='個人予定・シフト・参加登録のある共有予定の時間です。ほかの共有予定は一覧で確認してください';
         row.append(label);
         if(member.sharing){
           const track=document.createElement('div');track.className='member-timeline-track';
@@ -67,7 +67,7 @@ export function initMemberTimeline({$,requestJson,activeGroup,onConsentChanged})
           const intervals=document.createElement('p');intervals.textContent=[
             ...timelineSegments(member.busy).map(s=>`${time(s.a)}〜${time(s.b)} ${s.allDay?'終日予定':'予定あり'}`),
             ...timelineSegments(member.tentative).map(s=>`${time(s.a)}〜${time(s.b)} 仮予定`),
-          ].join(' / ')||'登録済み予定に競合なし';row.append(intervals);
+          ].join(' / ')||'この表示に対象の予定なし（空き確定ではありません）';row.append(intervals);
         }
         root.append(row);
       }
@@ -79,17 +79,19 @@ export function initMemberTimeline({$,requestJson,activeGroup,onConsentChanged})
   });
   toggle?.addEventListener?.('change',async()=>{
     const next=toggle.checked,group=activeGroup();if(!group||group.groupId!==groupId)return;
-    generation++;settingGeneration++;settingPending=false;
+    const requestedGroup=group.groupId;
+    generation++;const current=++settingGeneration;settingPending=false;
     if(details?.open)root.textContent='共有設定を更新中…';
     toggle.disabled=true;
     try{
-      await requestJson('/api/shared/named-busy/update',{payload:{groupId:group.groupId,enabled:next}});
+      await requestJson('/api/shared/named-busy/update',{payload:{groupId:requestedGroup,enabled:next}});
+      if(current!==settingGeneration||activeGroup()?.groupId!==requestedGroup||groupId!==requestedGroup)return;
       settingLoaded=true;setSettingError('');
       onConsentChanged?.();
       if(details?.open)await show(date,true);
     }
-    catch{toggle.checked=!next;setSettingError('共有設定を変更できませんでした');if(details?.open)root.textContent='共有設定を変更できませんでした';}
-    finally{toggle.disabled=false;}
+    catch{if(current===settingGeneration&&groupId===requestedGroup){toggle.checked=!next;setSettingError('共有設定を変更できませんでした');if(details?.open)root.textContent='共有設定を変更できませんでした';}}
+    finally{if(current===settingGeneration&&groupId===requestedGroup)toggle.disabled=false;}
   });
   if(typeof window!=='undefined'){
     window.addEventListener('daysync:logout',clear);
