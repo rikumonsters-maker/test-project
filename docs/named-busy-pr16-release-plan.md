@@ -1,28 +1,32 @@
 # PR #16 公開ゲートと実行順序
 
-この文書は公開手順の準備用。PR #16 は Draft のまま維持し、明示的な公開承認まで本番を変更しない。
+この文書は2026-10-30時点の準備記録。PR #16はDraftのまま。Frontend公開には別途明示的なマージ承認が必要。
 
-## 直前ゲート
+## 完了済みの本番段階
 
-1. PR の base が `main`、head が承認対象 SHA、全必須チェックが成功し、自動マージ opt-in が無いことを確認する。
-2. 本番 Worker の version と配信割合、D1 binding、Cron、assets、Secret **名**を確認する。D1 の名前 `money-app-shared` と ID `142e6c05-b703-4825-828b-b6dd702c38bd` を照合する。
-3. 本番 migration journal を読み取りで確認し、0018 までの必要な migration が適用済み、0019 が未適用、0011 が意図どおり未適用であることを確認する。通常の migrations ディレクトリを一括適用しない。
-4. 最新の SQL export を Git 管理外の保護された場所へ取得し、暗号化と隔離ローカル D1 への復元・件数・外部キー検証を行う。2026-10-27 の既存バックアップは取得後の更新を含まないため、公開直前の代替にはしない。Time Travel bookmark と基準件数を記録する。Time Travel は SQL バックアップと同等ではない。
-5. 本番と分離した合成データで、375/390/430/768px と PC、ライト/ダーク、Tab/Enter/Space、同意 OFF→ON→OFF、グループ切替、日付切替を実ブラウザで確認する。Preview の `/api/*` は本番 Worker に転送されるため、新 API を Preview から試験しない。
+- D1 `money-app-shared` (`142e6c05-b703-4825-828b-b6dd702c38bd`) に**0019_named_busy_sharing.sqlを1件だけ適用済み**。journalは19件、0011は未適用、0018・0019は適用済み、外部キー違反は0件。0019を再適用しない。
+- 2026-10-29のSQL exportをGit管理外でDPAPI暗号化し、SHA-256照合と隔離復元を検証済み。Time Travel bookmarkも取得済み。復元・Time Travelの実行は別途判断する。
+- 0019対応Worker `cloudflare-api` version `aa1e80ce-31ca-4da6-8519-a3273872602d` を100%配信中。再デプロイしない。
+- 旧Frontendから個人予定同期、共有予定一覧、通知件数の読み取りAPIを各2件、計6件すべてHTTP 200で確認。ログイン済みの主要画面も表示確認済み。
+- Cron scheduledイベントはoutcome `ok`。確認された期間のWorkers Logsで重大な異常は報告されていないが、通知の実送信成功や観測期間外の正常性までは示さない。Consoleの表示範囲に赤いJavaScript例外やCORSエラーなし。Chrome Issuesの詳細とSafari/PWA実機は未確認。
 
-いずれかが不一致・未確認なら停止する。
+## マージ直前ゲート
 
-## 公開手順（段階ごとに停止条件を確認）
+1. PRのbaseが`main`、headが承認対象SHA、Draft・Open、必須チェック成功、自動マージopt-inなしであることを確認する。ドキュメント更新などでheadが変わった場合は新しいSHAとチェックを照合する。
+2. Workerの上記versionが100%配信中で、D1 binding、Cron、Secret名、assets、Routes、Observabilityに想定外の変化がないことを読み取り専用で確認する。
+3. D1 journalで0011未適用、0018・0019適用済み、外部キー違反0件を読み取り専用で確認する。バックアップと復旧手段を保持する。
+4. 旧Frontendとの互換性と個人予定の匿名化を確認する。実データを変更する試験はしない。
 
-1. 0019 原本と `migrations-0019-only/0019_named_busy_sharing.sql` の SHA-256 が一致し、`wrangler.production-0019.review.jsonc` がこの1ファイルのみを対象にすることを確認する。0011 は対象に含めない。
-2. 明示的な承認後に 0019 のみを本番 D1 へ適用する。journal、新テーブルの空状態、既存件数、外部キー整合性を確認し、異常なら Worker 公開に進まない。
-3. 0019 対応の復旧用 Worker を利用可能にしたうえで、対象 PR の Backend を**本番用** `wrangler.production.jsonc` で dry-run、設定照合後に公開する。新 version 100%、既存 Frontend と既存 API、認可、匿名化、Cron を非破壊的に確認する。
-4. Worker が正常な場合のみ PR を Ready にし、保護ルールに従って通常マージする。Vercel の GitHub 連携による自動 Production deploy を待ち、READY、配信 SHA、正式ドメインを確認する。追加の Vercel deploy は行わない。
-5. Production Verify 成功後、iPhone Safari/PWA で予定一覧、折りたたみ、同意 ON/OFF、別グループ、空き時間、既存共有予定を本人が確認する。個人予定の内容を他人の画面・APIへ出さない。
+いずれかに不一致や重大な異常があればマージを停止する。**D1 migrationとWorker公開は既に完了しているため、この手順で繰り返さない。**
+
+## 残る公開手順
+
+1. ユーザーの明示的な承認後、PR #16をReadyにし、ブランチ保護に従って通常マージする。`--admin`や自動マージopt-inを使用しない。
+2. VercelのGitHub連携による自動Production deployを待つ。READY、配信元のマージSHA、正式ドメイン、HTTP応答、Production Verifyを照合する。追加の手動deployはしない。
+3. iPhone Safari/PWAで名前付き「予定あり」、未同意の匿名表示、同意ON/OFF、グループ・月・日付切替、折りたたみ、空き時間、既存共有予定を本人が確認する。通知・Cron・APIエラーを公開後も監視する。
 
 ## 異常時
 
-- 0019 適用失敗: 次段階へ進まず、journal と既存データを確認する。DB 全体の自動巻き戻しはしない。
-- 0019 適用後の Worker 障害: 0018 非対応 Worker へ戻さない。0019 対応の復旧用 Worker で新 API を停止しつつ既存 API を維持する。事前に互換性を証明できない旧 version へのロールバックは行わない。
-- Frontend 障害: 新 Worker を維持し、直前の正常な Frontend deployment への復旧を検討する。
-- データ異常: 書き込みを増やさず影響範囲を確定する。SQL バックアップと Time Travel は復旧候補として保持し、どちらも利用者の後続更新を失う可能性を評価してから別途判断する。
+- Frontend障害: 0019対応Workerを維持し、直前の正常なFrontend deploymentへの復旧を検討する。
+- Worker障害: 0018/0019非対応Workerへ戻さない。0019対応の復旧用Workerの影響を確認し、使用には別途承認を得る。
+- データ異常: 書き込みを増やさず影響範囲を確定する。SQLバックアップとTime Travelは復旧候補として保持し、後続更新への影響を評価してから別途判断する。自動復元しない。
