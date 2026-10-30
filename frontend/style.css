@@ -248,11 +248,15 @@ button:disabled { opacity:.6; cursor:wait; }
 .common-availability-dialog .time-pair { grid-template-columns:repeat(2,minmax(0,1fr)); }
 .common-availability-conditions { margin-top:18px; border-top:1px solid var(--line); }
 .common-availability-conditions > summary { min-height:44px; padding:12px 0; cursor:pointer; font-weight:700; }
-.availability-card,.availability-day-card { min-width:0; margin:10px 0; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); }
+.availability-card,.availability-day-card { min-width:0; margin:10px 0; padding:14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); }
+.availability-card:first-of-type { border-color:var(--accent-border); background:var(--accent-soft); }
+.availability-card-time { display:block; margin:3px 0 8px; font-size:clamp(1.25rem,5vw,1.6rem); line-height:1.2; font-variant-numeric:tabular-nums; }
+.availability-card-counts { font-size:.9rem; }
+.availability-legend { margin:8px 0 2px; font-size:.76rem; color:var(--muted); }
 .availability-card h5,.availability-day-card h5 { margin:0 0 6px; font-size:1rem; }
 .availability-card p { margin:5px 0; overflow-wrap:anywhere; }
 .availability-card button,.availability-range button,.availability-range select { min-height:44px; }
-.availability-axis,.member-timeline-axis { display:flex; justify-content:space-between; color:var(--muted); font-size:.75rem; }
+.availability-axis,.member-timeline-axis { display:flex; justify-content:space-between; color:var(--muted); font-size:.75rem; font-variant-numeric:tabular-nums; }
 .availability-track,.member-timeline-track { position:relative; height:20px; margin:6px 0 10px; border-radius:5px; background:var(--line); overflow:hidden; }
 .availability-bar,.member-timeline-bar { position:absolute; top:0; height:100%; border-radius:4px; }
 .availability-bar.clear { background:var(--accent-border); }.availability-bar.unconfirmed { background:repeating-linear-gradient(45deg,var(--accent-border) 0 5px,var(--line) 5px 9px); }
@@ -260,7 +264,9 @@ button:disabled { opacity:.6; cursor:wait; }
 .member-timeline-bar.busy { background:var(--accent-border); }.member-timeline-bar.tentative { background:repeating-linear-gradient(45deg,var(--accent-border) 0 5px,var(--line) 5px 9px); }
 .availability-range { display:grid; grid-template-columns:1fr; gap:5px; margin:12px 0; overflow-wrap:anywhere; }
 .availability-range select { max-width:100%; }.member-timeline { min-width:0; margin-top:18px; border-top:1px solid var(--line); padding-top:14px; }
-.member-timeline-consent { display:flex; align-items:center; gap:8px; min-height:44px; overflow-wrap:anywhere; }
+.availability-entry { margin:6px 0; padding:9px 11px; border-radius:8px; font-variant-numeric:tabular-nums; }
+.availability-entry.is-clear { border-left:4px solid var(--accent-border); background:var(--accent-soft); }
+.availability-entry.is-busy { border-left:4px solid var(--muted); background:var(--surface-muted); }
 .member-timeline-row { min-width:0; padding:10px 0; border-top:1px solid var(--line); overflow-wrap:anywhere; }
 .member-timeline-row p { margin:5px 0; font-size:.83rem; color:var(--muted); }
 .member-timeline-details { min-width:0; border-top:1px solid var(--line); }
@@ -324,22 +330,33 @@ button:disabled { opacity:.6; cursor:wait; }
 .copy-field { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
 .copy-field .action-button { min-height:46px; }
 /* Shared group view: header, actions, people, calendar. */
-#group-calendar-view { display:grid; gap:18px; }
+#group-calendar-view { display:grid; gap:10px; min-width:0; }
+#group-calendar-view > .group-header-block { padding:8px 12px; }
+.group-busy-policy { margin:0 2px; color:var(--muted); font-size:.78rem; line-height:1.4; }
+.group-wishes-top { min-width:0; padding:10px 12px; border:1px solid var(--line); border-radius:12px; }
+.group-wishes-heading { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.group-wishes-heading > h3 { min-width:0; }
+.group-wishes-heading > .action-button { max-width:100%; white-space:normal; }
+.group-wishes-heading h3 { margin:0; font-size:1rem; }
+.group-wishes-heading .action-button { min-height:44px; }
+.group-wishes-top .group-wishes-list { grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); max-height:none; gap:6px; margin-top:8px; overflow:visible; }
+.group-wishes-top .group-wish-card { padding:8px 10px; }
+.group-wishes-top .group-wish-message { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+.group-wishes-more { min-height:44px; margin-top:8px; }
 #group-calendar-view > .status { margin:0; }
 #group-calendar-view .card { padding:16px; }
-.group-header-block { display:grid; grid-template-columns:1fr; gap:4px; }
-.group-back-link { grid-column:1/-1; justify-self:start; min-height:44px; padding:0; border:0; color:var(--muted); background:transparent; font:inherit; font-size:.85rem; cursor:pointer; }
+#group-calendar-view > .group-header-block { padding:8px 12px; }
+.group-header-block { display:flex; align-items:center; gap:10px; min-width:0; }
+.group-back-link { flex:0 0 auto; min-height:44px; padding:0; border:0; color:var(--muted); background:transparent; font:inherit; font-size:.85rem; cursor:pointer; }
 .group-back-link:hover { color:var(--green); }
 .group-header-block .group-calendar-heading { min-width:0; margin:0; }
 .group-calendar-heading > div { min-width:0; }
-.group-calendar-heading .group-calendar-name { font-size:1.25rem; overflow-wrap:anywhere; }
+.group-calendar-heading .group-calendar-name { margin:0; min-width:0; font-size:1.05rem; line-height:1.25; overflow-wrap:anywhere; }
+.group-header-block #group-calendar-icon { width:30px; height:30px; flex-basis:30px; font-size:1rem; }
 .group-calendar-heading p { margin:4px 0 0; color:var(--muted); font-size:.85rem; }
 .group-block-title { margin:0; color:var(--ink); font-size:1rem; font-weight:800; }
-.group-action-block { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:12px 16px; border:1px solid var(--border); border-radius:12px; background:var(--accent-soft); }
-.group-action-block p { margin:4px 0 0; color:var(--muted); font-size:.82rem; }
-.group-action-block .group-calendar-actions { justify-content:flex-start; gap:8px; margin:0; }
-.group-action-block .action-button { min-height:44px; padding:9px 12px; font-size:.86rem; }
 .group-info-block > .group-block-title { margin-bottom:10px; }
+.group-info-block:not(:has(.group-status-section:not([hidden]))) { display:none; }
 .group-info-grid { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.5fr); gap:14px; align-items:start; }
 .group-info-grid:not(:has(.group-status-section:not([hidden]))) { grid-template-columns:1fr; }
 .group-info-grid > .card { margin:0; }
@@ -351,7 +368,6 @@ button:disabled { opacity:.6; cursor:wait; }
 .group-status-card .group-member-icon { width:28px; height:28px; flex-basis:28px; font-size:.95rem; }
 .group-status-card .group-member-identity strong { font-size:.86rem; }
 .group-status-card .member-status-message { margin:3px 0 0 37px; font-size:.83rem; line-height:1.5; }
-.group-info-grid .group-wishes-list { grid-template-columns:repeat(2,minmax(0,1fr)); max-height:338px; align-items:start; gap:10px; scrollbar-gutter:stable; }
 .group-wishes-list > .empty-state { grid-column:1/-1; padding:10px; }
 .group-wish-card { padding:12px; border:1px solid var(--line); background:var(--surface); }
 .group-wish-header { align-items:baseline; gap:6px; }
@@ -391,16 +407,14 @@ button:disabled { opacity:.6; cursor:wait; }
 .agenda-busy { border:1px dotted var(--accent-border); background:var(--surface-muted); }
 @media (max-width:899px) {
   .group-info-grid { grid-template-columns:1fr; }
-  .group-info-grid .group-wishes-list { grid-template-columns:1fr; }
 }
 @media (max-width:520px) {
-  #group-calendar-view { gap:14px; }
+  #group-calendar-view { gap:8px; }
   #group-calendar-view .card { padding:14px; }
   #group-calendar-view .calendar-card { padding:12px 8px; }
-  .group-header-block { grid-template-columns:1fr; gap:4px; }
-  .group-action-block { padding:12px 14px; }
-  .group-action-block .group-calendar-actions { width:100%; }
-  .group-action-block .action-button { flex:1 1 125px; }
+  .group-header-block { gap:8px; }
+  .group-header-block .group-calendar-heading { flex:1; }
+  .group-wishes-heading { align-items:flex-start; }
   #group-calendar .day-value { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; white-space:normal; overflow-wrap:anywhere; font-size:.58rem; line-height:1.3; }
   .calendar-more { font-size:.57rem; }
 }
@@ -489,6 +503,7 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
 @media (max-width:390px) { .expense-charts { padding:14px; } .chart-month { grid-template-columns:70px minmax(0,1fr) 70px; gap:5px; font-size:.74rem; } .chart-category strong { font-size:.8rem; } }
 #page-my .page-heading,#page-group .page-heading,#page-money > .page-heading { margin-bottom:16px; }
 #group-calendar-view > section { margin-top:18px; }
+#group-calendar-view > .group-wishes-top,#group-calendar-view > .group-calendar-block { margin-top:0; }
 .actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:12px; }
 .action-button { min-height:48px; padding:10px 15px; border:1px solid var(--line); border-radius:9px; color:var(--ink); background:var(--surface); cursor:pointer; font-size:.93rem; font-weight:750; }
 .action-button.primary { border-color:var(--green); color:var(--on-accent); background:var(--accent-solid); }

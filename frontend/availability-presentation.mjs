@@ -22,8 +22,9 @@ export function renderAvailabilityCards({data,query,recommendations,results,onSc
   const title=document.createElement('h4');title.textContent='おすすめ日時';recommendations.append(title);
   for(const slot of (data.recommendations||[]).slice(0,5)){
     const card=document.createElement('article');card.className='availability-card';
-    const heading=document.createElement('h5');heading.textContent=`${dayLabel(slot.date)} ${slot.start}〜${slot.end}`;card.append(heading);
-    const detail=document.createElement('p');detail.textContent=`登録済み予定に競合なし：${slot.registeredClearCount}人 / 競合：${slot.hardConflictCount+slot.tentativeConflictCount}人 / 未確認：${slot.unconfirmedCount}人`;
+    const heading=document.createElement('h5');heading.textContent=dayLabel(slot.date);card.append(heading);
+    const hours=document.createElement('strong');hours.className='availability-card-time';hours.textContent=`${slot.start}〜${slot.end}`;card.append(hours);
+    const detail=document.createElement('p');detail.className='availability-card-counts';detail.textContent=`空き候補 ${slot.registeredClearCount}人 · 競合 ${slot.hardConflictCount+slot.tentativeConflictCount}人 · 未確認 ${slot.unconfirmedCount}人`;
     card.append(detail,action(slot));recommendations.append(card);
   }
   if(!data.recommendations?.length){const empty=document.createElement('p');empty.textContent='条件に合うおすすめはありません';recommendations.append(empty);}
@@ -36,14 +37,17 @@ export function renderAvailabilityCards({data,query,recommendations,results,onSc
     for(const time of [query.windowStart,Math.round((query.windowStart+query.windowEnd)/2),query.windowEnd]){
       const tick=document.createElement('span');tick.textContent=clock(time);axis.append(tick);
     }section.append(axis);
-    const track=document.createElement('div');track.className='availability-track';
+    const legend=document.createElement('p');legend.className='availability-legend';legend.textContent='開始時刻ごとの状態（必要時間を確保）：空き候補 ●　競合 ■　未確認 ▧';section.append(legend);
+    const track=document.createElement('div');track.className='availability-track';track.setAttribute('role','img');
+    track.setAttribute('aria-label',`${dayLabel(day.date)}の時間帯。空き候補、競合、未確認を色と下の文字で表示`);
     for(const slot of visual){const bar=document.createElement('span');bar.className=`availability-bar ${slot.hardConflictCount||slot.tentativeConflictCount?'conflict':slot.unconfirmedCount||slot.needsConfirmation?'unconfirmed':'clear'}`;
-      bar.style.left=`${(minutes(slot.start)-query.windowStart)/(query.windowEnd-query.windowStart)*100}%`;
-      bar.style.width=`${(minutes(slot.end)-minutes(slot.start))/(query.windowEnd-query.windowStart)*100}%`;
+      bar.style.left=`${Math.max(0,(minutes(slot.start)-query.windowStart)/(query.windowEnd-query.windowStart)*100)}%`;
+      bar.style.width=`${30/(query.windowEnd-query.windowStart)*100}%`;
       bar.title=`${slot.start}〜${slot.end} ${slot.hardConflictCount||slot.tentativeConflictCount?'競合あり':slot.unconfirmedCount||slot.needsConfirmation?'未確認あり':'登録済み予定に競合なし'}`;track.append(bar);
     }section.append(track);
     for(const group of groups){const row=document.createElement('div');row.className='availability-range';
-      const label=document.createElement('span');label.textContent=`${group.start}〜${group.end}　${group.slots[0].unconfirmedCount||group.slots[0].needsConfirmation?'未確認あり':'登録済み予定に競合なし'}`;row.append(label);
+      const first=group.slots[0];
+      const label=document.createElement('span');label.textContent=`${group.start}〜${group.end}　空き候補 ${first.registeredClearCount}人 · 競合 ${first.hardConflictCount+first.tentativeConflictCount}人 · 未確認 ${first.unconfirmedCount}人`;row.append(label);
       const select=document.createElement('select');select.setAttribute('aria-label',`${dayLabel(day.date)}の開始時刻`);
       for(const slot of group.slots){const option=document.createElement('option');option.value=slot.start;option.textContent=`${slot.start}〜${slot.end}`;select.append(option);}
       const button=document.createElement('button');button.type='button';button.className='action-button';button.textContent='日程調整する';

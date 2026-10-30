@@ -531,7 +531,7 @@ describe('account-bound groups', () => {
     expect(memberResponse.data.events).toHaveLength(2);
     for (const event of memberResponse.data.events) {
       expect(event).toMatchObject({ title:'\u4e88\u5b9a\u3042\u308a', eventDate:'2026-10-10', sourceType:'busy' });
-      expect(Object.keys(event).sort()).toEqual(['allDay', 'end', 'eventDate', 'id', 'sourceType', 'start', 'title']);
+      expect(Object.keys(event).sort()).toEqual(['allDay', 'busyDisplayName', 'end', 'eventDate', 'id', 'sourceType', 'start', 'title']);
     }
     for (const secret of [
       'PRIVATE_PERSONAL_TITLE', 'PRIVATE_PERSONAL_NOTE', 'PRIVATE_WORKPLACE_AND_PAY', 'PRIVATE_SHIFT_MEMO',

@@ -402,16 +402,14 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 		}>();
 	const automatic = await db.prepare(
 		`SELECT e.source_type, e.source_id, e.title, e.event_date, e.starts_at, e.ends_at, e.all_day, e.note,
-		        e.member_id, m.user_id, COALESCE(u.display_name, m.display_name) AS member_name,
-		        COALESCE(sharing.enabled,0) AS named_busy_enabled
+		        e.member_id, m.user_id, COALESCE(u.display_name, m.display_name) AS member_name
 		 FROM member_calendar_entries e JOIN active_group_members m ON m.id = e.member_id
 		 LEFT JOIN users u ON u.id = m.user_id
-		 LEFT JOIN group_named_busy_sharing sharing ON sharing.member_id=m.id
 		 WHERE e.group_id = ?1 AND e.event_date >= ?2 AND e.event_date < ?3
 		 AND (e.source_type <> 'personal' OR NOT EXISTS (SELECT 1 FROM personal_sync_users s WHERE s.user_id = m.user_id))
 		 ORDER BY e.event_date, e.all_day DESC, e.starts_at`,
 	).bind(member.group_id, `${month}-01`, `${month}-32`).all<{
-		source_type: string; source_id: string; title: string; event_date: string; starts_at: string; ends_at: string; all_day: number; note: string; member_id: string; user_id:string | null; member_name: string; named_busy_enabled:number;
+		source_type: string; source_id: string; title: string; event_date: string; starts_at: string; ends_at: string; all_day: number; note: string; member_id: string; user_id:string | null; member_name: string;
 	}>();
 	const legacyEvents = (rows.results || []).map((event) => ({
 		id:event.id, title:event.title, eventDate:event.event_date, start:event.starts_at, end:event.ends_at,
@@ -425,7 +423,7 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 		if (event.user_id !== user.id) return {
 			id:`busy:${crypto.randomUUID()}`, title:'\u4e88\u5b9a\u3042\u308a', eventDate:event.event_date,
 			start:event.starts_at, end:event.ends_at, allDay:Boolean(event.all_day), sourceType:'busy',
-			...(event.named_busy_enabled===1 ? {busyDisplayName:event.member_name} : {}),
+			busyDisplayName:event.member_name,
 		};
 		return {
 			id:`${event.member_id}:${event.source_type}:${event.source_id}`, title:event.title, eventDate:event.event_date,
@@ -440,7 +438,7 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 	}));
 	const personal = await db.prepare(`SELECT e.event_date,e.starts_at,e.ends_at,e.all_day,
 		CASE WHEN e.user_id=?4 THEN 1 ELSE 0 END AS owned,
-		CASE WHEN sharing.enabled=1 THEN COALESCE(u.display_name,m.display_name) ELSE NULL END AS consented_name,
+		COALESCE(u.display_name,m.display_name) AS member_name,
 		CASE WHEN e.user_id=?4 THEN e.id ELSE NULL END AS id,
 		CASE WHEN e.user_id=?4 THEN e.title ELSE NULL END AS title,
 		CASE WHEN e.user_id=?4 THEN e.note ELSE NULL END AS note,
@@ -448,16 +446,15 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 		CASE WHEN e.user_id=?4 THEN u.display_name ELSE NULL END AS display_name
 		FROM personal_events e
 		JOIN personal_sync_users s ON s.user_id=e.user_id JOIN active_group_members m ON m.user_id=e.user_id
-		LEFT JOIN group_named_busy_sharing sharing ON sharing.member_id=m.id
 		JOIN users u ON u.id=e.user_id WHERE m.group_id=?1 AND e.deleted=0 AND e.event_date>=?2 AND e.event_date<?3`)
 		.bind(member.group_id, `${month}-01`, `${month}-32`, user.id).all<{
-			id:string | null; owned:number; event_date:string; title:string | null; starts_at:string; ends_at:string; all_day:number; note:string | null; member_id:string | null; display_name:string | null; consented_name:string | null;
+			id:string | null; owned:number; event_date:string; title:string | null; starts_at:string; ends_at:string; all_day:number; note:string | null; member_id:string | null; display_name:string | null; member_name:string | null;
 		}>();
 	const personalEvents = personal.results.map(event => event.owned ? {
 		id:`personal:${event.id}`,title:event.title,eventDate:event.event_date,start:event.starts_at,end:event.ends_at,
 		allDay:Boolean(event.all_day),note:event.note,createdByMemberId:event.member_id,createdByUserId:user.id,createdByName:event.display_name,sourceType:'personal',
 	} : {id:`busy:${crypto.randomUUID()}`,title:'予定あり',eventDate:event.event_date,start:event.starts_at,end:event.ends_at,allDay:Boolean(event.all_day),sourceType:'busy',
-		...(event.consented_name ? {busyDisplayName:event.consented_name} : {})});
+		...(event.member_name ? {busyDisplayName:event.member_name} : {})});
 	return jsonResponse({ events:[...legacyEvents, ...automaticEvents, ...personalEvents, ...redacted].sort((a, b) =>
 		a.eventDate.localeCompare(b.eventDate) || Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start),
 	) });
@@ -466,16 +463,11 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 async function namedBusySharing(db:D1Database, body:JsonRecord, user:SessionUser, method:string):Promise<Response> {
 	const member=await requireMembership(db,body,user);
 	if(!member)return jsonResponse({error:'グループにアクセスできません'},403);
-	if(method==='GET') {
-		const row=await db.prepare('SELECT enabled FROM group_named_busy_sharing WHERE member_id=?')
-			.bind(member.member_id).first<{enabled:number}>();
-		return jsonResponse({enabled:row?.enabled===1});
-	}
+	if(method==='GET') return jsonResponse({enabled:true});
 	if(typeof body.enabled!=='boolean')return jsonResponse({error:'共有設定が不正です'},400);
-	await db.prepare(`INSERT INTO group_named_busy_sharing(member_id,enabled,updated_at) VALUES(?,?,?)
-		ON CONFLICT(member_id) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at`)
-		.bind(member.member_id,body.enabled?1:0,new Date().toISOString()).run();
-	return jsonResponse({enabled:body.enabled});
+	// Legacy clients may still send OFF. Keep the endpoint compatible without
+	// letting that obsolete preference alter the group-visible busy policy.
+	return jsonResponse({enabled:true});
 }
 
 async function memberTimeline(db:D1Database, body:JsonRecord, user:SessionUser):Promise<Response> {
@@ -483,32 +475,29 @@ async function memberTimeline(db:D1Database, body:JsonRecord, user:SessionUser):
 	if(!member)return jsonResponse({error:'グループにアクセスできません'},403);
 	if(!validDate(body.date))return jsonResponse({error:'日付が不正です'},400);
 	const date=body.date;
-	const rows=await db.prepare(`SELECT m.id,m.user_id,COALESCE(u.display_name,m.display_name) AS name,
-		COALESCE(s.enabled,0) AS enabled FROM active_group_members m JOIN users u ON u.id=m.user_id
-		LEFT JOIN group_named_busy_sharing s ON s.member_id=m.id
+	const rows=await db.prepare(`SELECT m.id,m.user_id,COALESCE(u.display_name,m.display_name) AS name
+		FROM active_group_members m JOIN users u ON u.id=m.user_id
 		WHERE m.group_id=? ORDER BY m.created_at,m.id`).bind(member.group_id)
-		.all<{id:string;user_id:string;name:string;enabled:number}>();
-	const sharing=rows.results.filter(row=>row.enabled===1);
+		.all<{id:string;user_id:string;name:string}>();
+	const sharing=rows.results;
 	const months=[...new Set([date.slice(0,7),nextDate(date,-1).slice(0,7)])];
 	let hard=new Map<string,Map<string,[number,number][]>>(),tentative=new Map<string,Map<string,[number,number][]>>();
 	let unknown=new Map<string,Set<string>>();
 	if(sharing.length) {
 		const ids=sharing.map(row=>row.user_id);
-		// Named rows may contain only this group's explicit participants. Other-group
-		// shared events remain anonymous in /events/list, even when the member opts in.
+		// Only this group's explicit participants can contribute named intervals.
+		// Other-group shared events remain anonymous in /events/list.
 		({hard,tentative}=await loadAvailabilityDays(db,member.group_id,ids,date,date,true));
 		unknown=await unconfirmedByMonth(db,member.group_id,new Map(sharing.map(row=>[row.user_id,row.id])),months);
 	}
-	// Recheck membership and consent after the range queries, so a concurrent opt-out or departure cannot leak stale intervals.
-	const current=await db.prepare(`SELECT m.id,m.user_id,COALESCE(s.enabled,0) AS enabled FROM active_group_members m
-		LEFT JOIN group_named_busy_sharing s ON s.member_id=m.id WHERE m.group_id=?`)
-		.bind(member.group_id).all<{id:string;user_id:string;enabled:number}>();
+	// Recheck membership after the range queries so a concurrent departure cannot leak stale intervals.
+	const current=await db.prepare(`SELECT m.id,m.user_id FROM active_group_members m
+		WHERE m.group_id=?`)
+		.bind(member.group_id).all<{id:string;user_id:string}>();
 	const state=new Map(current.results.map(row=>[row.user_id,row]));
 	if(!(await db.prepare('SELECT 1 FROM active_group_members WHERE id=? AND user_id=?').bind(member.member_id,user.id).first()))
 		return jsonResponse({error:'グループへのアクセスが変わりました'},409);
 	const members=rows.results.filter(row=>state.get(row.user_id)?.id===row.id).map(row=>{
-		const enabled=row.enabled===1&&state.get(row.user_id)?.enabled===1;
-		if(!enabled)return {name:row.name,sharing:false,status:'not_shared',busy:[],tentative:[]};
 		const uncertain=months.some(month=>unknown.get(month)?.has(row.user_id));
 		const intervals=(source:typeof hard)=>source.get(row.user_id)?.get(date)?.map(([start,end])=>({start:formatMinute(start),end:formatMinute(end),allDay:start===0&&end===1440}))||[];
 		return {name:row.name,sharing:true,status:uncertain?'unconfirmed':'registered_only',busy:intervals(hard),tentative:intervals(tentative)};
