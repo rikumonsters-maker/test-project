@@ -236,6 +236,16 @@
               <article class="card">
                 <h3 id="group-date"></h3>
                 <div class="expense-list" id="group-shared-events"></div>
+                <section class="member-timeline" aria-label="名前付き予定時間の共有設定">
+                  <label class="member-timeline-consent"><input id="member-timeline-consent" type="checkbox" />このグループのメンバーに、自分の予定が入っている時間帯を名前付きで表示する</label>
+                  <p class="card-description">初期状態は非共有です。予定のタイトルやメモは共有されません。</p>
+                  <p id="member-timeline-setting-status" class="status error" role="alert" hidden></p>
+                  <details id="member-timeline-details" class="member-timeline-details">
+                    <summary id="member-timeline-title">メンバー別の時間帯を比較</summary>
+                    <div class="member-timeline-axis" aria-hidden="true"><span>9:00</span><span>13:00</span><span>18:00</span><span>22:00</span></div>
+                    <div id="member-timeline" role="region" aria-labelledby="member-timeline-title" aria-live="polite"></div>
+                  </details>
+                </section>
               </article>
             </div>
           </div>
@@ -272,6 +282,7 @@
           <p id="common-availability-status" role="status" aria-live="polite"></p>
           <div id="common-availability-recommendations" class="common-availability-results" role="region" aria-label="おすすめ日時"></div>
           <div id="common-availability-results" class="common-availability-results" role="region" aria-label="共通空き時間の候補"></div>
+          <details class="common-availability-conditions"><summary>検索条件を変更</summary>
           <form id="common-availability-form" class="form-stack">
             <fieldset id="common-availability-members" class="participant-choices"><legend>メンバーを2人以上選択</legend></fieldset>
             <div class="time-pair">
@@ -285,6 +296,7 @@
             </div>
             <label>最低参加人数<select id="common-availability-minimum"></select></label>
           </form>
+          </details>
         </dialog>
         <dialog class="qr-dialog status-invite-dialog schedules-dialog" id="schedules-dialog" aria-labelledby="schedules-title">
           <button class="action-button qr-dialog-close" id="schedules-close" type="button">閉じる</button>

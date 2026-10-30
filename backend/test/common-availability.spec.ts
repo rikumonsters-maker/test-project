@@ -43,6 +43,68 @@ beforeAll(async()=>{
 });
 
 describe('common availability Phase 1',()=>{
+  it('0019 is additive, defaults to no consent, and preserves foreign keys',async()=>{
+    const row=await db.prepare('SELECT COUNT(*) AS count FROM group_named_busy_sharing').first<{count:number}>();
+    expect(row?.count).toBe(0);
+    const integrity=await db.prepare('PRAGMA foreign_key_check').all();
+    expect(integrity.results).toEqual([]);
+  });
+  it('keeps named busy intervals off until per-group consent and revokes them immediately',async()=>{
+    await db.prepare(`INSERT INTO member_calendar_entries(group_id,member_id,source_type,source_id,event_date,title,starts_at,ends_at,note)
+      VALUES(?,?,'shift',?,?,?,'13:00','15:00',?)`)
+      .bind(groupId,memberId,crypto.randomUUID(),day,'PRIVATE_EMPLOYER','PRIVATE_SHIFT_NOTE').run();
+    const list=()=>api(owner,'/api/shared/events/list',{groupId,month:day.slice(0,7)});
+    const anonymous=(await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00');
+    expect(anonymous.busyDisplayName).toBeUndefined();
+    const endpoint='/api/shared/named-busy/timeline';
+    const before=await api(owner,endpoint,{groupId,date:day});
+    expect(before.status).toBe(200);
+    expect(before.data.members.find((row:any)=>row.name==='Member')).toMatchObject({sharing:false,busy:[]});
+    expect((await api(outsider,endpoint,{groupId,date:day})).status).toBe(403);
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:true})).status).toBe(200);
+    const named=(await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00');
+    expect(named.busyDisplayName).toBe('Member');
+    expect(JSON.stringify(named)).not.toContain('PRIVATE_EMPLOYER');
+    expect(JSON.stringify(named)).not.toContain('PRIVATE_SHIFT_NOTE');
+    const enabled=await api(owner,endpoint,{groupId,date:day});
+    expect(enabled.data.members.find((row:any)=>row.name==='Member').sharing).toBe(true);
+    expect(JSON.stringify(enabled.data)).not.toContain('PRIVATE_SHARED_TITLE');
+    expect(JSON.stringify(enabled.data)).not.toContain('PRIVATE_SHARED_NOTE');
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(200);
+    expect((await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00').busyDisplayName).toBeUndefined();
+    expect((await api(owner,endpoint,{groupId,date:day})).data.members.find((row:any)=>row.name==='Member'))
+      .toMatchObject({sharing:false,busy:[]});
+  });
+  it('never carries named busy consent into another group',async()=>{
+    const otherGroup=crypto.randomUUID(),otherOwnerMember=crypto.randomUUID(),otherMember=crypto.randomUUID(),otherEvent=crypto.randomUUID();
+    await db.batch([
+      db.prepare("INSERT INTO groups(id,name,invite_code,created_at) VALUES(?,'Other group',?,'2030-01-01')")
+        .bind(otherGroup,crypto.randomUUID()),
+      db.prepare("INSERT INTO group_members(id,group_id,user_id,display_name,access_token,created_at) VALUES(?,?,?,'Owner',?,'2030-01-01')")
+        .bind(otherOwnerMember,otherGroup,owner.id,crypto.randomUUID()),
+      db.prepare("INSERT INTO group_members(id,group_id,user_id,display_name,access_token,created_at) VALUES(?,?,?,'Member',?,'2030-01-01')")
+        .bind(otherMember,otherGroup,member.id,crypto.randomUUID()),
+      db.prepare("INSERT INTO member_calendar_entries(group_id,member_id,source_type,source_id,event_date,title,starts_at,ends_at) VALUES(?,?,'shift',?,?,'PRIVATE_OTHER_EMPLOYER','17:00','19:00')")
+        .bind(otherGroup,otherMember,crypto.randomUUID(),day),
+      db.prepare("INSERT INTO shared_events(id,group_id,created_by_member_id,title,event_date,starts_at,ends_at,created_at,updated_at) VALUES(?,?,?,'PRIVATE_OTHER_GROUP_EVENT',?,'18:00','20:00','2030-01-01','2030-01-01')")
+        .bind(otherEvent,otherGroup,otherMember,day),
+      db.prepare('INSERT INTO shared_event_participants(event_id,user_id) VALUES(?,?)').bind(otherEvent,member.id),
+    ]);
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:true})).status).toBe(200);
+    const otherList=await api(owner,'/api/shared/events/list',{groupId:otherGroup,month:day.slice(0,7)});
+    const otherBusy=otherList.data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='17:00');
+    expect(otherBusy.busyDisplayName).toBeUndefined();
+    expect(JSON.stringify(otherList.data)).not.toContain('PRIVATE_OTHER_EMPLOYER');
+    const otherTimeline=await api(owner,'/api/shared/named-busy/timeline',{groupId:otherGroup,date:day});
+    expect(otherTimeline.data.members.find((row:any)=>row.name==='Member')).toMatchObject({sharing:false,busy:[]});
+    const firstTimeline=await api(owner,'/api/shared/named-busy/timeline',{groupId,date:day});
+    expect(firstTimeline.data.members.find((row:any)=>row.name==='Member').busy).not.toContainEqual({start:'18:00',end:'20:00',allDay:false});
+    const firstList=await api(owner,'/api/shared/events/list',{groupId,month:day.slice(0,7)});
+    const anonymousOther=firstList.data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='18:00'&&event.end==='20:00');
+    expect(anonymousOther.busyDisplayName).toBeUndefined();
+    expect(JSON.stringify(firstList.data)).not.toContain('PRIVATE_OTHER_GROUP_EVENT');
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(200);
+  });
   it('rejects invalid ranges, durations, outsiders and departed members',async()=>{
     const ids=[owner.id,member.id];
     expect((await search(owner,ids,{endDate:'2030-10-16'})).status).toBe(400);
@@ -101,12 +163,20 @@ describe('common availability Phase 1',()=>{
     expect(starts).not.toContain('13:00');
     for (const privateText of ['PRIVATE_EMPLOYER','PRIVATE_PAY','PRIVATE_PERSONAL_TITLE','PRIVATE_PERSONAL_NOTE','PRIVATE_SHARED_TITLE','PRIVATE_SHARED_NOTE'])
       expect(JSON.stringify(result.data)).not.toContain(privateText);
+    expect((await api(owner,'/api/shared/named-busy/update',{groupId,enabled:true})).status).toBe(200);
+    const namedPersonal=await api(member,'/api/shared/events/list',{groupId,month:day.slice(0,7)});
+    const busyPersonal=namedPersonal.data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='11:00'&&event.end==='12:00');
+    expect(busyPersonal.busyDisplayName).toBe('Owner');
+    expect(JSON.stringify(namedPersonal.data)).not.toContain('PRIVATE_PERSONAL_TITLE');
+    expect(JSON.stringify(namedPersonal.data)).not.toContain('PRIVATE_PERSONAL_NOTE');
+    expect((await api(owner,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(200);
     const single=await api(owner,'/api/shared/availability',{groupId,userId:member.id,date:day});
     expect(single.status).toBe(200);
     expect(single.data.busy).toContainEqual({start:'00:00',end:'10:00',label:'予定あり'});
   });
 
   it('does not expose a departed member or revive old coverage on rejoin',async()=>{
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:true})).status).toBe(200);
     await db.prepare('UPDATE group_members SET left_at=?1,departed_user_id=user_id,user_id=NULL WHERE id=?2')
       .bind('2030-10-03',memberId).run();
     expect((await search(owner,[owner.id,member.id])).status).toBe(403);
@@ -117,5 +187,7 @@ describe('common availability Phase 1',()=>{
     const after=await search(owner,[owner.id,member.id]);
     expect(after.status).toBe(200);
     expect(after.data.days[0].unconfirmedUserIds).toEqual([member.id]);
+    expect((await api(owner,'/api/shared/named-busy/timeline',{groupId,date:day})).data.members
+      .find((row:any)=>row.name==='Member')).toMatchObject({sharing:false,busy:[]});
   });
 });
