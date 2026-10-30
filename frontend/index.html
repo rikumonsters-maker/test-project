@@ -40,6 +40,12 @@
     </section>
 
     <main class="page" id="app-root" hidden>
+      <section class="card named-busy-notice" id="named-busy-notice" aria-labelledby="named-busy-notice-title" hidden>
+        <h2 id="named-busy-notice-title">共有予定の表示方法が変わります</h2>
+        <p>共有予定の表示方法が変わります。同じグループのメンバーには、あなたの表示名と予定が入っている時間帯が表示されます。予定のタイトルやメモ、給与などの詳細は共有されません。</p>
+        <button class="action-button" id="named-busy-notice-ack" type="button">内容を確認しました</button>
+        <p class="status error" id="named-busy-notice-error" role="alert" hidden></p>
+      </section>
       <header class="site-header">
         <h1 class="site-title">DaySync — 毎日を、ひとつに。</h1>
         <div class="account-row">

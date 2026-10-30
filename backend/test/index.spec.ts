@@ -21,6 +21,7 @@ import migration16 from '../migrations/0016_common_availability_coverage.sql?raw
 import migration17 from '../migrations/0017_group_scheduling.sql?raw';
 import migration18 from '../migrations/0018_group_closure.sql?raw';
 import migration19 from '../migrations/0019_named_busy_sharing.sql?raw';
+import migration20 from '../migrations/0020_named_busy_notice.sql?raw';
 import { applySQL } from './migration-helper';
 import { drainPushQueue, encryptPushPayload, handlePushRequest, notifyGroup, queueGroupNotice, type PushEnv } from '../src/push';
 import { handleSharedRequest } from '../src/shared';
@@ -201,6 +202,7 @@ beforeAll(async () => {
   await applySQL(env.DB, migration17);
   await applySQL(env.DB, migration18);
   await applySQL(env.DB, migration19);
+  await applySQL(env.DB, migration20);
 });
 
 describe('DaySync authentication', () => {
@@ -531,7 +533,7 @@ describe('account-bound groups', () => {
     expect(memberResponse.data.events).toHaveLength(2);
     for (const event of memberResponse.data.events) {
       expect(event).toMatchObject({ title:'\u4e88\u5b9a\u3042\u308a', eventDate:'2026-10-10', sourceType:'busy' });
-      expect(Object.keys(event).sort()).toEqual(['allDay', 'busyDisplayName', 'end', 'eventDate', 'id', 'sourceType', 'start', 'title']);
+      expect(Object.keys(event).sort()).toEqual(['allDay', 'end', 'eventDate', 'id', 'sourceType', 'start', 'title']);
     }
     for (const secret of [
       'PRIVATE_PERSONAL_TITLE', 'PRIVATE_PERSONAL_NOTE', 'PRIVATE_WORKPLACE_AND_PAY', 'PRIVATE_SHIFT_MEMO',

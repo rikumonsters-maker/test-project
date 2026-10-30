@@ -36,7 +36,7 @@ export function initMemberTimeline({$,requestJson,activeGroup,onConsentChanged})
         else if(member.status==='unconfirmed')label.textContent='同期状況が未確認。表示された時間以外も空きとは限りません';
         else label.textContent='個人予定・シフト・参加登録のある共有予定の時間です。ほかの共有予定は一覧で確認してください';
         row.append(label);
-        {
+        if(member.sharing){
           const track=document.createElement('div');track.className='member-timeline-track';
           for(const [kind,items] of [['busy',member.busy],['tentative',member.tentative]]){
             for(const segment of timelineSegments(items)){

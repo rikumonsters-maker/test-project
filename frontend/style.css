@@ -144,6 +144,10 @@ button { touch-action:manipulation; }
 .page-heading h2 { margin:0; font-size:1.28rem; }
 .page-heading p { margin:0; color:var(--muted); font-size:.88rem; }
 .card { min-width:0; padding:20px; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
+.named-busy-notice { margin-bottom:16px; border-color:var(--accent); }
+.named-busy-notice h2 { margin:0 0 8px; font-size:1.05rem; }
+.named-busy-notice p { line-height:1.6; overflow-wrap:anywhere; }
+.named-busy-notice .action-button { min-height:44px; }
 .card h3 { margin:0 0 4px; font-size:1.05rem; }
 .card-description { margin:0 0 16px; color:var(--muted); font-size:.9rem; line-height:1.55; }
 .card-stack { display:grid; gap:14px; }

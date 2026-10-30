@@ -43,9 +43,10 @@ beforeAll(async()=>{
 });
 
 describe('common availability Phase 1',()=>{
-  it('0019 is additive, defaults to no consent, and preserves foreign keys',async()=>{
+  it('0019 and 0020 are additive, default to no notice acknowledgement, and preserve foreign keys',async()=>{
     const row=await db.prepare('SELECT COUNT(*) AS count FROM group_named_busy_sharing').first<{count:number}>();
     expect(row?.count).toBe(0);
+    expect((await db.prepare('SELECT COUNT(*) AS count FROM named_busy_policy_notices').first<{count:number}>())?.count).toBe(0);
     const integrity=await db.prepare('PRAGMA foreign_key_check').all();
     expect(integrity.results).toEqual([]);
   });
@@ -57,11 +58,11 @@ describe('common availability Phase 1',()=>{
       .bind(memberId,'2030-01-01').run();
     const list=()=>api(owner,'/api/shared/events/list',{groupId,month:day.slice(0,7)});
     const anonymous=(await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00');
-    expect(anonymous.busyDisplayName).toBe('Member');
+    expect(anonymous.busyDisplayName).toBeUndefined();
     const endpoint='/api/shared/named-busy/timeline';
     const before=await api(owner,endpoint,{groupId,date:day});
     expect(before.status).toBe(200);
-    expect(before.data.members.find((row:any)=>row.name==='Member')).toMatchObject({sharing:true,busy:[{start:'13:00',end:'15:00',allDay:false}]});
+    expect(before.data.members.find((row:any)=>row.name==='Member')).toMatchObject({sharing:false,busy:[]});
     expect((await api(outsider,endpoint,{groupId,date:day})).status).toBe(403);
     expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:true})).status).toBe(200);
     const named=(await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00');
@@ -74,6 +75,13 @@ describe('common availability Phase 1',()=>{
     expect(JSON.stringify(enabled.data)).not.toContain('PRIVATE_SHARED_NOTE');
     expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(200);
     expect((await db.prepare('SELECT enabled FROM group_named_busy_sharing WHERE member_id=?').bind(memberId).first<{enabled:number}>())?.enabled).toBe(0);
+    expect((await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00').busyDisplayName).toBeUndefined();
+    expect((await api(member,'/api/shared/named-busy/setting',{groupId})).data).toMatchObject({enabled:false,policy:'legacy'});
+    expect((await api(member,'/api/shared/named-busy/notice',{})).data.acknowledged).toBe(false);
+    expect((await api(member,'/api/shared/named-busy/notice',{acknowledge:true})).data.acknowledged).toBe(true);
+    expect((await api(member,'/api/shared/named-busy/notice',{acknowledge:true})).data.acknowledged).toBe(true);
+    expect((await api(member,'/api/shared/named-busy/setting',{groupId})).data).toMatchObject({enabled:true,policy:'group'});
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(409);
     expect((await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00').busyDisplayName).toBe('Member');
     expect((await api(owner,endpoint,{groupId,date:day})).data.members.find((row:any)=>row.name==='Member'))
       .toMatchObject({sharing:true,busy:[{start:'13:00',end:'15:00',allDay:false}]});
@@ -106,7 +114,7 @@ describe('common availability Phase 1',()=>{
     const anonymousOther=firstList.data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='18:00'&&event.end==='20:00');
     expect(anonymousOther.busyDisplayName).toBeUndefined();
     expect(JSON.stringify(firstList.data)).not.toContain('PRIVATE_OTHER_GROUP_EVENT');
-    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(200);
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(409);
   });
   it('rejects invalid ranges, durations, outsiders and departed members',async()=>{
     const ids=[owner.id,member.id];

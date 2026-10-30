@@ -402,14 +402,18 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 		}>();
 	const automatic = await db.prepare(
 		`SELECT e.source_type, e.source_id, e.title, e.event_date, e.starts_at, e.ends_at, e.all_day, e.note,
-		        e.member_id, m.user_id, COALESCE(u.display_name, m.display_name) AS member_name
+		        e.member_id, m.user_id, COALESCE(u.display_name, m.display_name) AS member_name,
+		        COALESCE(sharing.enabled,0) AS legacy_enabled,
+		        CASE WHEN notice.user_id IS NULL THEN 0 ELSE 1 END AS notice_seen
 		 FROM member_calendar_entries e JOIN active_group_members m ON m.id = e.member_id
 		 LEFT JOIN users u ON u.id = m.user_id
+		 LEFT JOIN group_named_busy_sharing sharing ON sharing.member_id=m.id
+		 LEFT JOIN named_busy_policy_notices notice ON notice.user_id=m.user_id
 		 WHERE e.group_id = ?1 AND e.event_date >= ?2 AND e.event_date < ?3
 		 AND (e.source_type <> 'personal' OR NOT EXISTS (SELECT 1 FROM personal_sync_users s WHERE s.user_id = m.user_id))
 		 ORDER BY e.event_date, e.all_day DESC, e.starts_at`,
 	).bind(member.group_id, `${month}-01`, `${month}-32`).all<{
-		source_type: string; source_id: string; title: string; event_date: string; starts_at: string; ends_at: string; all_day: number; note: string; member_id: string; user_id:string | null; member_name: string;
+		source_type: string; source_id: string; title: string; event_date: string; starts_at: string; ends_at: string; all_day: number; note: string; member_id: string; user_id:string | null; member_name: string; legacy_enabled:number; notice_seen:number;
 	}>();
 	const legacyEvents = (rows.results || []).map((event) => ({
 		id:event.id, title:event.title, eventDate:event.event_date, start:event.starts_at, end:event.ends_at,
@@ -423,7 +427,7 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 		if (event.user_id !== user.id) return {
 			id:`busy:${crypto.randomUUID()}`, title:'\u4e88\u5b9a\u3042\u308a', eventDate:event.event_date,
 			start:event.starts_at, end:event.ends_at, allDay:Boolean(event.all_day), sourceType:'busy',
-			busyDisplayName:event.member_name,
+			...(event.legacy_enabled===1 || event.notice_seen===1 ? {busyDisplayName:event.member_name} : {}),
 		};
 		return {
 			id:`${event.member_id}:${event.source_type}:${event.source_id}`, title:event.title, eventDate:event.event_date,
@@ -438,7 +442,8 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 	}));
 	const personal = await db.prepare(`SELECT e.event_date,e.starts_at,e.ends_at,e.all_day,
 		CASE WHEN e.user_id=?4 THEN 1 ELSE 0 END AS owned,
-		COALESCE(u.display_name,m.display_name) AS member_name,
+		CASE WHEN COALESCE(sharing.enabled,0)=1 OR notice.user_id IS NOT NULL
+			THEN COALESCE(u.display_name,m.display_name) ELSE NULL END AS member_name,
 		CASE WHEN e.user_id=?4 THEN e.id ELSE NULL END AS id,
 		CASE WHEN e.user_id=?4 THEN e.title ELSE NULL END AS title,
 		CASE WHEN e.user_id=?4 THEN e.note ELSE NULL END AS note,
@@ -446,6 +451,8 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 		CASE WHEN e.user_id=?4 THEN u.display_name ELSE NULL END AS display_name
 		FROM personal_events e
 		JOIN personal_sync_users s ON s.user_id=e.user_id JOIN active_group_members m ON m.user_id=e.user_id
+		LEFT JOIN group_named_busy_sharing sharing ON sharing.member_id=m.id
+		LEFT JOIN named_busy_policy_notices notice ON notice.user_id=e.user_id
 		JOIN users u ON u.id=e.user_id WHERE m.group_id=?1 AND e.deleted=0 AND e.event_date>=?2 AND e.event_date<?3`)
 		.bind(member.group_id, `${month}-01`, `${month}-32`, user.id).all<{
 			id:string | null; owned:number; event_date:string; title:string | null; starts_at:string; ends_at:string; all_day:number; note:string | null; member_id:string | null; display_name:string | null; member_name:string | null;
@@ -463,11 +470,33 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 async function namedBusySharing(db:D1Database, body:JsonRecord, user:SessionUser, method:string):Promise<Response> {
 	const member=await requireMembership(db,body,user);
 	if(!member)return jsonResponse({error:'グループにアクセスできません'},403);
-	if(method==='GET') return jsonResponse({enabled:true});
+	const seen=Boolean(await db.prepare('SELECT 1 FROM named_busy_policy_notices WHERE user_id=?').bind(user.id).first());
+	if(method==='GET') {
+		if(seen)return jsonResponse({enabled:true,policy:'group'});
+		const row=await db.prepare('SELECT enabled FROM group_named_busy_sharing WHERE member_id=?')
+			.bind(member.member_id).first<{enabled:number}>();
+		return jsonResponse({enabled:row?.enabled===1,policy:'legacy'});
+	}
 	if(typeof body.enabled!=='boolean')return jsonResponse({error:'共有設定が不正です'},400);
-	// Legacy clients may still send OFF. Keep the endpoint compatible without
-	// letting that obsolete preference alter the group-visible busy policy.
-	return jsonResponse({enabled:true});
+	if(seen)return body.enabled ? jsonResponse({enabled:true,policy:'group'})
+		:jsonResponse({error:'表示方法が変更されました。画面を更新してください',code:'NAMED_BUSY_POLICY_CHANGED'},409);
+	await db.prepare(`INSERT INTO group_named_busy_sharing(member_id,enabled,updated_at) VALUES(?,?,?)
+		ON CONFLICT(member_id) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at`)
+		.bind(member.member_id,body.enabled?1:0,new Date().toISOString()).run();
+	// A different device may acknowledge the notice while this old request runs.
+	if(await db.prepare('SELECT 1 FROM named_busy_policy_notices WHERE user_id=?').bind(user.id).first())
+		return jsonResponse({error:'表示方法が変更されました。画面を更新してください',code:'NAMED_BUSY_POLICY_CHANGED'},409);
+	return jsonResponse({enabled:body.enabled,policy:'legacy'});
+}
+
+async function namedBusyNotice(db:D1Database, body:JsonRecord, user:SessionUser):Promise<Response> {
+	if(body.acknowledge!==undefined && body.acknowledge!==true)return jsonResponse({error:'確認操作が不正です'},400);
+	if(body.acknowledge===true)
+		await db.prepare('INSERT OR IGNORE INTO named_busy_policy_notices(user_id,acknowledged_at) VALUES(?,?)')
+			.bind(user.id,new Date().toISOString()).run();
+	const row=await db.prepare('SELECT acknowledged_at FROM named_busy_policy_notices WHERE user_id=?')
+		.bind(user.id).first<{acknowledged_at:string}>();
+	return jsonResponse({acknowledged:Boolean(row),policy:'group-after-notice'});
 }
 
 async function memberTimeline(db:D1Database, body:JsonRecord, user:SessionUser):Promise<Response> {
@@ -475,11 +504,15 @@ async function memberTimeline(db:D1Database, body:JsonRecord, user:SessionUser):
 	if(!member)return jsonResponse({error:'グループにアクセスできません'},403);
 	if(!validDate(body.date))return jsonResponse({error:'日付が不正です'},400);
 	const date=body.date;
-	const rows=await db.prepare(`SELECT m.id,m.user_id,COALESCE(u.display_name,m.display_name) AS name
+	const rows=await db.prepare(`SELECT m.id,m.user_id,COALESCE(u.display_name,m.display_name) AS name,
+		COALESCE(s.enabled,0) AS legacy_enabled,
+		CASE WHEN n.user_id IS NULL THEN 0 ELSE 1 END AS notice_seen
 		FROM active_group_members m JOIN users u ON u.id=m.user_id
+		LEFT JOIN group_named_busy_sharing s ON s.member_id=m.id
+		LEFT JOIN named_busy_policy_notices n ON n.user_id=m.user_id
 		WHERE m.group_id=? ORDER BY m.created_at,m.id`).bind(member.group_id)
-		.all<{id:string;user_id:string;name:string}>();
-	const sharing=rows.results;
+		.all<{id:string;user_id:string;name:string;legacy_enabled:number;notice_seen:number}>();
+	const sharing=rows.results.filter(row=>row.legacy_enabled===1||row.notice_seen===1);
 	const months=[...new Set([date.slice(0,7),nextDate(date,-1).slice(0,7)])];
 	let hard=new Map<string,Map<string,[number,number][]>>(),tentative=new Map<string,Map<string,[number,number][]>>();
 	let unknown=new Map<string,Set<string>>();
@@ -491,13 +524,19 @@ async function memberTimeline(db:D1Database, body:JsonRecord, user:SessionUser):
 		unknown=await unconfirmedByMonth(db,member.group_id,new Map(sharing.map(row=>[row.user_id,row.id])),months);
 	}
 	// Recheck membership after the range queries so a concurrent departure cannot leak stale intervals.
-	const current=await db.prepare(`SELECT m.id,m.user_id FROM active_group_members m
+	const current=await db.prepare(`SELECT m.id,m.user_id,COALESCE(s.enabled,0) AS legacy_enabled,
+		CASE WHEN n.user_id IS NULL THEN 0 ELSE 1 END AS notice_seen FROM active_group_members m
+		LEFT JOIN group_named_busy_sharing s ON s.member_id=m.id
+		LEFT JOIN named_busy_policy_notices n ON n.user_id=m.user_id
 		WHERE m.group_id=?`)
-		.bind(member.group_id).all<{id:string;user_id:string}>();
+		.bind(member.group_id).all<{id:string;user_id:string;legacy_enabled:number;notice_seen:number}>();
 	const state=new Map(current.results.map(row=>[row.user_id,row]));
 	if(!(await db.prepare('SELECT 1 FROM active_group_members WHERE id=? AND user_id=?').bind(member.member_id,user.id).first()))
 		return jsonResponse({error:'グループへのアクセスが変わりました'},409);
 	const members=rows.results.filter(row=>state.get(row.user_id)?.id===row.id).map(row=>{
+		const active=state.get(row.user_id)!;
+		if(!(row.legacy_enabled===1||row.notice_seen===1) || !(active.legacy_enabled===1||active.notice_seen===1))
+			return {name:row.name,sharing:false,status:'not_shared',busy:[],tentative:[]};
 		const uncertain=months.some(month=>unknown.get(month)?.has(row.user_id));
 		const intervals=(source:typeof hard)=>source.get(row.user_id)?.get(date)?.map(([start,end])=>({start:formatMinute(start),end:formatMinute(end),allDay:start===0&&end===1440}))||[];
 		return {name:row.name,sharing:true,status:uncertain?'unconfirmed':'registered_only',busy:intervals(hard),tentative:intervals(tentative)};
@@ -773,6 +812,7 @@ export async function handleSharedRequest(request: Request, env: SharedEnv, ctx:
 		if (pathname === '/api/groups/leave') return await leaveGroup(env,ctx, body, user);
 		if (pathname === '/api/groups/delete') return await closeGroup(env.DB,body,user);
 		if (pathname === '/api/shared/events/list') return await listEvents(env.DB, body, user);
+		if (pathname === '/api/shared/named-busy/notice') return await namedBusyNotice(env.DB,body,user);
 		if (pathname === '/api/shared/named-busy/setting') return await namedBusySharing(env.DB,body,user,'GET');
 		if (pathname === '/api/shared/named-busy/update') return await namedBusySharing(env.DB,body,user,'POST');
 		if (pathname === '/api/shared/named-busy/timeline') return await memberTimeline(env.DB,body,user);
