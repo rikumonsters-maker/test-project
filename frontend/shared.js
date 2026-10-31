@@ -490,8 +490,13 @@ export function initShared(app) {
   function renderWishes() {
     const list = $("group-wishes-list");
     list.replaceChildren();
+    const more = $("group-wishes-more");
+    const expanded = more.getAttribute("aria-expanded") === "true" || wishes.some(wish => wish.id === view.notificationWishId);
+    if (expanded) more.setAttribute("aria-expanded", "true");
+    more.hidden = wishes.length <= 3;
+    more.textContent = expanded ? "閉じる" : `すべて見る（${wishes.length}件）`;
     if (!wishes.length) return appendEmptyState(list, "まだ遊びたい日の投稿はありません。");
-    for (const wish of wishes) {
+    for (const wish of expanded ? wishes : wishes.slice(0, 3)) {
       const card = document.createElement("div");
       card.className = "group-wish-card";
       if (wish.id === view.notificationWishId) {
@@ -608,6 +613,11 @@ export function initShared(app) {
       list.append(card);
     }
   }
+  $("group-wishes-more").addEventListener?.("click", () => {
+    const button = $("group-wishes-more");
+    button.setAttribute("aria-expanded", String(button.getAttribute("aria-expanded") !== "true"));
+    renderWishes();
+  });
   async function loadWishes() {
     const group = activeGroup();
     if (!group) return;
@@ -808,19 +818,19 @@ export function initShared(app) {
       if (activeGroupId !== group.groupId || selectedWish !== wish) return;
       list.replaceChildren();
       const heading = document.createElement("strong");
-      heading.textContent = "空いている時間（9:00〜22:00）";
+      heading.textContent = "登録済み予定との競合がない時間";
       list.append(heading);
       if (!data.free?.length) appendEmptyState(list, "空いている時間は見つかりませんでした。");
       for (const slot of data.free || []) {
         const row = document.createElement("p");
-        row.className = "availability-entry";
-        row.textContent = `${slot.start}〜${slot.end} 空き`;
+        row.className = "availability-entry is-clear";
+        row.textContent = `${slot.start}〜${slot.end}　競合なし（空き確定ではありません）`;
         list.append(row);
       }
       for (const slot of data.busy || []) {
         const row = document.createElement("p");
-        row.className = "availability-entry";
-        row.textContent = `${slot.start}〜${slot.end} 予定あり`;
+        row.className = "availability-entry is-busy";
+        row.textContent = `${slot.start}〜${slot.end}　予定あり`;
         list.append(row);
       }
     } catch (error) {
@@ -1007,6 +1017,7 @@ export function initShared(app) {
     view.notificationWishId = reminderTarget?.wishId || null;
     resetCache();
     wishes = [];
+    $("group-wishes-more").setAttribute("aria-expanded", "false");
     renderWishes();
     $("group-calendar-name").textContent = group.groupName;
     updateGroupIcon(group);

@@ -22,6 +22,51 @@ const emptyBudget = { fixed:"", saving:"", spent:"" };
 
 let activeStorageKey = null;
 let currentUser = null;
+let namedBusyNoticeGeneration = 0;
+async function showNamedBusyNotice(userId) {
+  const generation = ++namedBusyNoticeGeneration;
+  const notice = $("named-busy-notice");
+  const button = $("named-busy-notice-ack");
+  const error = $("named-busy-notice-error");
+  notice.hidden = false;
+  button.disabled = true;
+  error.hidden = true;
+  try {
+    const status = await requestJson("/api/shared/named-busy/notice", { payload:{} });
+    if (generation !== namedBusyNoticeGeneration || currentUser?.id !== userId) return;
+    notice.hidden = status.acknowledged === true;
+    button.disabled = false;
+  } catch {
+    if (generation !== namedBusyNoticeGeneration || currentUser?.id !== userId) return;
+    error.textContent = "お知らせの確認機能を読み込めません。後で再度お試しください。";
+    error.hidden = false;
+  }
+}
+$("named-busy-notice-ack")?.addEventListener("click", async () => {
+  const userId = currentUser?.id;
+  if (!userId) return;
+  const button = $("named-busy-notice-ack");
+  const error = $("named-busy-notice-error");
+  button.disabled = true;
+  error.hidden = true;
+  try {
+    const result = await requestJson("/api/shared/named-busy/notice", { payload:{ acknowledge:true } });
+    if (currentUser?.id !== userId) return;
+    if (result.acknowledged !== true) throw new Error("確認できませんでした");
+    $("named-busy-notice").hidden = true;
+    await shared.refreshPersonal();
+  } catch {
+    if (currentUser?.id !== userId) return;
+    error.textContent = "確認を保存できませんでした。通信状態を確認して再度お試しください。";
+    error.hidden = false;
+  } finally {
+    if (currentUser?.id === userId) button.disabled = false;
+  }
+});
+window.addEventListener("daysync:logout", () => {
+  namedBusyNoticeGeneration++;
+  $("named-busy-notice").hidden = true;
+});
 function emptyState() {
   return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", theme:"system", budget:{ ...emptyBudget }, groups:[], pendingGroupMonths:{}, pendingGroupShiftMonths:{} };
 }
@@ -372,6 +417,7 @@ async function startApp(user) {
   document.body.classList.remove("auth-mode");
   $("auth-shell").hidden = true;
   $("app-root").hidden = false;
+  void showNamedBusyNotice(user.id);
   document.querySelector(".page-nav").hidden = false;
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", () => setActivePage(button.dataset.page));

@@ -32,11 +32,17 @@ test('main navigation is planned, shared, money; money contains both existing pa
   for(const id of ['page-calendar','page-budget','page-shift','agenda-calendar','shift-calendar','expense-calendar','common-availability-open'])
     assert.equal([...html.matchAll(new RegExp('id="'+id+'"','g'))].length,1,id);
 });
-test('shared calendar remains primary and availability keeps automatic controls',()=>{
-  assert.ok(html.indexOf('id="group-calendar-title"')<html.indexOf('id="group-actions-title"'));
+test('wishes precede the shared calendar and availability keeps automatic controls',()=>{
+  assert.ok(html.indexOf('id="group-wishes-heading"')<html.indexOf('id="group-calendar-title"'));
   assert.ok(html.indexOf('id="group-calendar-title"')<html.indexOf('id="group-info-title"'));
   assert.match(html,/id="common-availability-refresh"/);
   assert.doesNotMatch(html,/id="common-availability-submit"/);
+});
+test('shared view explains named busy times before the calendar and has one wish action',()=>{
+  assert.equal((html.match(/id="add-group-wish"/g)||[]).length,1);
+  assert.match(html,/同じグループのメンバーには、表示名と予定が入っている時間帯が共有されます。予定の内容は共有されません。/);
+  assert.ok(html.indexOf('id="group-wishes-list"')<html.indexOf('id="group-calendar"'));
+  assert.ok(html.indexOf('id="group-shared-events"')<html.indexOf('id="group-members"'));
 });
 test('money subtab switches panels and keeps DOM state',()=>{
   const buttons=['budget','shift'].map(moneyView=>({dataset:{moneyView},setAttribute(name,value){this[name]=value;},tabIndex:0}));

@@ -11,31 +11,14 @@ export function timelineSegments(intervals,from=540,to=1320){
 const time=n=>`${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
 
 export function initMemberTimeline({$,requestJson,activeGroup,onConsentChanged}){
-  const root=$('member-timeline'),toggle=$('member-timeline-consent'),details=$('member-timeline-details'),settingStatus=$('member-timeline-setting-status');
-  const setSettingError=message=>{if(settingStatus){settingStatus.textContent=message;settingStatus.hidden=!message;}};
-  let generation=0,settingGeneration=0,groupId=null,date=null,loadedAt=0,settingLoaded=false,settingPending=false;
-  const clear=()=>{generation++;settingGeneration++;groupId=null;date=null;loadedAt=0;settingLoaded=false;settingPending=false;
-    root.replaceChildren();toggle.checked=false;toggle.disabled=true;setSettingError('');if(details)details.open=false;};
-  async function loadSetting(){
-    if(!groupId||settingLoaded||settingPending)return;
-    const current=++settingGeneration,requestedGroup=groupId;
-    settingPending=true;toggle.disabled=true;
-    try{
-      const setting=await requestJson('/api/shared/named-busy/setting',{payload:{groupId:requestedGroup}});
-      if(current!==settingGeneration||groupId!==requestedGroup)return;
-      toggle.checked=setting.enabled===true;settingLoaded=true;setSettingError('');
-    }catch{
-      if(current===settingGeneration&&groupId===requestedGroup){toggle.checked=false;setSettingError('共有設定を取得できませんでした。日付を選び直して再試行してください。');}
-    }finally{
-      if(current===settingGeneration){settingPending=false;toggle.disabled=!settingLoaded;}
-    }
-  }
+  const root=$('member-timeline'),details=$('member-timeline-details');
+  let generation=0,groupId=null,date=null,loadedAt=0;
+  const clear=()=>{generation++;groupId=null;date=null;loadedAt=0;root.replaceChildren();if(details)details.open=false;};
   async function show(nextDate,force=false){
     const group=activeGroup();if(!group||!nextDate){clear();return;}
-    if(group.groupId!==groupId){generation++;settingGeneration++;groupId=group.groupId;settingLoaded=false;settingPending=false;
-      loadedAt=0;root.replaceChildren();toggle.checked=false;toggle.disabled=true;setSettingError('');if(details)details.open=false;}
+    if(group.groupId!==groupId){generation++;groupId=group.groupId;
+      loadedAt=0;root.replaceChildren();if(details)details.open=false;}
     const dateChanged=date!==nextDate;date=nextDate;
-    void loadSetting();
     if(!details?.open){generation++;loadedAt=0;root.replaceChildren();return;}
     if(!force&&!dateChanged&&Date.now()-loadedAt<30000)return;
     const current=++generation,requestedGroup=groupId,requestedDate=date;
@@ -76,22 +59,6 @@ export function initMemberTimeline({$,requestJson,activeGroup,onConsentChanged})
   details?.addEventListener?.('toggle',()=>{
     if(details.open){if(date)void show(date,true);}
     else{generation++;loadedAt=0;root.replaceChildren();}
-  });
-  toggle?.addEventListener?.('change',async()=>{
-    const next=toggle.checked,group=activeGroup();if(!group||group.groupId!==groupId)return;
-    const requestedGroup=group.groupId;
-    generation++;const current=++settingGeneration;settingPending=false;
-    if(details?.open)root.textContent='共有設定を更新中…';
-    toggle.disabled=true;
-    try{
-      await requestJson('/api/shared/named-busy/update',{payload:{groupId:requestedGroup,enabled:next}});
-      if(current!==settingGeneration||activeGroup()?.groupId!==requestedGroup||groupId!==requestedGroup)return;
-      settingLoaded=true;setSettingError('');
-      onConsentChanged?.();
-      if(details?.open)await show(date,true);
-    }
-    catch{if(current===settingGeneration&&groupId===requestedGroup){toggle.checked=!next;setSettingError('共有設定を変更できませんでした');if(details?.open)root.textContent='共有設定を変更できませんでした';}}
-    finally{if(current===settingGeneration&&groupId===requestedGroup)toggle.disabled=false;}
   });
   if(typeof window!=='undefined'){
     window.addEventListener('daysync:logout',clear);

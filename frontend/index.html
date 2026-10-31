@@ -40,6 +40,12 @@
     </section>
 
     <main class="page" id="app-root" hidden>
+      <section class="card named-busy-notice" id="named-busy-notice" aria-labelledby="named-busy-notice-title" hidden>
+        <h2 id="named-busy-notice-title">共有予定の表示方法が変わります</h2>
+        <p>共有予定の表示方法が変わります。同じグループのメンバーには、あなたの表示名と予定が入っている時間帯が表示されます。予定のタイトルやメモ、給与などの詳細は共有されません。</p>
+        <button class="action-button" id="named-busy-notice-ack" type="button">内容を確認しました</button>
+        <p class="status error" id="named-busy-notice-error" role="alert" hidden></p>
+      </section>
       <header class="site-header">
         <h1 class="site-title">DaySync — 毎日を、ひとつに。</h1>
         <div class="account-row">
@@ -187,6 +193,7 @@
               <form id="join-group-form" class="form-stack group-join-form">
                 <label>招待コード<input id="group-invite-code" type="text" autocomplete="off" maxlength="40" placeholder="MP-..." required /></label>
                 <label>あなたの表示名<input id="join-member-name" type="text" maxlength="40" placeholder="予定　太郎" required /></label>
+                <p class="card-description">同じグループのメンバーには、表示名と予定が入っている時間帯が共有されます。予定の内容は共有されません。</p>
                 <button class="action-button" type="submit">グループに参加</button>
                 <div class="qr-divider" aria-hidden="true"><span>または</span></div>
                 <button class="action-button qr-scan-button" id="open-invite-qr-scanner" type="button">QRコードを読み取る</button>
@@ -205,10 +212,17 @@
         <div id="group-calendar-view" hidden>
           <header class="card group-header-block">
             <button class="group-back-link" id="back-to-groups" type="button">← グループ一覧</button>
-            <div class="group-calendar-heading"><span id="group-calendar-icon" class="group-icon-placeholder" aria-hidden="true">🌿</span><div><h3 class="group-calendar-name" id="group-calendar-name"></h3><p>共有カレンダー</p></div></div>
+            <div class="group-calendar-heading"><span id="group-calendar-icon" class="group-icon-placeholder" aria-hidden="true">🌿</span><h3 class="group-calendar-name" id="group-calendar-name"></h3></div>
           </header>
           <p class="status safe" id="group-calendar-status" hidden role="status"></p>
           <p class="status error" id="group-calendar-error" hidden aria-live="polite"></p>
+          <p class="group-busy-policy">同じグループのメンバーには、表示名と予定が入っている時間帯が共有されます。予定の内容は共有されません。</p>
+          <section class="group-wishes-section group-wishes-top" aria-labelledby="group-wishes-heading">
+            <div class="group-wishes-heading"><h3 id="group-wishes-heading">みんなの遊びたい日</h3><button class="action-button primary" id="add-group-wish" type="button">＋ 遊びたい日を追加</button></div>
+            <div class="group-wishes-list" id="group-wishes-list" aria-live="polite" tabindex="0" role="region" aria-label="みんなの遊びたい日の一覧"></div>
+            <button class="action-button group-wishes-more" id="group-wishes-more" type="button" hidden aria-expanded="false">すべて見る</button>
+            <p class="status error" id="group-wishes-error" hidden role="alert"></p>
+          </section>
           <section class="group-calendar-block" aria-labelledby="group-calendar-title">
           <div class="group-calendar-section-heading"><h3 class="group-block-title" id="group-calendar-title">共有カレンダー</h3><p>日付を選ぶと詳細を表示</p></div>
           <div class="group-calendar-legend" aria-label="予定の種類"><span class="legend-event">正式予定</span><span class="legend-tentative">仮予定</span><span class="legend-shift">シフト</span><span class="legend-busy">予定あり</span></div>
@@ -227,19 +241,9 @@
             </article>
             <div class="side-stack">
               <article class="card">
-                <h3>メンバー</h3>
-                <ul class="group-member-list" id="group-members" aria-live="polite"></ul>
-                <p class="status error" id="group-members-error" hidden aria-live="polite"></p>
-                <button class="action-button common-availability-open" id="common-availability-open" type="button" aria-haspopup="dialog">みんなの空き時間を見る</button>
-                <button class="action-button common-availability-open" id="schedules-open" type="button" aria-haspopup="dialog">日程調整・投票を見る</button>
-              </article>
-              <article class="card">
                 <h3 id="group-date"></h3>
                 <div class="expense-list" id="group-shared-events"></div>
-                <section class="member-timeline" aria-label="名前付き予定時間の共有設定">
-                  <label class="member-timeline-consent"><input id="member-timeline-consent" type="checkbox" />このグループのメンバーに、自分の予定が入っている時間帯を名前付きで表示する</label>
-                  <p class="card-description">初期状態は非共有です。予定のタイトルやメモは共有されません。</p>
-                  <p id="member-timeline-setting-status" class="status error" role="alert" hidden></p>
+                <section class="member-timeline" aria-label="メンバー別の予定時間">
                   <details id="member-timeline-details" class="member-timeline-details">
                     <summary id="member-timeline-title">メンバー別の時間帯を比較</summary>
                     <div class="member-timeline-axis" aria-hidden="true"><span>9:00</span><span>13:00</span><span>18:00</span><span>22:00</span></div>
@@ -247,16 +251,17 @@
                   </details>
                 </section>
               </article>
+              <article class="card">
+                <h3>メンバー</h3>
+                <ul class="group-member-list" id="group-members" aria-live="polite"></ul>
+                <p class="status error" id="group-members-error" hidden aria-live="polite"></p>
+                <button class="action-button common-availability-open" id="common-availability-open" type="button" aria-haspopup="dialog">みんなの空き時間を見る</button>
+                <button class="action-button common-availability-open" id="schedules-open" type="button" aria-haspopup="dialog">日程調整・投票を見る</button>
+              </article>
             </div>
           </div>
           </section>
-          <section class="group-action-block" aria-labelledby="group-actions-title">
-            <div><h3 id="group-actions-title" class="group-block-title">アクション</h3><p>遊びたい日から、共有予定へ。</p></div>
-            <div class="group-calendar-actions">
-              <button class="action-button primary" id="add-group-wish" type="button">＋ 遊びたい日を追加</button>
-              <button class="action-button" id="refresh-group-events" type="button">最新情報を取得</button>
-            </div>
-          </section>
+          <div class="group-calendar-actions"><button class="action-button" id="refresh-group-events" type="button">最新情報を取得</button></div>
           <section class="group-info-block" aria-labelledby="group-info-title">
           <h3 class="group-block-title" id="group-info-title">みんなの情報</h3>
           <div class="group-info-grid">
@@ -264,11 +269,7 @@
             <h3>みんなの今やりたいこと</h3>
             <div class="group-status-list" id="group-status-list"></div>
           </article>
-          <article class="card group-wishes-section">
-            <h3>みんなの遊びたい日</h3>
-            <div class="group-wishes-list" id="group-wishes-list" aria-live="polite" tabindex="0" role="region" aria-label="みんなの遊びたい日の一覧"></div>
-            <p class="status error" id="group-wishes-error" hidden role="alert"></p>
-          </article>
+
           </div>
           </section>
         </div>
