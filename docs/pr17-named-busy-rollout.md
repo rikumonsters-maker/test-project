@@ -1,6 +1,6 @@
 # PR #17 名前付き予定時間の段階的公開
 
-PR #17はDraftのままにする。0019は本番適用済みであり、再適用しない。0011は意図的に未適用。今回の追加は0020の通知確認テーブルだけで、既存の予定・設定行を変更しない。
+PR #17はDraftのままにする。0011は意図的に未適用。0019と0020は本番適用済みであり、再適用しない。0020の追加は通知確認テーブルだけで、既存の予定・設定行を変更しない。
 
 ## 公開前の互換性
 
@@ -12,10 +12,10 @@ PR #17はDraftのままにする。0019は本番適用済みであり、再適�
 
 ## 公開手順と停止条件
 
-1. PRのhead・必須チェック・Draft状態、現行Worker、D1 ID、journalを照合する。0011未適用、0019適用済み、0020未適用を確認する。
-2. 直前のSQLバックアップをGit外に取得し、暗号化・SHA-256・隔離復元・外部キー確認・Time Travel bookmarkを記録する。失敗なら停止。
-3. `backend/wrangler.production-0020.review.jsonc` の `migrations-0020-only` に0020が1件だけあり、原本とのハッシュ一致を確認する。レビュー設定をWorker deployには使用しない。別途承認後に0020だけ本番適用し、journal・新テーブル行数0・既存件数・外部キー0を確認する。
-4. 別途承認後、0020対応Backendを本番用Wrangler設定で先行公開する。現行Frontendで旧設定GET/POST、OFF利用者の匿名表示、既存API、Cron、D1 bindingを確認する。ここで新仕様の名前を一斉公開しない。
+1. PRのhead・必須チェック・Draft状態、現行Worker version、D1 ID、journalを照合する。0011未適用、0019・0020適用済み、journal 20件を再確認する。0020は再適用しない。
+2. 取得済みの暗号化SQLバックアップ、SHA-256、隔離復元、外部キー確認、Time Travel bookmarkの記録を照合する。不要な再取得や本番データ変更はしない。
+3. 公開済みの0020対応Workerについて、DashboardのCron Events、scheduled outcome、Workers Logs、D1・通知関連エラーを監査する。現行Frontendからの旧設定GET/POST、OFF利用者の匿名表示、既存APIとの互換性を本番書き込みなしで確認する。確認できない項目や異常があればマージ停止。
+4. `backend/wrangler.production-0020.review.jsonc` は0020単独適用時の記録として保持する。Worker deployには使用しない。Workerの再デプロイ、D1本番データの変更、通知確認の代理操作はしない。
 5. 別途承認後、PRを通常マージしVercel ProductionのREADY・merge SHA・正式ドメイン・Production Verifyを確認する。新Frontendのバナー表示と確認操作を合成データおよび安全な実運用範囲で確認する。
 6. 確認済み本人だけ名前表示に切り替わること、他グループ匿名、未認証・退出済み拒否、詳細非公開を検証する。古いService Worker/タブ、複数端末、告知未確認者の匿名表示を監視する。
 
