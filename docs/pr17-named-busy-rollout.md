@@ -14,7 +14,7 @@ PR #17はDraftのままにする。0011は意図的に未適用。0019と0020は
 
 1. PRのhead・必須チェック・Draft状態、現行Worker version、D1 ID、journalを照合する。0011未適用、0019・0020適用済み、journal 20件を再確認する。0020は再適用しない。
 2. 取得済みの暗号化SQLバックアップ、SHA-256、隔離復元、外部キー確認、Time Travel bookmarkの記録を照合する。不要な再取得や本番データ変更はしない。
-3. 公開済みの0020対応Workerについて、DashboardのCron Events、scheduled outcome、Workers Logs、D1・通知関連エラーを監査する。現行Frontendからの旧設定GET/POST、OFF利用者の匿名表示、既存APIとの互換性を本番書き込みなしで確認する。確認できない項目や異常があればマージ停止。
+3. 公開済みの0020対応Workerについて、DashboardのCron Events、scheduled outcome、Workers Logs、D1・通知関連エラーを監査する。旧設定GET/POSTと旧OFF利用者の匿名表示は合成データのテストで確認し、本番では未認証GETや静的配信など書き込みのない確認だけを行う。実際の旧OFF/ON利用者の応答は未検証と明記し、必須の確認が残る場合はマージ停止。
 4. `backend/wrangler.production-0020.review.jsonc` は0020単独適用時の記録として保持する。Worker deployには使用しない。Workerの再デプロイ、D1本番データの変更、通知確認の代理操作はしない。
 5. 別途承認後、PRを通常マージしVercel ProductionのREADY・merge SHA・正式ドメイン・Production Verifyを確認する。新Frontendのバナー表示と確認操作を合成データおよび安全な実運用範囲で確認する。
 6. 確認済み本人だけ名前表示に切り替わること、他グループ匿名、未認証・退出済み拒否、詳細非公開を検証する。古いService Worker/タブ、複数端末、告知未確認者の匿名表示を監視する。
