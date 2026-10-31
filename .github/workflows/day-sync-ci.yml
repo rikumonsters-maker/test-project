@@ -37,6 +37,26 @@ jobs:
         working-directory: backend
       - run: npx wrangler deploy --dry-run --config wrangler.production.jsonc --outdir "$RUNNER_TEMP/daysync-worker-dry-run"
         working-directory: backend
+  browser-e2e:
+    name: day-sync-browser-e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:e2e
+        working-directory: frontend
+        env:
+          CI: 'true'
   security:
     name: day-sync-security
     runs-on: ubuntu-latest
