@@ -1215,6 +1215,7 @@ export function initShared(app) {
     $("refresh-group-events").addEventListener("click", () => {
       void refreshCurrentMonth();
       if (activeGroup()) { void loadGroupMembers(activeGroup()); void loadWishes(); }
+      if (activeGroupId) window.dispatchEvent(new CustomEvent("daysync:availability-changed", { detail:{ groupId:activeGroupId } }));
     });
     $("add-group-wish").addEventListener("click", () => openWishEditor());
     $("group-icon-change").addEventListener("click", openIconPicker);
