@@ -55,6 +55,7 @@ $("named-busy-notice-ack")?.addEventListener("click", async () => {
     if (result.acknowledged !== true) throw new Error("確認できませんでした");
     $("named-busy-notice").hidden = true;
     await shared.refreshPersonal();
+    window.dispatchEvent(new Event("daysync:availability-changed"));
   } catch {
     if (currentUser?.id !== userId) return;
     error.textContent = "確認を保存できませんでした。通信状態を確認して再度お試しください。";
