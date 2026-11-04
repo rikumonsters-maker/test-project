@@ -1,12 +1,13 @@
 // All Worker requests are answered locally; unknown or external requests fail closed.
+import { tokyoToday } from '../wish-expiry.mjs';
 const user={id:'00000000-0000-4000-8000-000000000001',displayName:'テスト利用者'};
 const group={groupId:'synthetic-group-a',memberId:'member-a',memberName:'テスト利用者',groupName:'合成グループ',inviteCode:'MP-SYNTHETIC'};
 const members=[{memberId:'member-a',userId:user.id,memberName:user.displayName},
   {memberId:'member-b',userId:'00000000-0000-4000-8000-000000000002',memberName:'田中'}];
 const privateMarkers=['私的タイトルSECRET','私的メモSECRET','勤務先SECRET','給与SECRET','家計簿SECRET'];
-const date='2026-10-31';
+const date=tokyoToday();
 
-export function syntheticApi({legacyEnabled=false,acknowledged=false}={}) {
+export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false}={}) {
   const state={legacyEnabled,acknowledged,requests:[],outside:[]};
   const named=()=>state.legacyEnabled||state.acknowledged;
   const event=()=>({id:'anonymous-busy',sourceType:'busy',eventDate:date,start:'13:00',end:'15:00',
@@ -46,10 +47,13 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false}={}) {
         userId:m.userId,sharing:m.userId===user.id||named(),status:'confirmed',
         busy:m.userId==='00000000-0000-4000-8000-000000000002'&&named()&&body.date===date?[{start:'13:00',end:'15:00'}]:[],tentative:[]}))};
       else if(path==='/api/groups/members/list') data={members};
-      else if(path==='/api/groups/wishes/list') data={wishes:Array.from({length:4},(_,i)=>({id:`synthetic-wish-${i}`,wishDate:date,
+      else if(path==='/api/groups/wishes/list') data={wishes:Array.from({length:4},(_,i)=>({id:`synthetic-wish-${i}`,wishDate:includeExpired&&i===0?'2020-01-01':date,
         message:`合成の遊びたい日 ${i+1}`,ownerName:'テスト利用者',userId:user.id,isOwn:true,
         managementState:'open',isAllDay:false,start:'18:00',end:'20:00',interestedUsers:[]}))};
-      else if(path==='/api/shared/events/list') data={events:[event()]};
+      else if(path==='/api/shared/events/list') data={events:[event(),...(extraBusyMember?[{
+        id:'second-busy',sourceType:'busy',eventDate:date,start:'13:00',end:'15:00',title:'予定あり',
+        ...(named()?{busyDisplayName:'佐藤'}:{}),
+      }]:[])]};
       else if(path==='/api/shared/availability/search') data={days:[{date,unconfirmedUserIds:[],slots:[{start:'16:00',end:'18:00',registeredClearCount:2,hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,needsConfirmation:false}]}],
         recommendations:[{date,start:'16:00',end:'18:00',registeredClearCount:2,hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,reason:'登録済み予定との競合なし'}]};
       else {status=501;data={error:`Synthetic API has no fixture for ${path}`};}

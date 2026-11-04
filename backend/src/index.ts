@@ -5,6 +5,7 @@ import { handleProfileRequest } from './profile';
 import { drainPushQueue, handlePushRequest } from './push';
 import { drainReminderQueue, handleReminderRequest } from './reminders';
 import { drainScheduleNotices } from './schedule-cron';
+import { isTokyoCleanupTick, removeUnreferencedExpiredWishes } from './wish-expiry';
 import { handleNotificationRequest } from './notifications';
 import { PUBLIC_APP_ORIGIN } from './app-origin';
 import { isLocalDevelopment, localOrigins, type DevelopmentEnv } from './development';
@@ -57,9 +58,14 @@ async function readJson(request: Request): Promise<unknown> {
 }
 
 export default {
-	async scheduled(_controller, env, ctx): Promise<void> {
+	async scheduled(controller, env, ctx): Promise<void> {
 		if (groupAccessPaused(env)) return;
 		ctx.waitUntil((async () => {
+			// One cleanup per Tokyo day; reads and writes are skipped on other ticks.
+			if (isTokyoCleanupTick(controller.scheduledTime)) {
+				try { await removeUnreferencedExpiredWishes(env.DB); }
+				catch { console.error('Wish expiry cleanup failed'); }
+			}
 			await drainReminderQueue(env);
 			try { await drainScheduleNotices(env); }
 			catch { console.error('Schedule notice Cron failed'); }

@@ -652,14 +652,14 @@ describe('account-bound groups', () => {
     const group = (await api('/api/groups/create', { name:'友達', memberName:'仮名' }, owner.cookie)).data.membership;
     const other = (await api('/api/groups/create', { name:'研究室' }, owner.cookie)).data.membership;
     await api('/api/groups/join', { inviteCode:group.inviteCode }, guest.cookie);
-    const wish = { groupId:group.groupId, wishDate:'2026-10-10', isAllDay:false,
+    const wish = { groupId:group.groupId, wishDate:'2030-10-10', isAllDay:false,
       start:'13:00', end:'', message:'誰か空いてたら遊びたい' };
     expect((await api('/api/groups/wishes/create', { ...wish, wishDate:'2026-02-30' }, owner.cookie)).status).toBe(400);
     expect((await api('/api/groups/wishes/create', { ...wish, end:'12:00' }, owner.cookie)).status).toBe(400);
     const created = await api('/api/groups/wishes/create', wish, owner.cookie);
     expect(created.status).toBe(201);
     const wishId = created.data.id;
-    expect((await api('/api/groups/wishes/create', { groupId:other.groupId, wishDate:'2026-10-15', isAllDay:true }, owner.cookie)).status).toBe(201);
+    expect((await api('/api/groups/wishes/create', { groupId:other.groupId, wishDate:'2030-10-15', isAllDay:true }, owner.cookie)).status).toBe(201);
     const visible = await api('/api/groups/wishes/list', { groupId:group.groupId }, guest.cookie);
     expect(visible.data.wishes).toHaveLength(1);
     expect(visible.data.wishes[0]).toMatchObject({
@@ -710,7 +710,7 @@ describe('account-bound groups', () => {
     const pending:Promise<unknown>[]=[];
     const ctx={waitUntil:(task:Promise<unknown>)=>{pending.push(task);}} as unknown as ExecutionContext;
     try {
-      const body={groupId:group.groupId,wishDate:'2026-10-20',isAllDay:true,message:'PRIVATE_WISH_TEXT',clientRequestId:'wish-create-retry-token'};
+      const body={groupId:group.groupId,wishDate:'2030-10-20',isAllDay:true,message:'PRIVATE_WISH_TEXT',clientRequestId:'wish-create-retry-token'};
       const created=await handleWishRequest(pushEnv,ctx,'/api/groups/wishes/create',body,owner.user);
       expect(created.status).toBe(201);
       const wishId=(await created.json() as any).id;
@@ -754,7 +754,7 @@ describe('account-bound groups', () => {
     const group = (await api('/api/groups/create', { name:'遊び仲間' }, owner.cookie)).data.membership;
     await api('/api/groups/join', { inviteCode:group.inviteCode }, guest.cookie);
     await api('/api/groups/join', { inviteCode:group.inviteCode }, third.cookie);
-    const created = await api('/api/groups/wishes/create', { groupId:group.groupId, wishDate:'2026-10-15', isAllDay:false,
+    const created = await api('/api/groups/wishes/create', { groupId:group.groupId, wishDate:'2030-10-15', isAllDay:false,
       start:'15:00', end:'18:00', message:'ボウリング' }, owner.cookie);
     const wishId = created.data.id;
     const list = () => api('/api/groups/wishes/list', { groupId:group.groupId }, owner.cookie);
@@ -770,14 +770,14 @@ describe('account-bound groups', () => {
     await api('/api/groups/wishes/unreact', { groupId:group.groupId, wishId }, third.cookie);
     wish = (await list()).data.wishes[0];
     expect(wish).toMatchObject({ participantCount:1, eventStatus:'tentative', participantsInsufficient:true });
-    expect((await api('/api/groups/wishes/confirm', { groupId:group.groupId, wishId, title:'確定', eventDate:'2026-10-15',
+    expect((await api('/api/groups/wishes/confirm', { groupId:group.groupId, wishId, title:'確定', eventDate:'2030-10-15',
       allDay:true, participantUserIds:[owner.user.id, guest.user.id] }, owner.cookie)).status).toBe(409);
-    expect((await api('/api/shared/events/list', { groupId:group.groupId, month:'2026-10' }, owner.cookie)).data.events
+    expect((await api('/api/shared/events/list', { groupId:group.groupId, month:'2030-10' }, owner.cookie)).data.events
       .find((event:any) => event.wishId === wishId).status).toBe('tentative');
-    expect((await api('/api/groups/wishes/confirm', { groupId:group.groupId, wishId, title:'確定', eventDate:'2026-10-15',
+    expect((await api('/api/groups/wishes/confirm', { groupId:group.groupId, wishId, title:'確定', eventDate:'2030-10-15',
       allDay:true, participantUserIds:[owner.user.id, guest.user.id] }, guest.cookie)).status).toBe(403);
     await api('/api/groups/wishes/react', { groupId:group.groupId, wishId }, guest.cookie);
-    expect((await api('/api/groups/wishes/confirm', { groupId:group.groupId, wishId, title:'確定', eventDate:'2026-10-15',
+    expect((await api('/api/groups/wishes/confirm', { groupId:group.groupId, wishId, title:'確定', eventDate:'2030-10-15',
       allDay:true, participantUserIds:[owner.user.id, guest.user.id] }, owner.cookie)).status).toBe(200);
     await api('/api/groups/wishes/unreact', { groupId:group.groupId, wishId }, guest.cookie);
     expect((await list()).data.wishes[0].eventStatus).toBe('confirmed');

@@ -1,7 +1,8 @@
 import { canManageSharedEvent, initSharedEventEditor } from './shared-event-editor.mjs';
 import { initCommonAvailability } from './common-availability.mjs';
 import { initMemberTimeline } from './member-timeline.mjs';
-import { busyAgendaName } from './busy-display.mjs';
+import { busyAgendaName, busyCalendarLabel, busyCalendarAriaLabel } from './busy-display.mjs';
+import { tokyoToday, visibleWishes, millisUntilNextTokyoDay } from './wish-expiry.mjs';
 import { initSchedules } from './schedules.mjs';
 import { createInviteUrl } from './config.mjs';
 import { initReminderControls } from './reminder-controls.mjs';
@@ -49,6 +50,8 @@ export function initShared(app) {
   let selectedWish = null;
   let memberExpiryTimer = null;
   let wishes = [];
+  let wishDayTimer = null;
+  let lastWishDay = tokyoToday();
   let editingWishId = null;
   let wishRequestId = 0;
   let wishClientRequestId = null;
@@ -105,6 +108,8 @@ export function initShared(app) {
     memberExpiryTimer = null;
   }
   function showHome() {
+    if (wishDayTimer) clearTimeout(wishDayTimer);
+    wishDayTimer = null;
     commonAvailability?.close();
     schedules?.close();
     closeGroupManagement();
@@ -455,7 +460,7 @@ export function initShared(app) {
     container.append(empty);
   }
   function wishesForDate(key) {
-    return wishes.filter((wish) => wish.wishDate === key);
+    return visibleWishes(wishes).filter((wish) => wish.wishDate === key);
   }
   function wishTime(wish) {
     return wish.isAllDay ? "終日・時間未定" : `${wish.start}〜${wish.end || ""}`;
@@ -471,7 +476,8 @@ export function initShared(app) {
     editingWishId = wish?.id || null;
     if (!wish) wishClientRequestId = null;
     $("group-wish-title").textContent = wish ? "遊びたい日を編集" : "遊びたい日を追加";
-    $("group-wish-date").value = wish?.wishDate || view.groupDate;
+    $("group-wish-date").min = tokyoToday();
+    $("group-wish-date").value = wish?.wishDate || (view.groupDate >= tokyoToday() ? view.groupDate : tokyoToday());
     $("group-wish-all-day").checked = wish?.isAllDay ?? true;
     $("group-wish-start").value = wish?.start || "";
     $("group-wish-end").value = wish?.end || "";
@@ -488,15 +494,16 @@ export function initShared(app) {
     $("group-wish-start").required = !allDay;
   }
   function renderWishes() {
+    const currentWishes = visibleWishes(wishes);
     const list = $("group-wishes-list");
     list.replaceChildren();
     const more = $("group-wishes-more");
-    const expanded = more.getAttribute("aria-expanded") === "true" || wishes.some(wish => wish.id === view.notificationWishId);
+    const expanded = more.getAttribute("aria-expanded") === "true" || currentWishes.some(wish => wish.id === view.notificationWishId);
     if (expanded) more.setAttribute("aria-expanded", "true");
-    more.hidden = wishes.length <= 3;
-    more.textContent = expanded ? "閉じる" : `すべて見る（${wishes.length}件）`;
-    if (!wishes.length) return appendEmptyState(list, "まだ遊びたい日の投稿はありません。");
-    for (const wish of expanded ? wishes : wishes.slice(0, 3)) {
+    more.hidden = currentWishes.length <= 3;
+    more.textContent = expanded ? "閉じる" : `すべて見る（${currentWishes.length}件）`;
+    if (!currentWishes.length) return appendEmptyState(list, "まだ遊びたい日の投稿はありません。");
+    for (const wish of expanded ? currentWishes : currentWishes.slice(0, 3)) {
       const card = document.createElement("div");
       card.className = "group-wish-card";
       if (wish.id === view.notificationWishId) {
@@ -625,7 +632,7 @@ export function initShared(app) {
     try {
       const data = await requestJson("/api/groups/wishes/list", { payload:credentials(group) });
       if (ticket !== wishRequestId || activeGroupId !== group.groupId) return;
-      wishes = data.wishes || [];
+      wishes = visibleWishes(data.wishes || []);
       setError("", "group-wishes-error");
       renderWishes();
       renderCalendar();
@@ -848,9 +855,9 @@ export function initShared(app) {
       getEntries:(key) => [
         ...eventsForDate(key).map((event) => ({
           type:event.sourceType === "busy" ? "busy" : event.sourceType === "shift" ? "shift" : event.status === "tentative" ? "tentative" : "event",
-          label:event.sourceType === "busy" ? `${event.allDay ? "終日" : `${event.start}〜${event.end}`} 予定あり` :
+          label:event.sourceType === "busy" ? busyCalendarLabel(event) :
             `${event.createdByName} ${event.status === "tentative" ? "仮予定" : event.allDay ? "終日" : `${event.start}-${event.end}`}`,
-          ariaLabel:event.sourceType === "busy" ? `予定あり ${event.allDay ? "終日" : `${event.start}-${event.end}`}` :
+          ariaLabel:event.sourceType === "busy" ? busyCalendarAriaLabel(event) :
             `${event.createdByName} ${event.status === "tentative" ? "仮予定 " : ""}${event.sourceType === "shift" ? "シフト" : event.title} ${event.allDay ? "終日" : `${event.start}-${event.end}`}`,
         })),
         ...wishesForDate(key).filter((wish) => !wish.eventStatus).map((wish) => ({
@@ -1007,6 +1014,8 @@ export function initShared(app) {
     const group = memberships().find((item) => item.groupId === groupId);
     if (!group) return;
     activeGroupId = groupId;
+    lastWishDay = tokyoToday();
+    scheduleWishDayCheck();
     selectedGroupId = groupId;
     const targetDate = reminderTarget?.date;
     if (typeof targetDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(targetDate)) {
@@ -1031,6 +1040,26 @@ export function initShared(app) {
     if(typeof reminderTarget?.scheduleId==='string' && /^[A-Za-z0-9-]{1,64}$/.test(reminderTarget.scheduleId))
       void schedules?.openDetail(reminderTarget.scheduleId);
     window.scrollTo({ top:0, behavior:"instant" });
+  }
+  function scheduleWishDayCheck() {
+    if (wishDayTimer) clearTimeout(wishDayTimer);
+    if (!activeGroupId) return;
+    wishDayTimer = setTimeout(() => {
+      wishDayTimer = null;
+      checkWishDay();
+    }, millisUntilNextTokyoDay());
+  }
+  function checkWishDay() {
+    if (!activeGroupId || $("group-calendar-view").hidden) return;
+    const today = tokyoToday();
+    if (today !== lastWishDay) {
+      lastWishDay = today;
+      wishes = visibleWishes(wishes, today);
+      renderWishes();
+      renderCalendar();
+      void loadWishes();
+    }
+    scheduleWishDayCheck();
   }
   function monthsWithData() {
     const months = new Set();
@@ -1172,6 +1201,8 @@ export function initShared(app) {
     } finally { if (managedGroupId === group.groupId) setImageBusy(false); }
   }
   function init() {
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) checkWishDay(); });
+    window.addEventListener("pageshow", checkWishDay);
     groupDeletion=createGroupDeletion({$,requestJson,setError,onSuccess:completeGroupDeletion,
       onMemberChanged:()=>setError('メンバー数が変わりました。もう一度「グループから退出」を押してください。','group-icon-error')});
     schedules=initSchedules({$,requestJson,activeGroup,getCurrentUserId:app.getCurrentUserId,

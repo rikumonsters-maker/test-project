@@ -4,3 +4,14 @@ export function busyAgendaName(event){
   return typeof event?.busyDisplayName==='string'&&event.busyDisplayName.trim()
     ? `${event.busyDisplayName.trim()}${event.busyDisplayName.trim().endsWith('さん')?'':'さん'}　予定あり` : '予定あり';
 }
+
+export function busyCalendarLabel(event) {
+  const name = typeof event?.busyDisplayName === 'string' && event.busyDisplayName.trim()
+    ? `${event.busyDisplayName.trim()}${event.busyDisplayName.trim().endsWith('さん') ? '' : 'さん'}`
+    : '予定あり';
+  return `${name} ${event.allDay ? '終日' : `${event.start}〜${event.end}`}`;
+}
+
+export function busyCalendarAriaLabel(event) {
+  return `${busyAgendaName(event)} ${event.allDay ? '終日' : `${event.start}から${event.end}`}`;
+}

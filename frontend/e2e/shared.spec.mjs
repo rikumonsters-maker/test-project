@@ -52,6 +52,40 @@ test('旧ONは告知前から名前と時間帯を表示',async({page})=>{
   await expect(page.locator('#group-shared-events')).toContainText('13:00');
 });
 
+test('calendar labels agree with detail and never infer names for anonymous busy time',async({browser})=>{
+  const namedContext=await browser.newContext(),namedPage=await namedContext.newPage();
+  const named=syntheticApi({legacyEnabled:true,extraBusyMember:true});await openShared(namedPage,named);
+  await expect(namedPage.locator('#group-calendar .calendar-busy').filter({hasText:'田中さん 13:00〜15:00'})).toHaveCount(1);
+  await expect(namedPage.locator('#group-calendar .calendar-busy').filter({hasText:'佐藤さん 13:00〜15:00'})).toHaveCount(1);
+  await expect(namedPage.locator('#group-shared-events')).toContainText('田中さん');
+  await namedContext.close();
+  const anonymousContext=await browser.newContext(),anonymousPage=await anonymousContext.newPage();
+  const anonymous=syntheticApi();await openShared(anonymousPage,anonymous);
+  await expect(anonymousPage.locator('#group-calendar .calendar-busy')).toContainText('予定あり 13:00〜15:00');
+  await expect(anonymousPage.locator('#group-calendar .calendar-busy')).not.toContainText('田中');
+  await anonymousContext.close();
+});
+
+test('expired wishes stay absent from the list, count and calendar with a stale API response',async({page})=>{
+  const api=syntheticApi({legacyEnabled:true,includeExpired:true});await openShared(page,api);
+  await expect(page.locator('#group-wishes-list .group-wish-card')).toHaveCount(3);
+  await expect(page.locator('#group-wishes-more')).toBeHidden();
+  await expect(page.locator('#group-calendar')).not.toContainText('合成の遊びたい日 1');
+  expect(api.state.outside).toEqual([]);
+});
+
+test('an open group removes a proposal when Tokyo midnight passes',async({page})=>{
+  const api=syntheticApi({legacyEnabled:true});
+  const midnight=Date.parse(`${api.date}T15:00:00Z`);
+  await page.clock.install({time:new Date(midnight-1000)});
+  await openShared(page,api);
+  await expect(page.locator('#group-wishes-list .group-wish-card')).toHaveCount(3);
+  await page.clock.fastForward(2000);
+  await expect(page.locator('#group-wishes-list .group-wish-card')).toHaveCount(0);
+  await expect(page.locator('#group-calendar')).not.toContainText('合成の遊びたい日');
+  await expect(page.locator('#group-wishes-more')).toBeHidden();
+});
+
 test('共有画面、カレンダー、空き時間、画面遷移をモバイル幅で表示',async({page})=>{
   const api=syntheticApi({legacyEnabled:true});await page.setViewportSize({width:375,height:812});await openShared(page,api);
   await expect(page.locator('#group-calendar')).toBeVisible();
