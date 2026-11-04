@@ -397,7 +397,7 @@ button:disabled { opacity:.6; cursor:wait; }
 .legend-shift { border-left:3px double var(--accent-border); background:var(--accent-soft); }
 .legend-busy { border:1px dotted var(--accent-border); background:var(--surface-muted); }
 #group-calendar .calendar-shift { border-left:3px double var(--accent-border); }
-.calendar-busy { padding:3px; border:1px dotted var(--accent-border); border-radius:4px; color:var(--muted); background:var(--surface-muted); text-align:left; }
+.calendar-busy { display:block; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:3px; border:1px dotted var(--accent-border); border-radius:4px; color:var(--muted); background:var(--surface-muted); text-align:left; }
 #group-calendar .day-value { text-align:left; }
 .calendar-more { color:var(--muted); font-size:.65rem; line-height:1.3; text-align:center; }
 .group-calendar-layout .group-member-list { gap:0; }

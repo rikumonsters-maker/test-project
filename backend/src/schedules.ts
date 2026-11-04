@@ -3,6 +3,7 @@ import { loadAvailabilityDays } from './availability';
 import { drainPushQueue,type PushEnv } from './push';
 import { queueScheduleNotice,type ScheduleNoticeKind } from './schedule-notices';
 import { activeScheduleUserIds,getSchedule,listSchedules } from './schedule-read';
+import { tokyoToday } from './wish-expiry';
 import { activeMember,activeParticipants,deadline,json,optionInput,optionalText,schedule,text,userIds,
   type Body,type ScheduleMember,type ScheduleRow } from './schedule-core';
 
@@ -35,8 +36,9 @@ async function create(env:PushEnv,ctx:ExecutionContext,member:ScheduleMember,use
   if(sourceWishId) {
     const wish=await env.DB.prepare(`SELECT w.id FROM group_availability_wishes w
       WHERE w.id=?1 AND w.group_id=?2 AND w.manager_member_id=?3 AND w.management_state='open'
+      AND w.wish_date >= ?4
       AND NOT EXISTS (SELECT 1 FROM shared_events e WHERE e.wish_id=w.id AND e.status='confirmed' AND e.cancelled_at IS NULL)`)
-      .bind(sourceWishId,member.group_id,member.id).first();
+      .bind(sourceWishId,member.group_id,member.id,tokyoToday()).first();
     if(!wish) return json({error:'この遊びたい日から日程調整を開始できません'},409);
   }
   const id=crypto.randomUUID(),now=new Date().toISOString();
