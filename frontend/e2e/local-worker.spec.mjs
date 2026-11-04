@@ -48,6 +48,10 @@ test('local Worker and D1 expose only same-group busy names and reject legacy OF
     const oldPage=await member.context.newPage();await legacyFiles(oldPage);
     await oldPage.goto(`${app}/?group=${group.groupId}&date=${day}`);
     await expect(oldPage.locator('#group-calendar-view')).toBeVisible();
+    await expect(oldPage.locator('#member-timeline-consent')).toBeChecked();
+    await oldPage.locator('#member-timeline-consent').uncheck();
+    await expect(oldPage.locator('#member-timeline-setting-status')).toBeVisible();
+    await expect(oldPage.locator('#member-timeline-consent')).toBeChecked();
     const setting=await post(member.context,'/api/shared/named-busy/setting',{groupId:group.groupId});
     expect(setting).toMatchObject({enabled:true,configurable:false});
     const page=await owner.context.newPage();await page.goto(`${app}/?group=${group.groupId}&date=${day}`);
