@@ -40,12 +40,6 @@
     </section>
 
     <main class="page" id="app-root" hidden>
-      <section class="card named-busy-notice" id="named-busy-notice" aria-labelledby="named-busy-notice-title" hidden>
-        <h2 id="named-busy-notice-title">共有予定の表示方法が変わります</h2>
-        <p>共有予定の表示方法が変わります。同じグループのメンバーには、あなたの表示名と予定が入っている時間帯が表示されます。予定のタイトルやメモ、給与などの詳細は共有されません。</p>
-        <button class="action-button" id="named-busy-notice-ack" type="button">内容を確認しました</button>
-        <p class="status error" id="named-busy-notice-error" role="alert" hidden></p>
-      </section>
       <header class="site-header">
         <h1 class="site-title">DaySync — 毎日を、ひとつに。</h1>
         <div class="account-row">
@@ -183,7 +177,7 @@
           <div id="group-list" class="group-list" aria-label="参加中のグループ"></div>
           <article class="card" id="group-card">
             <h3>グループを追加</h3>
-            <p class="card-description">グループを作成するか、招待コードで参加できます。個人予定の詳細は本人が同意した同期APIにのみ送信し、グループ同期APIには含めません。共有画面には時間帯と「予定あり」のみ表示し、勤務先・給与・家計簿は共有しません。旧予定は自動移行されません。</p>
+            <p class="card-description">グループを作成するか、招待コードで参加できます。同じグループのメンバーには、表示名と予定が入っている時間帯が共有されます。個人予定の内容、勤務先・給与・家計簿は共有されません。個人予定の詳細は本人が同意した同期APIにのみ送信し、グループ同期APIには含めません。旧予定は自動移行されません。</p>
             <div class="card-stack">
               <form id="create-group-form" class="form-stack">
                 <label>グループ名<input id="group-name" type="text" maxlength="60" placeholder="例：家族" required /></label>

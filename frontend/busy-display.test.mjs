@@ -19,6 +19,7 @@ test('calendar and detail use only the server-authorized name, including overlap
   assert.equal(busyCalendarAriaLabel(events[0]),'田中さん　予定あり 13:30から14:38');
   assert.equal(busyCalendarAriaLabel(events[2]),'予定あり 13:30から14:38');
   assert.equal(busyCalendarLabel({busyDisplayName:'田中さん',allDay:true}),'田中さん 終日');
+  assert.equal(busyCalendarLabel({busyDisplayName:'メンバー',start:'13:30',end:'14:38'}),'メンバー 13:30〜14:38');
 });
 
 test('only an explicitly supplied display name labels a busy event',()=>{

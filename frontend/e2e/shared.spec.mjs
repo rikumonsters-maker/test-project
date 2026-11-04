@@ -30,23 +30,20 @@ async function openShared(page,api) {
   return failures;
 }
 
-test('旧OFFかつ告知未確認は匿名、確認後は同じグループで名前を表示',async({page})=>{
+test('旧OFFかつ告知未確認でも同じグループの名前と時間帯を表示',async({page})=>{
   const api=syntheticApi();const failures=await openShared(page,api);
-  await expect(page.locator('#group-shared-events')).not.toContainText('田中');
-  await expect(page.locator('#named-busy-notice')).toBeVisible();
+  await expect(page.locator('#group-shared-events')).toContainText('田中さん');
+  await expect(page.locator('#named-busy-notice')).toHaveCount(0);
   await page.locator('#member-timeline-details summary').click();
   await expect(page.locator('#member-timeline')).toBeVisible();
-  await expect(page.locator('#member-timeline')).not.toContainText('13:00');
-  await page.locator('#named-busy-notice-ack').click();
-  await expect(page.locator('#named-busy-notice')).toBeHidden();
-  await expect(page.locator('#group-shared-events')).toContainText('田中');
   await expect(page.locator('#member-timeline')).toContainText('13:00');
+  expect(api.state.requests.some(r=>r.path==='/api/shared/named-busy/notice')).toBe(false);
   for(const marker of api.privateMarkers) await expect(page.locator('#page-group')).not.toContainText(marker);
   expect(api.state.outside).toEqual([]);
   expect(failures).toEqual([]);
 });
 
-test('旧ONは告知前から名前と時間帯を表示',async({page})=>{
+test('旧ONの履歴があっても同じ名前と時間帯を表示',async({page})=>{
   const api=syntheticApi({legacyEnabled:true});await openShared(page,api);
   await expect(page.locator('#group-shared-events')).toContainText('田中');
   await expect(page.locator('#group-shared-events')).toContainText('13:00');
@@ -60,9 +57,9 @@ test('calendar labels agree with detail and never infer names for anonymous busy
   await expect(namedPage.locator('#group-shared-events')).toContainText('田中さん');
   await namedContext.close();
   const anonymousContext=await browser.newContext(),anonymousPage=await anonymousContext.newPage();
-  const anonymous=syntheticApi();await openShared(anonymousPage,anonymous);
-  await expect(anonymousPage.locator('#group-calendar .calendar-busy')).toContainText('予定あり 13:00〜15:00');
-  await expect(anonymousPage.locator('#group-calendar .calendar-busy')).not.toContainText('田中');
+  const anonymous=syntheticApi({anonymousBusy:true});await openShared(anonymousPage,anonymous);
+  await expect(anonymousPage.locator('#group-calendar .calendar-busy')).toContainText([
+    '田中さん 13:00〜15:00','予定あり 18:00〜20:00']);
   await anonymousContext.close();
 });
 
@@ -127,23 +124,18 @@ test('おすすめ日時から日程調整へ日時と参加者を引き継ぐ',
   expect(api.state.requests.some(r=>r.path==='/api/groups/schedules/create')).toBe(false);
 });
 
-test('古いタブのOFF要求は告知確認後409で名前公開を取り消さない',async({browser})=>{
+test('古いタブのOFF要求は409で名前公開を取り消さない',async({browser})=>{
   const context=await browser.newContext();const api=syntheticApi({legacyEnabled:false});await api.attach(context);
   const oldTab=await context.newPage(),newTab=await context.newPage();
   await useLegacyFrontend(oldTab);
   await oldTab.goto('/');await newTab.goto(`/?group=${api.group.groupId}&date=${api.date}`);
   await oldTab.locator('[data-page="group"]').click();
   await oldTab.locator('.group-name-button').first().click();
-  await expect(oldTab.locator('#member-timeline-consent')).not.toBeChecked();
-  await expect(newTab.locator('#named-busy-notice')).toBeVisible();
-  await newTab.locator('#named-busy-notice-ack').click();
-  // The stale checkbox can still send OFF. The backend must reject that write.
-  await oldTab.locator('#member-timeline-consent').check();
-  await expect(oldTab.locator('#member-timeline-consent')).toBeChecked();
-  await oldTab.locator('#member-timeline-consent').uncheck();
-  await expect(oldTab.locator('#member-timeline-setting-status')).toBeVisible();
-  await expect(oldTab.locator('#member-timeline-consent')).toBeChecked();
-  expect(api.state.requests.some(r=>r.path==='/api/shared/named-busy/update'&&r.body.enabled===false)).toBe(true);
+  expect(api.state.requests.some(r=>r.path==='/api/shared/named-busy/setting')).toBe(true);
+  const staleStatus=await oldTab.evaluate(async groupId=>(await fetch('http://127.0.0.1:8787/api/shared/named-busy/update',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({groupId,enabled:false})})).status,
+    api.group.groupId);
+  expect(staleStatus).toBe(409);
   await expect(newTab.locator('#group-shared-events')).toContainText('田中');
   await context.close();
 });

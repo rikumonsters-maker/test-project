@@ -147,6 +147,7 @@ test('after explicit consent, new personal events use only the personal API and 
 test('group sharing explanation separates personal sync from the group calendar API',async()=>{
   const html=await readFile(new URL('./index.html',import.meta.url),'utf8');
   assert.match(html,/個人予定の詳細は本人が同意した同期APIにのみ送信し、グループ同期APIには含めません/);
+  assert.match(html,/同じグループのメンバーには、表示名と予定が入っている時間帯が共有されます/);
   assert.match(html,/旧予定は自動移行されません/);
   assert.doesNotMatch(html,/この端末に保存済みのものも含め、個人予定は時間帯と「予定あり」のみ.*共有されます/);
 });

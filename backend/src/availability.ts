@@ -57,9 +57,10 @@ export async function loadAvailabilityDays(db:D1Database, groupId:string, userId
     db.prepare(`SELECT DISTINCT m.user_id,e.event_date,e.source_type,e.starts_at,e.ends_at,e.all_day
       FROM member_calendar_entries e JOIN active_group_members m ON m.id=e.member_id
       WHERE m.user_id IN (${slots}) AND e.event_date BETWEEN ? AND ?
+      AND (?=0 OR e.group_id=?)
       AND (e.source_type<>'personal' OR NOT EXISTS
         (SELECT 1 FROM personal_sync_users s WHERE s.user_id=m.user_id))`)
-      .bind(...userIds,nextDate(first,-1),last).all<TimedRow>(),
+      .bind(...userIds,nextDate(first,-1),last,namedTimeline?1:0,groupId).all<TimedRow>(),
     db.prepare(`SELECT DISTINCT target.user_id,e.event_date,e.starts_at,e.ends_at,e.all_day,e.status
       FROM shared_events e JOIN group_members creator ON creator.id=e.created_by_member_id
       JOIN active_group_members target ON target.group_id=? AND target.user_id IN (${slots})

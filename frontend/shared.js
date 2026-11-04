@@ -57,7 +57,7 @@ export function initShared(app) {
   let wishClientRequestId = null;
   let sharedEventEditor = null;
   let commonAvailability = null;
-  const memberTimeline=initMemberTimeline({$,requestJson,activeGroup:()=>activeGroup(),onConsentChanged:()=>void refreshCurrentMonth()});
+  const memberTimeline=initMemberTimeline({$,requestJson,activeGroup:()=>activeGroup()});
   let schedules = null;
   let sharedReminderControls = null;
   let sharedReminderEvent = null;
