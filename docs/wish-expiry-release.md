@@ -1,5 +1,9 @@
 # Shared busy labels and play-day expiry
 
+> Historical PR #19 release record. PR #20 changes the named busy policy; use
+> `docs/group-busy-names-release.md` for its release gates. The legacy OFF and
+> acknowledgement statements below describe the policy before PR #20.
+
 ## Data policy
 
 - Calendar and date detail show a name only when `/api/shared/events/list` supplies `busyDisplayName`. The existing notice and group authorization policy stays in the Worker. A legacy OFF member who has not acknowledged the notice remains anonymous. Matching a timeline interval never identifies an event owner.
