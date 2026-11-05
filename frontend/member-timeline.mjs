@@ -10,7 +10,7 @@ export function timelineSegments(intervals,from=540,to=1320){
 }
 const time=n=>`${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
 
-export function initMemberTimeline({$,requestJson,activeGroup,onConsentChanged}){
+export function initMemberTimeline({$,requestJson,activeGroup}){
   const root=$('member-timeline'),details=$('member-timeline-details');
   let generation=0,groupId=null,date=null,loadedAt=0;
   const clear=()=>{generation++;groupId=null;date=null;loadedAt=0;root.replaceChildren();if(details)details.open=false;};

@@ -29,10 +29,20 @@ const GROUP_ICON_COLORS = [
   { id:"purple", label:"\u7d2b" }, { id:"pink", label:"\u30d4\u30f3\u30af" }, { id:"orange", label:"\u30aa\u30ec\u30f3\u30b8" }, { id:"gray", label:"\u30b0\u30ec\u30fc" },
 ];
 const SVG_NS = "http://www.w3.org/2000/svg";
+const NAMED_BUSY_ACTIVATION_MS = Date.parse("2026-11-06T09:00:00Z");
 
 export function initShared(app) {
   const { $, state, view, parseDate, requestJson, saveState, renderMonthCalendar, changeMonth, dateLabel, QrScanner, qrcode } = app;
   let activeGroupId = null;
+  let namedBusyCutoffRefreshed = false;
+  const refreshAtNamedBusyCutoff = () => {
+    if (namedBusyCutoffRefreshed || Date.now() < NAMED_BUSY_ACTIVATION_MS || document.hidden) return;
+    namedBusyCutoffRefreshed = true;
+    if (activeGroupId && !$("group-calendar-view").hidden) {
+      void refreshCurrentMonth();
+      void memberTimeline.show(view.groupDate, true);
+    }
+  };
   let selectedGroupId = null;
   let managedGroupId = null;
   let selectedIconId = "friends";
@@ -57,7 +67,7 @@ export function initShared(app) {
   let wishClientRequestId = null;
   let sharedEventEditor = null;
   let commonAvailability = null;
-  const memberTimeline=initMemberTimeline({$,requestJson,activeGroup:()=>activeGroup(),onConsentChanged:()=>void refreshCurrentMonth()});
+  const memberTimeline=initMemberTimeline({$,requestJson,activeGroup:()=>activeGroup()});
   let schedules = null;
   let sharedReminderControls = null;
   let sharedReminderEvent = null;
@@ -1201,6 +1211,11 @@ export function initShared(app) {
     } finally { if (managedGroupId === group.groupId) setImageBusy(false); }
   }
   function init() {
+    if (Date.now() < NAMED_BUSY_ACTIVATION_MS)
+      setTimeout(refreshAtNamedBusyCutoff, NAMED_BUSY_ACTIVATION_MS - Date.now() + 100);
+    else namedBusyCutoffRefreshed = true;
+    document.addEventListener("visibilitychange", refreshAtNamedBusyCutoff);
+    window.addEventListener("pageshow", refreshAtNamedBusyCutoff);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) checkWishDay(); });
     window.addEventListener("pageshow", checkWishDay);
     groupDeletion=createGroupDeletion({$,requestJson,setError,onSuccess:completeGroupDeletion,

@@ -2,12 +2,17 @@
 // Never infer a name from matching times in the separate timeline response.
 export function busyAgendaName(event){
   return typeof event?.busyDisplayName==='string'&&event.busyDisplayName.trim()
-    ? `${event.busyDisplayName.trim()}${event.busyDisplayName.trim().endsWith('さん')?'':'さん'}　予定あり` : '予定あり';
+    ? `${displayName(event.busyDisplayName)}　予定あり` : '予定あり';
+}
+
+function displayName(name){
+  const value=name.trim();
+  return value==='メンバー'||value.endsWith('さん')?value:`${value}さん`;
 }
 
 export function busyCalendarLabel(event) {
   const name = typeof event?.busyDisplayName === 'string' && event.busyDisplayName.trim()
-    ? `${event.busyDisplayName.trim()}${event.busyDisplayName.trim().endsWith('さん') ? '' : 'さん'}`
+    ? displayName(event.busyDisplayName)
     : '予定あり';
   return `${name} ${event.allDay ? '終日' : `${event.start}〜${event.end}`}`;
 }

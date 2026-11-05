@@ -7,11 +7,10 @@ const members=[{memberId:'member-a',userId:user.id,memberName:user.displayName},
 const privateMarkers=['私的タイトルSECRET','私的メモSECRET','勤務先SECRET','給与SECRET','家計簿SECRET'];
 const date=tokyoToday();
 
-export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false}={}) {
+export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false}={}) {
   const state={legacyEnabled,acknowledged,requests:[],outside:[]};
-  const named=()=>state.legacyEnabled||state.acknowledged;
   const event=()=>({id:'anonymous-busy',sourceType:'busy',eventDate:date,start:'13:00',end:'15:00',
-    title:'予定あり',...(named()?{busyDisplayName:'田中'}:{})});
+    title:'予定あり',busyDisplayName:'田中'});
   async function attach(context) {
     await context.route('**/*',async route=>{
       const request=route.request(),url=new URL(request.url());
@@ -35,25 +34,23 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
       else if(path==='/api/profile') data={profile:{displayName:user.displayName,profileIcon:'🌿',email:'synthetic@example.invalid'}};
       else if(path==='/api/notifications/count') data={count:0};
       else if(path==='/api/shared/named-busy/notice') {
-        if(body.acknowledge===true) state.acknowledged=true;
-        data={acknowledged:state.acknowledged,policy:'group-after-notice'};
+        data={acknowledged:true,policy:'group',requiresAcknowledgement:false};
       }
-      else if(path==='/api/shared/named-busy/setting') data={enabled:named(),policy:state.acknowledged?'group':'legacy'};
+      else if(path==='/api/shared/named-busy/setting') data={enabled:true,policy:'group',configurable:false};
       else if(path==='/api/shared/named-busy/update') {
-        if(state.acknowledged && body.enabled===false){status=409;data={error:'表示方法が変更されました。画面を更新してください',code:'NAMED_BUSY_POLICY_CHANGED'};}
-        else {state.legacyEnabled=body.enabled===true;data={enabled:named(),policy:'legacy'};}
+        status=409;data={error:'名前表示の切替設定は終了しました。画面を更新してください',code:'NAMED_BUSY_POLICY_CHANGED'};
       }
       else if(path==='/api/shared/named-busy/timeline') data={members:members.map(m=>({name:m.memberName,
-        userId:m.userId,sharing:m.userId===user.id||named(),status:'confirmed',
-        busy:m.userId==='00000000-0000-4000-8000-000000000002'&&named()&&body.date===date?[{start:'13:00',end:'15:00'}]:[],tentative:[]}))};
+        sharing:true,status:'confirmed',
+        busy:m.userId==='00000000-0000-4000-8000-000000000002'&&body.date===date?[{start:'13:00',end:'15:00'}]:[],tentative:[]}))};
       else if(path==='/api/groups/members/list') data={members};
       else if(path==='/api/groups/wishes/list') data={wishes:Array.from({length:4},(_,i)=>({id:`synthetic-wish-${i}`,wishDate:includeExpired&&i===0?'2020-01-01':date,
         message:`合成の遊びたい日 ${i+1}`,ownerName:'テスト利用者',userId:user.id,isOwn:true,
         managementState:'open',isAllDay:false,start:'18:00',end:'20:00',interestedUsers:[]}))};
       else if(path==='/api/shared/events/list') data={events:[event(),...(extraBusyMember?[{
         id:'second-busy',sourceType:'busy',eventDate:date,start:'13:00',end:'15:00',title:'予定あり',
-        ...(named()?{busyDisplayName:'佐藤'}:{}),
-      }]:[])]};
+        busyDisplayName:'佐藤',
+      }]:[]),...(anonymousBusy?[{id:'other-group-busy',sourceType:'busy',eventDate:date,start:'18:00',end:'20:00',title:'予定あり'}]:[])]};
       else if(path==='/api/shared/availability/search') data={days:[{date,unconfirmedUserIds:[],slots:[{start:'16:00',end:'18:00',registeredClearCount:2,hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,needsConfirmation:false}]}],
         recommendations:[{date,start:'16:00',end:'18:00',registeredClearCount:2,hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,reason:'登録済み予定との競合なし'}]};
       else {status=501;data={error:`Synthetic API has no fixture for ${path}`};}

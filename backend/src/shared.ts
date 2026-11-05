@@ -7,6 +7,7 @@ import { queueScheduleNotice } from './schedule-notices';
 import { sharedReminderRefreshStatements } from './reminders';
 import { notificationPath } from './notifications';
 import { candidateSlots, combineBusyDays, formatMinute, freeIntervals, loadAvailabilityDays, loadBusyDays, nextDate, rankAvailability, unconfirmedByMonth } from './availability';
+import { namedBusyActive } from './named-busy-activation';
 
 type SharedEnv = PushEnv;
 
@@ -374,6 +375,7 @@ async function closeGroup(db:D1Database,body:JsonRecord,user:SessionUser):Promis
 }
 
 async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): Promise<Response> {
+	const namesActive = namedBusyActive();
 	const member = await requireMembership(db, body, user);
 	const month = stringValue(body.month, 7);
 	if (!member) return jsonResponse({ error: 'グループへの参加情報を確認できません' }, 401);
@@ -402,9 +404,10 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 		}>();
 	const automatic = await db.prepare(
 		`SELECT e.source_type, e.source_id, e.title, e.event_date, e.starts_at, e.ends_at, e.all_day, e.note,
-		        e.member_id, m.user_id, COALESCE(u.display_name, m.display_name) AS member_name,
+		        e.member_id, m.user_id,
 		        COALESCE(sharing.enabled,0) AS legacy_enabled,
-		        CASE WHEN notice.user_id IS NULL THEN 0 ELSE 1 END AS notice_seen
+		        CASE WHEN notice.user_id IS NULL THEN 0 ELSE 1 END AS notice_seen,
+		        COALESCE(NULLIF(TRIM(u.display_name),''),NULLIF(TRIM(m.display_name),''),'メンバー') AS member_name
 		 FROM member_calendar_entries e JOIN active_group_members m ON m.id = e.member_id
 		 LEFT JOIN users u ON u.id = m.user_id
 		 LEFT JOIN group_named_busy_sharing sharing ON sharing.member_id=m.id
@@ -427,7 +430,7 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 		if (event.user_id !== user.id) return {
 			id:`busy:${crypto.randomUUID()}`, title:'\u4e88\u5b9a\u3042\u308a', eventDate:event.event_date,
 			start:event.starts_at, end:event.ends_at, allDay:Boolean(event.all_day), sourceType:'busy',
-			...(event.legacy_enabled===1 || event.notice_seen===1 ? {busyDisplayName:event.member_name} : {}),
+			...(namesActive || event.legacy_enabled===1 || event.notice_seen===1 ? {busyDisplayName:event.member_name} : {}),
 		};
 		return {
 			id:`${event.member_id}:${event.source_type}:${event.source_id}`, title:event.title, eventDate:event.event_date,
@@ -442,8 +445,9 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 	}));
 	const personal = await db.prepare(`SELECT e.event_date,e.starts_at,e.ends_at,e.all_day,
 		CASE WHEN e.user_id=?4 THEN 1 ELSE 0 END AS owned,
-		CASE WHEN COALESCE(sharing.enabled,0)=1 OR notice.user_id IS NOT NULL
-			THEN COALESCE(u.display_name,m.display_name) ELSE NULL END AS member_name,
+		COALESCE(sharing.enabled,0) AS legacy_enabled,
+		CASE WHEN notice.user_id IS NULL THEN 0 ELSE 1 END AS notice_seen,
+		COALESCE(NULLIF(TRIM(u.display_name),''),NULLIF(TRIM(m.display_name),''),'メンバー') AS member_name,
 		CASE WHEN e.user_id=?4 THEN e.id ELSE NULL END AS id,
 		CASE WHEN e.user_id=?4 THEN e.title ELSE NULL END AS title,
 		CASE WHEN e.user_id=?4 THEN e.note ELSE NULL END AS note,
@@ -455,13 +459,13 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 		LEFT JOIN named_busy_policy_notices notice ON notice.user_id=e.user_id
 		JOIN users u ON u.id=e.user_id WHERE m.group_id=?1 AND e.deleted=0 AND e.event_date>=?2 AND e.event_date<?3`)
 		.bind(member.group_id, `${month}-01`, `${month}-32`, user.id).all<{
-			id:string | null; owned:number; event_date:string; title:string | null; starts_at:string; ends_at:string; all_day:number; note:string | null; member_id:string | null; display_name:string | null; member_name:string | null;
+			id:string | null; owned:number; event_date:string; title:string | null; starts_at:string; ends_at:string; all_day:number; note:string | null; member_id:string | null; display_name:string | null; member_name:string | null; legacy_enabled:number; notice_seen:number;
 		}>();
 	const personalEvents = personal.results.map(event => event.owned ? {
 		id:`personal:${event.id}`,title:event.title,eventDate:event.event_date,start:event.starts_at,end:event.ends_at,
 		allDay:Boolean(event.all_day),note:event.note,createdByMemberId:event.member_id,createdByUserId:user.id,createdByName:event.display_name,sourceType:'personal',
 	} : {id:`busy:${crypto.randomUUID()}`,title:'予定あり',eventDate:event.event_date,start:event.starts_at,end:event.ends_at,allDay:Boolean(event.all_day),sourceType:'busy',
-		...(event.member_name ? {busyDisplayName:event.member_name} : {})});
+		...(event.member_name && (namesActive || event.legacy_enabled===1 || event.notice_seen===1) ? {busyDisplayName:event.member_name} : {})});
 	return jsonResponse({ events:[...legacyEvents, ...automaticEvents, ...personalEvents, ...redacted].sort((a, b) =>
 		a.eventDate.localeCompare(b.eventDate) || Number(b.allDay) - Number(a.allDay) || a.start.localeCompare(b.start),
 	) });
@@ -470,6 +474,11 @@ async function listEvents(db: D1Database, body: JsonRecord, user: SessionUser): 
 async function namedBusySharing(db:D1Database, body:JsonRecord, user:SessionUser, method:string):Promise<Response> {
 	const member=await requireMembership(db,body,user);
 	if(!member)return jsonResponse({error:'グループにアクセスできません'},403);
+	if(namedBusyActive()) {
+		if(method==='GET')return jsonResponse({enabled:true,policy:'group',configurable:false});
+		return jsonResponse({error:'名前表示の切替設定は終了しました。画面を更新してください',
+			code:'NAMED_BUSY_POLICY_CHANGED'},409);
+	}
 	const seen=Boolean(await db.prepare('SELECT 1 FROM named_busy_policy_notices WHERE user_id=?').bind(user.id).first());
 	if(method==='GET') {
 		if(seen)return jsonResponse({enabled:true,policy:'group'});
@@ -483,13 +492,13 @@ async function namedBusySharing(db:D1Database, body:JsonRecord, user:SessionUser
 	await db.prepare(`INSERT INTO group_named_busy_sharing(member_id,enabled,updated_at) VALUES(?,?,?)
 		ON CONFLICT(member_id) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at`)
 		.bind(member.member_id,body.enabled?1:0,new Date().toISOString()).run();
-	// A different device may acknowledge the notice while this old request runs.
-	if(await db.prepare('SELECT 1 FROM named_busy_policy_notices WHERE user_id=?').bind(user.id).first())
+	if(namedBusyActive() || await db.prepare('SELECT 1 FROM named_busy_policy_notices WHERE user_id=?').bind(user.id).first())
 		return jsonResponse({error:'表示方法が変更されました。画面を更新してください',code:'NAMED_BUSY_POLICY_CHANGED'},409);
 	return jsonResponse({enabled:body.enabled,policy:'legacy'});
 }
 
 async function namedBusyNotice(db:D1Database, body:JsonRecord, user:SessionUser):Promise<Response> {
+	if(namedBusyActive())return jsonResponse({acknowledged:true,policy:'group',requiresAcknowledgement:false});
 	if(body.acknowledge!==undefined && body.acknowledge!==true)return jsonResponse({error:'確認操作が不正です'},400);
 	if(body.acknowledge===true)
 		await db.prepare('INSERT OR IGNORE INTO named_busy_policy_notices(user_id,acknowledged_at) VALUES(?,?)')
@@ -500,19 +509,21 @@ async function namedBusyNotice(db:D1Database, body:JsonRecord, user:SessionUser)
 }
 
 async function memberTimeline(db:D1Database, body:JsonRecord, user:SessionUser):Promise<Response> {
+	const namesActive=namedBusyActive();
 	const member=await requireMembership(db,body,user);
 	if(!member)return jsonResponse({error:'グループにアクセスできません'},403);
 	if(!validDate(body.date))return jsonResponse({error:'日付が不正です'},400);
 	const date=body.date;
-	const rows=await db.prepare(`SELECT m.id,m.user_id,COALESCE(u.display_name,m.display_name) AS name,
+	const rows=await db.prepare(`SELECT m.id,m.user_id,
 		COALESCE(s.enabled,0) AS legacy_enabled,
-		CASE WHEN n.user_id IS NULL THEN 0 ELSE 1 END AS notice_seen
+		CASE WHEN n.user_id IS NULL THEN 0 ELSE 1 END AS notice_seen,
+		COALESCE(NULLIF(TRIM(u.display_name),''),NULLIF(TRIM(m.display_name),''),'メンバー') AS name
 		FROM active_group_members m JOIN users u ON u.id=m.user_id
 		LEFT JOIN group_named_busy_sharing s ON s.member_id=m.id
 		LEFT JOIN named_busy_policy_notices n ON n.user_id=m.user_id
 		WHERE m.group_id=? ORDER BY m.created_at,m.id`).bind(member.group_id)
 		.all<{id:string;user_id:string;name:string;legacy_enabled:number;notice_seen:number}>();
-	const sharing=rows.results.filter(row=>row.legacy_enabled===1||row.notice_seen===1);
+	const sharing=rows.results.filter(row=>namesActive||row.legacy_enabled===1||row.notice_seen===1);
 	const months=[...new Set([date.slice(0,7),nextDate(date,-1).slice(0,7)])];
 	let hard=new Map<string,Map<string,[number,number][]>>(),tentative=new Map<string,Map<string,[number,number][]>>();
 	let unknown=new Map<string,Set<string>>();
@@ -535,7 +546,7 @@ async function memberTimeline(db:D1Database, body:JsonRecord, user:SessionUser):
 		return jsonResponse({error:'グループへのアクセスが変わりました'},409);
 	const members=rows.results.filter(row=>state.get(row.user_id)?.id===row.id).map(row=>{
 		const active=state.get(row.user_id)!;
-		if(!(row.legacy_enabled===1||row.notice_seen===1) || !(active.legacy_enabled===1||active.notice_seen===1))
+		if(!(namesActive || (row.legacy_enabled===1||row.notice_seen===1) && (active.legacy_enabled===1||active.notice_seen===1)))
 			return {name:row.name,sharing:false,status:'not_shared',busy:[],tentative:[]};
 		const uncertain=months.some(month=>unknown.get(month)?.has(row.user_id));
 		const intervals=(source:typeof hard)=>source.get(row.user_id)?.get(date)?.map(([start,end])=>({start:formatMinute(start),end:formatMinute(end),allDay:start===0&&end===1440}))||[];

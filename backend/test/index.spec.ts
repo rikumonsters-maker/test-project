@@ -529,11 +529,13 @@ describe('account-bound groups', () => {
     expect(ownerEvents.find((event:any) => event.sourceType === 'shift')).toMatchObject({
       title:'PRIVATE_WORKPLACE_AND_PAY', note:'PRIVATE_SHIFT_MEMO', createdByUserId:first.user.id,
     });
+    expect((await api('/api/shared/named-busy/update', {groupId:group.groupId,enabled:true}, first.cookie)).status).toBe(200);
     const memberResponse = await api('/api/shared/events/list', { groupId:group.groupId, month:'2026-10' }, second.cookie);
     expect(memberResponse.data.events).toHaveLength(2);
     for (const event of memberResponse.data.events) {
       expect(event).toMatchObject({ title:'\u4e88\u5b9a\u3042\u308a', eventDate:'2026-10-10', sourceType:'busy' });
-      expect(Object.keys(event).sort()).toEqual(['allDay', 'end', 'eventDate', 'id', 'sourceType', 'start', 'title']);
+      expect(Object.keys(event).sort()).toEqual(['allDay', 'busyDisplayName', 'end', 'eventDate', 'id', 'sourceType', 'start', 'title']);
+      expect(event.busyDisplayName).toBe(first.user.displayName);
     }
     for (const secret of [
       'PRIVATE_PERSONAL_TITLE', 'PRIVATE_PERSONAL_NOTE', 'PRIVATE_WORKPLACE_AND_PAY', 'PRIVATE_SHIFT_MEMO',
