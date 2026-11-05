@@ -1,5 +1,5 @@
 import { env, createExecutionContext } from 'cloudflare:test';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applySQL } from './migration-helper';
 import { handleSharedRequest } from '../src/shared';
 import type { SessionUser } from '../src/auth';
@@ -43,6 +43,8 @@ beforeAll(async()=>{
 });
 
 describe('common availability Phase 1',()=>{
+  beforeEach(()=>vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-11-06T09:00:00Z')));
+  afterEach(()=>vi.restoreAllMocks());
   it('0019 and 0020 remain additive while historical settings do not gate names',async()=>{
     const row=await db.prepare('SELECT COUNT(*) AS count FROM group_named_busy_sharing').first<{count:number}>();
     expect(row?.count).toBe(0);
@@ -57,6 +59,17 @@ describe('common availability Phase 1',()=>{
     await db.prepare('INSERT INTO group_named_busy_sharing(member_id,enabled,updated_at) VALUES(?,0,?)')
       .bind(memberId,'2030-01-01').run();
     const list=()=>api(owner,'/api/shared/events/list',{groupId,month:day.slice(0,7)});
+    vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-11-06T08:59:59.999Z'));
+    expect((await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00').busyDisplayName).toBeUndefined();
+    expect((await api(owner,'/api/shared/named-busy/timeline',{groupId,date:day})).data.members
+      .find((row:any)=>row.name==='Member')).toMatchObject({sharing:false,busy:[]});
+    expect((await api(member,'/api/shared/named-busy/setting',{groupId})).data)
+      .toMatchObject({enabled:false,policy:'legacy'});
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:true})).status).toBe(200);
+    expect((await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00').busyDisplayName).toBe('Member');
+    expect((await api(member,'/api/shared/named-busy/update',{groupId,enabled:false})).status).toBe(200);
+    expect((await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00').busyDisplayName).toBeUndefined();
+    vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-11-06T09:00:00Z'));
     const named=(await list()).data.events.find((event:any)=>event.sourceType==='busy'&&event.start==='13:00'&&event.end==='15:00');
     expect(named.busyDisplayName).toBe('Member');
     expect(JSON.stringify(named)).not.toContain('PRIVATE_EMPLOYER');

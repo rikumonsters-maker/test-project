@@ -529,6 +529,7 @@ describe('account-bound groups', () => {
     expect(ownerEvents.find((event:any) => event.sourceType === 'shift')).toMatchObject({
       title:'PRIVATE_WORKPLACE_AND_PAY', note:'PRIVATE_SHIFT_MEMO', createdByUserId:first.user.id,
     });
+    expect((await api('/api/shared/named-busy/update', {groupId:group.groupId,enabled:true}, first.cookie)).status).toBe(200);
     const memberResponse = await api('/api/shared/events/list', { groupId:group.groupId, month:'2026-10' }, second.cookie);
     expect(memberResponse.data.events).toHaveLength(2);
     for (const event of memberResponse.data.events) {

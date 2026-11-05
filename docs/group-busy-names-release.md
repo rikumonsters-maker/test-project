@@ -2,9 +2,12 @@
 
 ## Policy and announcement
 
-After this release, every active member of a group can see another active
-member's display name and busy time in that group. The old named-busy OFF value
-and notice acknowledgement do not gate the result. Personal calendar sync
+At 2026-11-06 18:00 JST (09:00 UTC), every active member of a group can see another active
+member's display name and busy time in that group. Before this instant the
+server retains the historical ON/OFF and notice-acknowledgement gates for all
+named-busy responses and the cached Frontend setting API. After this instant
+the old named-busy OFF value and notice acknowledgement do not gate the result.
+The switch uses server time at each API request and needs no second deploy. Personal calendar sync
 consent remains separate. Other-group events are anonymous; personal titles,
 notes, workplaces, pay and budget data are not returned.
 
@@ -27,12 +30,15 @@ before the Worker deployment and report NO-GO.
 1. Confirm the exact PR HEAD and all four CI jobs, Preview, D1 schema through
    0020, current Worker configuration, backup and recovery Worker. Do not run
    any migration; 0011 remains intentionally unapplied.
-2. Send the announcement before the behavior change. Verify the recorded
-   audience and delivery result. Allow the stated notice period before release.
-3. Deploy the new Backend first. Check the old Frontend's authenticated reads,
-   unauthorized rejection, same-group names, other-group anonymity, detail
-   redaction, old setting GET, and 409 on old ON/OFF updates. A cached old tab
-   may still show the obsolete toggle; its update must not succeed. Monitor
+2. The five existing members were sent the announcement on 2026-11-05 JST,
+   explicitly promising no change before 2026-11-06 18:00 JST. Do not send
+   additional mail. Verify the record of delivery and the exact cutoff.
+3. Deploy the new Backend first. Before the cutoff, check that legacy OFF
+   remains anonymous, legacy ON remains named, old setting GET/POST works,
+   and the old Frontend remains compatible. After the cutoff, check
+   same-group names, other-group anonymity, detail redaction, and 409 on
+   old ON/OFF updates. A cached old tab may still show the obsolete toggle;
+   its update must not claim success after the cutoff. Monitor
    Cron and Worker errors. Stop on unexpected API, privacy or data changes.
 4. Confirm PR HEAD and protected checks again. Change Draft to Ready and merge
    through branch protection only after separate release authorization.
