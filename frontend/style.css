@@ -215,8 +215,18 @@ button:disabled { opacity:.6; cursor:wait; }
 }
 .group-member { margin:4px 0 14px; color:var(--muted); font-size:.88rem; }
 .group-home { max-width:680px; }
-.group-list-title { margin:0 0 12px; font-size:1rem; }
-.group-list { display:grid; gap:14px; margin-bottom:14px; }
+.group-list-title { margin:0 0 8px; font-size:1rem; }
+.group-list { display:grid; gap:8px; margin-bottom:10px; }
+.group-card { min-width:0; padding:10px 12px; }
+.group-card .group-name { gap:6px; margin:0; }
+.group-card .group-name-button { min-height:46px; gap:8px; padding:0 6px; border:0; background:transparent; font-size:.98rem; }
+.group-card .group-name-button[aria-pressed="true"] { background:var(--accent-soft); }
+.group-card .group-card-image { width:34px; height:34px; flex-basis:34px; border-radius:10px; }
+.group-card-actions { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:10px; margin:4px 0 0 48px; }
+.group-card-member-count { display:flex; min-width:0; align-items:baseline; gap:6px; margin:0; color:var(--muted); font-size:.78rem; }
+.group-card-member-count strong { color:var(--ink); font-size:.9rem; font-weight:750; }
+.group-invite-button { min-width:72px; min-height:44px; padding:8px 14px; }
+.group-card :focus-visible { outline:3px solid var(--accent-border); outline-offset:2px; }
 .group-calendar-name { margin:0 0 14px; font-size:1.1rem; }
 .qr-divider { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:10px; color:var(--muted); font-size:.85rem; text-align:center; }
 .qr-divider::before,.qr-divider::after { height:1px; background:var(--line); content:""; }
@@ -293,6 +303,10 @@ button:disabled { opacity:.6; cursor:wait; }
 .qr-dialog-close { display:block; margin:0 0 14px auto; }
 .qr-image { display:block; width:min(100%,320px); aspect-ratio:1; margin:12px auto; image-rendering:pixelated; }
 .qr-link { margin:0; overflow-wrap:anywhere; color:var(--muted); font-size:.82rem; }
+.group-invite-code-field { display:grid; gap:6px; margin:12px 0 8px; font-size:.88rem; font-weight:700; }
+.group-invite-code-field input { min-width:0; min-height:44px; padding:8px 10px; border:1px solid var(--input-border); border-radius:8px; color:var(--ink); background:var(--input-surface); font-variant-numeric:tabular-nums; }
+.group-invite-copy { width:100%; min-height:44px; margin-bottom:6px; }
+.group-invite-copy-status { min-height:1.4em; }
 .group-member-list { display:grid; gap:8px; margin:0; padding:0; list-style:none; }
 .group-member-list li { padding:10px 12px; border-radius:8px; background:var(--bg); font-size:.92rem; }
 .group-member-identity { display:flex; min-width:0; align-items:center; gap:9px; }

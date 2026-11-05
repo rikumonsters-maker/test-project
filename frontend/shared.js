@@ -49,6 +49,7 @@ export function initShared(app) {
   let selectedIconColorId = "green"
   let inviteScanner = null;
   let inviteScanHandled = false;
+  let inviteDialogGroupId = null;
   let scannerGeneration = 0;
   let eventsByDate = {};
   let loadedMonths = new Set();
@@ -135,7 +136,7 @@ export function initShared(app) {
   }
   function groupCard(group) {
     const card = document.createElement("article");
-    card.className = "card";
+    card.className = "card group-card";
     const heading = document.createElement("h3");
     heading.className = "group-name";
     const name = document.createElement("button");
@@ -144,6 +145,7 @@ export function initShared(app) {
     const nameText = document.createElement("span");
     nameText.className = "group-name-text";
     nameText.textContent = group.groupName;
+    nameText.title = group.groupName;
     name.append(nameText);
     name.setAttribute("aria-label", `${group.groupName}の共有カレンダーを表示`);
     name.setAttribute("aria-pressed", String(group.groupId === selectedGroupId));
@@ -160,38 +162,27 @@ export function initShared(app) {
     manage.addEventListener("click", () => openGroupManagement(group));
     heading.append(name, manage);
     const member = document.createElement("p");
-    member.className = "group-member";
-    member.textContent = `${group.memberName} として参加中`;
-    const label = document.createElement("label");
-    label.textContent = "招待コード";
-    const copyField = document.createElement("span");
-    copyField.className = "copy-field";
-    const code = document.createElement("input");
-    code.type = "text";
-    code.readOnly = true;
-    code.value = group.inviteCode || "";
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "action-button";
-    copy.textContent = "コピー";
-    copy.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(code.value);
-        setStatus("招待コードをコピーしました。", "safe");
-      } catch {
-        code.select();
-        setStatus("招待コードを選択しました。コピーしてください。", "caution");
-      }
-    });
-    copyField.append(code, copy);
-    label.append(copyField);
-    const showQr = document.createElement("button");
-    showQr.type = "button";
-    showQr.className = "action-button qr-show-button";
-    showQr.textContent = "QRコードを表示";
-    showQr.disabled = !group.inviteCode;
-    showQr.addEventListener("click", () => showInviteQr(group));
-    card.append(heading, member, label, showQr);
+    member.className = "group-card-member-count";
+    const memberCount = Number(group.memberCount);
+    const memberCountLabel = document.createElement("span");
+    memberCountLabel.textContent = "メンバー";
+    const memberCountValue = document.createElement("strong");
+    const hasMemberCount = Number.isInteger(memberCount) && memberCount >= 1;
+    memberCountValue.textContent = hasMemberCount ? `${memberCount}人` : "人数未取得";
+    member.append(memberCountLabel, memberCountValue);
+    member.setAttribute("aria-label", hasMemberCount ? `メンバー${memberCount}人` : "メンバー数は未取得です");
+    const actions = document.createElement("div");
+    actions.className = "group-card-actions";
+    const invite = document.createElement("button");
+    invite.type = "button";
+    invite.className = "action-button group-invite-button";
+    invite.textContent = "招待";
+    invite.disabled = !group.inviteCode;
+    invite.setAttribute("aria-label", `${group.groupName}にメンバーを招待`);
+    invite.setAttribute("aria-haspopup", "dialog");
+    invite.addEventListener("click", () => showInviteQr(group.groupId));
+    actions.append(member, invite);
+    card.append(heading, actions);
     return card;
   }
   function openGroupManagement(group) {
@@ -329,22 +320,56 @@ export function initShared(app) {
       setError(error.message || "グループアイコンを保存できませんでした。", "group-icon-error");
     } finally { setImageBusy(false); }
   }
-  function showInviteQr(group) {
+  function showInviteQr(groupId) {
+    const group = memberships().find(item => item.groupId === groupId);
+    if (!group?.inviteCode) return;
     const url = createInviteUrl(group.inviteCode);
     const qr = qrcode(0, "M");
     qr.addData(url.href);
     qr.make();
+    inviteDialogGroupId = group.groupId;
     $("group-invite-qr-name").textContent = group.groupName;
+    $("group-invite-qr-code").value = group.inviteCode;
     $("group-invite-qr-image").src = qr.createDataURL(6, 8);
     $("group-invite-qr-url").textContent = url.href;
+    $("group-invite-qr-copy-status").textContent = "";
     const dialog = $("group-invite-qr-dialog");
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
+  }
+  function clearInviteQr() {
+    inviteDialogGroupId = null;
+    $("group-invite-qr-code").value = "";
+    $("group-invite-qr-image").removeAttribute("src");
+    $("group-invite-qr-url").textContent = "";
+    $("group-invite-qr-name").textContent = "";
+    $("group-invite-qr-copy-status").textContent = "";
+    $("group-invite-qr-copy-status").className = "status";
   }
   function closeInviteQr() {
     const dialog = $("group-invite-qr-dialog");
     if (typeof dialog.close === "function" && dialog.open) dialog.close();
     else dialog.removeAttribute("open");
+    clearInviteQr();
+  }
+  async function copyInviteCode() {
+    const group = memberships().find(item => item.groupId === inviteDialogGroupId);
+    const code = $("group-invite-qr-code").value;
+    const status = $("group-invite-qr-copy-status");
+    if (!group?.inviteCode || group.inviteCode !== code) {
+      status.textContent = "招待情報が更新されました。招待を開き直してください。";
+      status.className = "status error";
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(group.inviteCode);
+      status.textContent = "招待コードをコピーしました。";
+      status.className = "status safe";
+    } catch {
+      $("group-invite-qr-code").select();
+      status.textContent = "招待コードを選択しました。コピーしてください。";
+      status.className = "status caution";
+    }
   }
   function inviteCodeFromQr(value) {
     try {
@@ -1377,9 +1402,11 @@ export function initShared(app) {
     $("open-invite-qr-scanner").addEventListener("click", () => void startInviteScanner());
     $("close-invite-qr-scanner").addEventListener("click", () => stopInviteScanner());
     $("close-group-invite-qr").addEventListener("click", closeInviteQr);
+    $("group-invite-qr-copy").addEventListener("click", () => void copyInviteCode());
     $("group-invite-qr-dialog").addEventListener("click", (event) => {
       if (event.target === $("group-invite-qr-dialog")) closeInviteQr();
     });
+    $("group-invite-qr-dialog").addEventListener("close", clearInviteQr);
     showHome();
     void flushPending();
   }
