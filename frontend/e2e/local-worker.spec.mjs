@@ -41,14 +41,27 @@ test('local Worker and D1 preserve legacy OFF before activation',async({browser}
     });
     const group=(await post(owner.context,'/api/groups/create',
       {name:'Synthetic Group',memberName:'Group Owner'})).membership;
-    await post(member.context,'/api/groups/join',{inviteCode:group.inviteCode,memberName:'Tanaka'});
+    expect(group.memberCount).toBe(1);
+    const joined=(await post(member.context,'/api/groups/join',
+      {inviteCode:group.inviteCode,memberName:'Tanaka'})).membership;
+    expect(joined.memberCount).toBe(2);
+    for(const context of [owner.context,member.context]) {
+      const mine=await post(context,'/api/groups/mine',{});
+      expect(mine.groups.find(item=>item.groupId===group.groupId).memberCount).toBe(2);
+    }
     await post(member.context,'/api/shared/calendar/sync',{groupId:group.groupId,month:'2030-10',syncShifts:true,
       entries:[{sourceType:'shift',sourceId:crypto.randomUUID(),eventDate:day,title:'PRIVATE_EMPLOYER',
         start:'13:00',end:'15:00',allDay:false,note:'PRIVATE_NOTE'}]});
-    const oldPage=await member.context.newPage();await legacyFiles(oldPage);
+    const oldPage=await member.context.newPage();
+    const legacyErrors=[];oldPage.on('pageerror',error=>legacyErrors.push(error.message));
+    await legacyFiles(oldPage);
     await oldPage.goto(`${app}/?group=${group.groupId}&date=${day}`);
     await expect(oldPage.locator('#group-calendar-view')).toBeVisible();
     await expect(oldPage.locator('#member-timeline-consent')).not.toBeChecked();
+    await oldPage.locator('#back-to-groups').click();
+    await expect(oldPage.locator('#group-home')).toBeVisible();
+    await expect(oldPage.locator('#group-list')).toContainText('Synthetic Group');
+    expect(legacyErrors).toEqual([]);
     const setting=await post(member.context,'/api/shared/named-busy/setting',{groupId:group.groupId});
     expect(setting).toMatchObject({enabled:false,policy:'legacy'});
     const page=await owner.context.newPage();await page.goto(`${app}/?group=${group.groupId}&date=${day}`);
