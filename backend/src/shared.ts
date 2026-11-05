@@ -85,8 +85,8 @@ async function requireMembership(db: D1Database, body: JsonRecord, user: Session
 }
 
 function membershipResponse(groupId: string, groupName: string, inviteCode: string, memberId: string, memberName: string,
-	groupIcon = 'friends', groupIconColor = 'green') {
-	return { membership: { groupId, groupName, inviteCode, memberId, memberName, groupIcon, groupIconColor } };
+	groupIcon = 'friends', groupIconColor = 'green', memberCount = 1) {
+	return { membership: { groupId, groupName, inviteCode, memberId, memberName, groupIcon, groupIconColor, memberCount } };
 }
 
 async function createGroup(db: D1Database, body: JsonRecord, user: SessionUser): Promise<Response> {
@@ -136,7 +136,11 @@ async function joinGroup(env: SharedEnv, ctx: ExecutionContext, body: JsonRecord
 		.first<{ id: string; name: string; invite_code: string; group_icon:string; group_icon_color:string }>();
 	if (!group) return jsonResponse({ error: '招待コードが見つかりません' }, 404);
 	const existing = await db.prepare('SELECT id, display_name FROM active_group_members WHERE group_id = ?1 AND user_id = ?2').bind(group.id, user.id).first<{ id:string; display_name:string }>();
-	if (existing) return jsonResponse(membershipResponse(group.id, group.name, group.invite_code, existing.id, existing.display_name, group.group_icon || 'friends', group.group_icon_color || 'green'));
+	if (existing) {
+		const count = await db.prepare('SELECT COUNT(*) AS count FROM active_group_members WHERE group_id=?').bind(group.id).first<{count:number}>();
+		return jsonResponse(membershipResponse(group.id, group.name, group.invite_code, existing.id, existing.display_name,
+			group.group_icon || 'friends', group.group_icon_color || 'green', Number(count?.count) || 1));
+	}
 	const memberId = crypto.randomUUID();
 	const memberToken = token();
 	try {
@@ -145,17 +149,20 @@ async function joinGroup(env: SharedEnv, ctx: ExecutionContext, body: JsonRecord
 	} catch {
 		return jsonResponse({error:'グループの参加状態が変わりました。招待コードを確認してください。'},409);
 	}
+	const count = await db.prepare('SELECT COUNT(*) AS count FROM active_group_members WHERE group_id=?').bind(group.id).first<{count:number}>();
 	await scheduleNotice(env, ctx, group.id, user.id, 'group_joined', `「${group.name}」に${memberName}さんが参加しました`,
 		'group-joined:'+memberId);
-	return jsonResponse(membershipResponse(group.id, group.name, group.invite_code, memberId, memberName, group.group_icon || 'friends', group.group_icon_color || 'green'), 201);
+	return jsonResponse(membershipResponse(group.id, group.name, group.invite_code, memberId, memberName,
+		group.group_icon || 'friends', group.group_icon_color || 'green', Number(count?.count) || 1), 201);
 }
 
 async function mine(db: D1Database, user: SessionUser): Promise<Response> {
-	const rows = await db.prepare(`SELECT m.id AS member_id, m.display_name, g.id AS group_id, g.name, g.invite_code, g.group_icon, g.group_icon_color
+	const rows = await db.prepare(`SELECT m.id AS member_id, m.display_name, g.id AS group_id, g.name, g.invite_code, g.group_icon, g.group_icon_color,
+		(SELECT COUNT(*) FROM active_group_members count_member WHERE count_member.group_id=g.id) AS member_count
 		FROM active_group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = ?1 ORDER BY m.created_at, m.id`)
-		.bind(user.id).all<{ member_id:string; display_name:string; group_id:string; name:string; invite_code:string; group_icon:string; group_icon_color:string }>();
+		.bind(user.id).all<{ member_id:string; display_name:string; group_id:string; name:string; invite_code:string; group_icon:string; group_icon_color:string; member_count:number }>();
 	return jsonResponse({ groups:(rows.results || []).map((row) => ({ groupId:row.group_id, groupName:row.name, inviteCode:row.invite_code, memberId:row.member_id, memberName:row.display_name,
-		groupIcon:row.group_icon || 'friends', groupIconColor:row.group_icon_color || 'green' })) });
+		groupIcon:row.group_icon || 'friends', groupIconColor:row.group_icon_color || 'green', memberCount:Number(row.member_count) })) });
 }
 
 async function claimLegacyMembership(db: D1Database, body: JsonRecord, user: SessionUser): Promise<Response> {

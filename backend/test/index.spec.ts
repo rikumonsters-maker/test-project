@@ -497,15 +497,22 @@ describe('account-bound groups', () => {
     expect(created.status).toBe(201);
     const group = created.data.membership;
     expect(group.memberToken).toBeUndefined();
+    expect(group.memberCount).toBe(1);
     const joined = await api('/api/groups/join', { inviteCode:group.inviteCode, memberName:'同じ名前' }, second.cookie);
     expect(joined.status).toBe(201);
     expect(joined.data.membership.memberId).not.toBe(group.memberId);
-    expect((await api('/api/groups/mine', {}, first.cookie)).data.groups).toHaveLength(1);
+    expect(joined.data.membership.memberCount).toBe(2);
+    expect((await api('/api/groups/mine', {}, first.cookie)).data.groups).toEqual([
+      expect.objectContaining({ groupId:group.groupId, memberCount:2 }),
+    ]);
+    expect((await api('/api/groups/mine', {}, second.cookie)).data.groups[0].memberCount).toBe(2);
     const members = await api('/api/groups/members/list', { groupId:group.groupId }, first.cookie);
     expect(members.data.members).toHaveLength(2);
     expect(members.data.members.map((member: any) => member.userId).sort()).toEqual([first.user.id, second.user.id].sort());
     expect((await api('/api/groups/members/list', { groupId:group.groupId })).status).toBe(401);
     const third = await register();
+    expect((await api('/api/groups/mine', {}, third.cookie)).data.groups).toEqual([]);
+    expect((await api('/api/groups/mine')).status).toBe(401);
     expect((await api('/api/groups/members/list', { groupId:group.groupId }, third.cookie)).status).toBe(401);
   });
 
