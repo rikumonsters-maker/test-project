@@ -202,8 +202,10 @@ test('3D tilt can be enabled again and preference survives reload without a serv
   await expect(toggle).not.toBeChecked();
   const requests=[];
   page.on('request',request=>requests.push({url:request.url(),method:request.method()}));
-  await toggle.check();
+  await toggle.focus();
+  await page.keyboard.press('Space');
   await expect(page.locator('html')).toHaveAttribute('data-card-tilt','on');
+  await expect(toggle).toBeChecked();
   expect(await page.evaluate(()=>localStorage.getItem('daysync-card-3d-tilt'))).toBe('on');
   expect(requests).toEqual([]);
   await page.reload();
@@ -211,6 +213,23 @@ test('3D tilt can be enabled again and preference survives reload without a serv
   await page.locator('#account-open').click();
   await expect(page.locator('#card-tilt-toggle')).toBeChecked();
 });
+
+for(const width of [320,375,390,430,768,1280]) {
+  test(`3D tilt preference remains accessible at ${width}px`,async({page})=>{
+    await openGroupHome(page,{width,height:844});
+    await page.locator('#account-open').click();
+    const row=page.locator('.card-tilt-toggle-row');
+    const toggle=page.locator('#card-tilt-toggle');
+    await expect(row).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-describedby','card-tilt-help');
+    const rowBox=await row.boundingBox();
+    const toggleBox=await toggle.boundingBox();
+    expect(rowBox?.height).toBeGreaterThanOrEqual(48);
+    expect(toggleBox?.width).toBeGreaterThanOrEqual(24);
+    expect(toggleBox?.height).toBeGreaterThanOrEqual(24);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  });
+}
 
 test('interactive card hover supports dark theme, keyboard focus and reduced motion',async({page})=>{
   await openGroupHome(page,{width:390,height:844});
