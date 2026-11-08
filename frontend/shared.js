@@ -136,7 +136,7 @@ export function initShared(app) {
   }
   function groupCard(group) {
     const card = document.createElement("article");
-    card.className = "card group-card";
+    card.className = "card group-card interactive-card";
     const heading = document.createElement("h3");
     heading.className = "group-name";
     const name = document.createElement("button");
@@ -261,7 +261,7 @@ export function initShared(app) {
     for (const item of GROUP_ICONS) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = "group-icon-option";
+      button.className = "group-icon-option interactive-card";
       button.dataset.iconId = item.id;
       button.setAttribute("aria-pressed", String(item.id === selectedIconId));
       button.setAttribute("aria-label", item.label);

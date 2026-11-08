@@ -33,7 +33,7 @@ export function initBudget(app) {
     const list = $('expense-category-chart-list'); list.replaceChildren();
     EXPENSE_CATEGORIES.forEach((category,index) => {
       const item = document.createElement('li');
-      const button = document.createElement('button'); button.type='button'; button.className='chart-category';
+      const button = document.createElement('button'); button.type='button'; button.className='chart-category interactive-card';
       button.setAttribute('aria-pressed',String(selectedCategory===category));
       const label = document.createElement('span'); label.className='chart-category-name';
       const swatch = document.createElement('i'); swatch.className='chart-swatch'; swatch.style.backgroundColor=chartColors[index]; swatch.setAttribute('aria-hidden','true');

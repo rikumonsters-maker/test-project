@@ -34,6 +34,8 @@
   --focus-soft:rgba(22,101,52,.12);
   --shadow:0 8px 24px rgba(25,45,28,.07);
   --small-shadow:0 1px 3px rgba(25,45,28,.12);
+  --interactive-card-border-hover:#93c5fd;
+  --interactive-card-shadow-hover:0 12px 24px rgba(0,0,0,.12);
   --nav-shadow:0 -5px 18px rgba(25,45,28,.07);
   --backdrop:rgba(20,32,22,.48);
 }
@@ -73,6 +75,8 @@
   --focus-soft:rgba(139,217,165,.16);
   --shadow:0 9px 26px rgba(0,0,0,.26);
   --small-shadow:0 1px 3px rgba(0,0,0,.28);
+  --interactive-card-border-hover:#78a9d6;
+  --interactive-card-shadow-hover:0 12px 24px rgba(0,0,0,.38);
   --nav-shadow:0 -5px 18px rgba(0,0,0,.3);
   --backdrop:rgba(0,0,0,.65);
 }
@@ -198,7 +202,6 @@ button:disabled { opacity:.6; cursor:wait; }
 .group-icon-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
 .group-icon-option { display:grid; min-width:0; min-height:76px; place-items:center; gap:5px; padding:8px 4px; border:1px solid var(--border); border-radius:11px; color:var(--ink); background:var(--surface-soft); cursor:pointer; font-size:.78rem; }
 .group-icon-option[data-icon-id="bowling"] > span:last-child { white-space:nowrap; font-size:.68rem; letter-spacing:-.04em; }
-.group-icon-option:hover { border-color:var(--accent-border); background:var(--accent-soft); }
 .group-icon-option[aria-pressed="true"] { border:2px solid var(--accent); padding:7px 3px; background:var(--accent-soft); }
 .group-icon-picker-preview { width:38px; height:38px; flex-basis:38px; }
 .group-icon-color-title { margin-top:16px !important; }
@@ -212,6 +215,7 @@ button:disabled { opacity:.6; cursor:wait; }
 @media (hover:hover) and (pointer:fine) {
   .group-name-button:hover { background:var(--surface-soft); }
   .group-name-button[aria-pressed="true"]:hover { background:var(--accent-hover); }
+  .group-icon-option:hover { background:var(--accent-soft); }
 }
 .group-member { margin:4px 0 14px; color:var(--muted); font-size:.88rem; }
 .group-home { max-width:680px; }
@@ -515,6 +519,25 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
 .chart-note { color:var(--muted); font-size:.78rem; line-height:1.5; }
 @media (max-width:700px) { .expense-chart-grid { grid-template-columns:minmax(0,1fr); gap:20px; } }
 @media (max-width:390px) { .expense-charts { padding:14px; } .chart-month { grid-template-columns:70px minmax(0,1fr) 70px; gap:5px; font-size:.74rem; } .chart-category strong { font-size:.8rem; } }
+
+/* A shared, restrained lift for controls that behave as selectable cards. */
+.interactive-card {
+  transition:transform 200ms ease,box-shadow 200ms ease,border-color 200ms ease;
+}
+.interactive-card:focus-visible {
+  outline:3px solid var(--focus);
+  outline-offset:2px;
+}
+@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
+  .interactive-card:hover {
+    transform:translateY(-4px);
+    box-shadow:var(--interactive-card-shadow-hover);
+    border-color:var(--interactive-card-border-hover);
+  }
+}
+@media (prefers-reduced-motion:reduce) {
+  .interactive-card { transition:none; }
+}
 #page-my .page-heading,#page-group .page-heading,#page-money > .page-heading { margin-bottom:16px; }
 #group-calendar-view > section { margin-top:18px; }
 #group-calendar-view > .group-wishes-top,#group-calendar-view > .group-calendar-block { margin-top:0; }

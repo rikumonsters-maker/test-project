@@ -28,7 +28,7 @@ async function legacyFiles(page) {
     catch {return route.fulfill({status:404,body:'Not found'});}
   });
 }
-test('local Worker and D1 preserve legacy OFF before activation',async({browser})=>{
+test('local Worker and D1 keep same-group names visible after activation with legacy frontend',async({browser})=>{
   test.setTimeout(60000);
   const owner=await account(browser,'Group Owner'),member=await account(browser,'Tanaka'),
     outsider=await account(browser,'Outside Member');
@@ -57,24 +57,24 @@ test('local Worker and D1 preserve legacy OFF before activation',async({browser}
     await legacyFiles(oldPage);
     await oldPage.goto(`${app}/?group=${group.groupId}&date=${day}`);
     await expect(oldPage.locator('#group-calendar-view')).toBeVisible();
-    await expect(oldPage.locator('#member-timeline-consent')).not.toBeChecked();
+    await expect(oldPage.locator('#member-timeline-consent')).toBeChecked();
     await oldPage.locator('#back-to-groups').click();
     await expect(oldPage.locator('#group-home')).toBeVisible();
     await expect(oldPage.locator('#group-list')).toContainText('Synthetic Group');
     expect(legacyErrors).toEqual([]);
     const setting=await post(member.context,'/api/shared/named-busy/setting',{groupId:group.groupId});
-    expect(setting).toMatchObject({enabled:false,policy:'legacy'});
+    expect(setting).toMatchObject({enabled:true,policy:'group'});
     const page=await owner.context.newPage();await page.goto(`${app}/?group=${group.groupId}&date=${day}`);
-    await expect(page.locator('#group-shared-events')).not.toContainText('Tanaka');
+    await expect(page.locator('#group-shared-events')).toContainText('Tanaka');
     await page.locator('#member-timeline-details summary').click();
-    await expect(page.locator('#member-timeline')).not.toContainText('13:00');
+    await expect(page.locator('#member-timeline')).toContainText('13:00');
     await expect(page.locator('#page-group')).not.toContainText('PRIVATE_EMPLOYER');
     await expect(page.locator('#page-group')).not.toContainText('PRIVATE_NOTE');
     const stale=await member.context.request.post(worker+'/api/shared/named-busy/update',
       {data:{groupId:group.groupId,enabled:false},headers:{Origin:app}});
-    expect(stale.status()).toBe(200);
+    expect(stale.status()).toBe(409);
     await page.locator('#refresh-group-events').click();
-    await expect(page.locator('#group-shared-events')).not.toContainText('Tanaka');
+    await expect(page.locator('#group-shared-events')).toContainText('Tanaka');
     const denied=await outsider.context.request.post(worker+'/api/shared/events/list',
       {data:{groupId:group.groupId,month:'2030-10'},headers:{Origin:app}});
     expect([401,403]).toContain(denied.status());

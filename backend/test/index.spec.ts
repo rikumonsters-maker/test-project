@@ -536,7 +536,16 @@ describe('account-bound groups', () => {
     expect(ownerEvents.find((event:any) => event.sourceType === 'shift')).toMatchObject({
       title:'PRIVATE_WORKPLACE_AND_PAY', note:'PRIVATE_SHIFT_MEMO', createdByUserId:first.user.id,
     });
-    expect((await api('/api/shared/named-busy/update', {groupId:group.groupId,enabled:true}, first.cookie)).status).toBe(200);
+    // Keep this assertion about the legacy pre-activation API stable after the
+    // announced policy cutoff has passed in real time.
+    const preActivationClock=vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-11-06T08:59:59.999Z'));
+    let legacySettingStatus:number;
+    try {
+      legacySettingStatus=(await api('/api/shared/named-busy/update', {groupId:group.groupId,enabled:true}, first.cookie)).status;
+    } finally {
+      preActivationClock.mockRestore();
+    }
+    expect(legacySettingStatus).toBe(200);
     const memberResponse = await api('/api/shared/events/list', { groupId:group.groupId, month:'2026-10' }, second.cookie);
     expect(memberResponse.data.events).toHaveLength(2);
     for (const event of memberResponse.data.events) {
