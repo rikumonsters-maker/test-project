@@ -544,8 +544,9 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
     background-image:radial-gradient(circle 150px at var(--card-highlight-x,50%) var(--card-highlight-y,50%),var(--card-tilt-highlight),transparent 100%);
   }
   .calendar-tilt-card:hover {
+    --calendar-tilt-lift:-6px;
     z-index:5;
-    transform:perspective(700px) rotateX(var(--card-rotate-x,0deg)) rotateY(var(--card-rotate-y,0deg)) translateY(-6px);
+    transform:perspective(700px) rotateX(var(--card-rotate-x,0deg)) rotateY(var(--card-rotate-y,0deg)) translateY(var(--calendar-tilt-lift));
     box-shadow:var(--calendar-tilt-shadow-hover);
     border-color:var(--interactive-card-border-hover);
     background-image:radial-gradient(circle 115px at var(--card-highlight-x,50%) var(--card-highlight-y,50%),var(--calendar-tilt-highlight),transparent 100%);

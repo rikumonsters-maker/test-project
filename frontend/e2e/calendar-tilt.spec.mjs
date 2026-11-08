@@ -22,14 +22,14 @@ async function measureTilt(cell,page,{screenshotName}={}) {
     transform:getComputedStyle(el).transform,
     shadow:getComputedStyle(el).boxShadow,
     reflection:getComputedStyle(el).backgroundImage,
-    matrix:new DOMMatrixReadOnly(getComputedStyle(el).transform),
+    lift:getComputedStyle(el).getPropertyValue('--calendar-tilt-lift').trim(),
   }));
   expect(Math.abs(edge.x)).toBeLessThanOrEqual(7);
   expect(Math.abs(edge.y)).toBeLessThanOrEqual(7);
   expect(Math.abs(edge.x)).toBeGreaterThan(6.5);
   expect(Math.abs(edge.y)).toBeGreaterThan(6.5);
   expect(edge.transform).not.toBe('none');
-  expect(edge.matrix.m42).toBeLessThan(-4);
+  expect(edge.lift).toBe('-6px');
   expect(edge.shadow).not.toBe('none');
   expect(edge.reflection).toContain('radial-gradient');
   if(screenshotName) await page.screenshot({path:'test-results/screenshots/'+screenshotName+'-hover.png',fullPage:false});
