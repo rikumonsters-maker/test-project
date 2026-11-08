@@ -36,6 +36,7 @@
   --small-shadow:0 1px 3px rgba(25,45,28,.12);
   --interactive-card-border-hover:#93c5fd;
   --interactive-card-shadow-hover:0 12px 24px rgba(0,0,0,.12);
+  --card-tilt-highlight:rgba(255,255,255,.28);
   --nav-shadow:0 -5px 18px rgba(25,45,28,.07);
   --backdrop:rgba(20,32,22,.48);
 }
@@ -77,6 +78,7 @@
   --small-shadow:0 1px 3px rgba(0,0,0,.28);
   --interactive-card-border-hover:#78a9d6;
   --interactive-card-shadow-hover:0 12px 24px rgba(0,0,0,.38);
+  --card-tilt-highlight:rgba(255,255,255,.13);
   --nav-shadow:0 -5px 18px rgba(0,0,0,.3);
   --backdrop:rgba(0,0,0,.65);
 }
@@ -529,15 +531,23 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
   outline-offset:2px;
 }
 @media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
-  .interactive-card:hover {
-    transform:translateY(-4px);
+  :root[data-card-tilt="on"] .interactive-card:hover {
+    transform:perspective(900px) rotateX(var(--card-rotate-x,0deg)) rotateY(var(--card-rotate-y,0deg)) translateY(-4px);
     box-shadow:var(--interactive-card-shadow-hover);
     border-color:var(--interactive-card-border-hover);
+    background-image:radial-gradient(circle 150px at var(--card-highlight-x,50%) var(--card-highlight-y,50%),var(--card-tilt-highlight),transparent 100%);
   }
 }
 @media (prefers-reduced-motion:reduce) {
   .interactive-card { transition:none; }
 }
+:root[data-card-tilt="off"] .interactive-card { transition:box-shadow 200ms ease,border-color 200ms ease; }
+:root[data-card-tilt="off"] .interactive-card:hover { transform:none; background-image:none; }
+.card-tilt-setting { display:grid; gap:8px; margin-top:14px; }
+.card-tilt-toggle-row { display:flex; min-height:48px; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; font-weight:750; }
+.card-tilt-toggle-row input { width:24px; height:24px; min-height:24px; flex:0 0 24px; margin:0; accent-color:var(--green); }
+.card-tilt-setting .card-description { margin:0; }
+.card-tilt-setting .status { margin:0; }
 #page-my .page-heading,#page-group .page-heading,#page-money > .page-heading { margin-bottom:16px; }
 #group-calendar-view > section { margin-top:18px; }
 #group-calendar-view > .group-wishes-top,#group-calendar-view > .group-calendar-block { margin-top:0; }
