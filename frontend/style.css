@@ -37,6 +37,8 @@
   --interactive-card-border-hover:#93c5fd;
   --interactive-card-shadow-hover:0 12px 24px rgba(0,0,0,.12);
   --card-tilt-highlight:rgba(255,255,255,.28);
+  --calendar-tilt-shadow-hover:0 16px 30px rgba(15,23,42,.3);
+  --calendar-tilt-highlight:rgba(255,255,255,.38);
   --nav-shadow:0 -5px 18px rgba(25,45,28,.07);
   --backdrop:rgba(20,32,22,.48);
 }
@@ -79,6 +81,8 @@
   --interactive-card-border-hover:#78a9d6;
   --interactive-card-shadow-hover:0 12px 24px rgba(0,0,0,.38);
   --card-tilt-highlight:rgba(255,255,255,.13);
+  --calendar-tilt-shadow-hover:0 18px 34px rgba(0,0,0,.62);
+  --calendar-tilt-highlight:rgba(255,255,255,.24);
   --nav-shadow:0 -5px 18px rgba(0,0,0,.3);
   --backdrop:rgba(0,0,0,.65);
 }
@@ -455,6 +459,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .day.outside { color:var(--outside-text); background:var(--surface-outside); }
 .day.has-entry { background:var(--accent-soft); }
 .day.selected { position:relative; z-index:1; outline:3px solid var(--green); outline-offset:-3px; background:var(--accent-selected); }
+.day.today:not(.selected) { background:var(--accent-soft); box-shadow:inset 0 0 0 2px var(--accent-border); }
 .day-number { display:grid; width:25px; min-height:25px; flex:0 0 25px; place-items:center; border-radius:50%; font-size:.82rem; font-weight:750; }
 .day.today .day-number { color:var(--on-accent); background:var(--accent-solid); }
 .day-mark { width:6px; height:6px; margin:0 auto; border-radius:50%; background:var(--accent-solid); }
@@ -522,32 +527,33 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
 @media (max-width:700px) { .expense-chart-grid { grid-template-columns:minmax(0,1fr); gap:20px; } }
 @media (max-width:390px) { .expense-charts { padding:14px; } .chart-month { grid-template-columns:70px minmax(0,1fr) 70px; gap:5px; font-size:.74rem; } .chart-category strong { font-size:.8rem; } }
 
-/* A shared, restrained lift for controls that behave as selectable cards. */
-.interactive-card {
-  transition:transform 200ms ease,box-shadow 200ms ease,border-color 200ms ease;
+/* Shared pointer-driven 3D treatment for clickable cards and calendar dates. */
+.interactive-card,.calendar-tilt-card {
+  transition:transform 220ms cubic-bezier(.2,.75,.3,1),box-shadow 220ms ease,border-color 180ms ease,background-image 160ms ease;
+  transform-style:preserve-3d;
 }
-.interactive-card:focus-visible {
+.interactive-card:focus-visible,.calendar-tilt-card:focus-visible {
   outline:3px solid var(--focus);
   outline-offset:2px;
 }
 @media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
-  :root[data-card-tilt="on"] .interactive-card:hover {
+  .interactive-card:hover {
     transform:perspective(900px) rotateX(var(--card-rotate-x,0deg)) rotateY(var(--card-rotate-y,0deg)) translateY(-4px);
     box-shadow:var(--interactive-card-shadow-hover);
     border-color:var(--interactive-card-border-hover);
     background-image:radial-gradient(circle 150px at var(--card-highlight-x,50%) var(--card-highlight-y,50%),var(--card-tilt-highlight),transparent 100%);
   }
+  .calendar-tilt-card:hover {
+    z-index:5;
+    transform:perspective(700px) rotateX(var(--card-rotate-x,0deg)) rotateY(var(--card-rotate-y,0deg)) translateY(-6px);
+    box-shadow:var(--calendar-tilt-shadow-hover);
+    border-color:var(--interactive-card-border-hover);
+    background-image:radial-gradient(circle 115px at var(--card-highlight-x,50%) var(--card-highlight-y,50%),var(--calendar-tilt-highlight),transparent 100%);
+  }
 }
 @media (prefers-reduced-motion:reduce) {
-  .interactive-card { transition:none; }
+  .interactive-card,.calendar-tilt-card { transition:none; }
 }
-:root[data-card-tilt="off"] .interactive-card { transition:box-shadow 200ms ease,border-color 200ms ease; }
-:root[data-card-tilt="off"] .interactive-card:hover { transform:none; background-image:none; }
-.card-tilt-setting { display:grid; gap:8px; margin-top:14px; }
-.card-tilt-toggle-row { display:flex; min-height:48px; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; font-weight:750; }
-.card-tilt-toggle-row input { width:24px; height:24px; min-height:24px; flex:0 0 24px; margin:0; accent-color:var(--green); }
-.card-tilt-setting .card-description { margin:0; }
-.card-tilt-setting .status { margin:0; }
 #page-my .page-heading,#page-group .page-heading,#page-money > .page-heading { margin-bottom:16px; }
 #group-calendar-view > section { margin-top:18px; }
 #group-calendar-view > .group-wishes-top,#group-calendar-view > .group-calendar-block { margin-top:0; }
