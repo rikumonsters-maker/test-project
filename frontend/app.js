@@ -147,9 +147,30 @@ function bindTimeInput(fieldId, pickerId) {
   picker.addEventListener("input", () => { field.value = picker.value; });
   picker.addEventListener("change", () => { field.value = picker.value; });
 }
+function animateCalendarElement(element, keyframes) {
+  if (!element || typeof element.animate !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  for (const animation of element.getAnimations()) animation.cancel();
+  element.animate(keyframes, { duration:200, easing:"cubic-bezier(.2,.75,.3,1)" });
+}
+function animateCalendarMonth(calendar) {
+  animateCalendarElement(calendar, [
+    { opacity:.78, transform:"translateX(7px)" },
+    { opacity:1, transform:"translateX(0)" },
+  ]);
+}
+function animateCalendarDetails(panel) {
+  if (!panel) return;
+  animateCalendarElement(panel, [
+    { opacity:.78, transform:"translateY(5px)", boxShadow:"var(--small-shadow)" },
+    { opacity:1, transform:"translateY(0)", boxShadow:getComputedStyle(panel).boxShadow },
+  ]);
+}
 function renderMonthCalendar({ calendarId, month, selectedDate, mode, onSelect, getEntries, maxEntries = Infinity }) {
   const calendar = $(calendarId);
+  const monthKey = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2,"0")}`;
+  const previousMonthKey = calendar.dataset.renderedMonthKey;
   calendar.querySelectorAll(".calendar-day").forEach((cell) => cell.remove());
+  calendar.dataset.renderedMonthKey = monthKey;
   $(calendar.dataset.monthLabel).textContent = monthLabel.format(month);
   const offset = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
   const count = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
@@ -161,7 +182,7 @@ function renderMonthCalendar({ calendarId, month, selectedDate, mode, onSelect, 
     const cell = document.createElement("button");
     const number = document.createElement("span");
     cell.type = "button";
-    cell.className = "day calendar-day calendar-tilt-card";
+    cell.className = "day calendar-day";
     cell.setAttribute("role", "gridcell");
     cell.setAttribute("aria-pressed", String(key === selectedDate));
     if (date.getMonth() !== month.getMonth()) cell.classList.add("outside");
@@ -199,6 +220,7 @@ function renderMonthCalendar({ calendarId, month, selectedDate, mode, onSelect, 
     cell.addEventListener("click", () => onSelect(key, date));
     calendar.append(cell);
   }
+  if (previousMonthKey && previousMonthKey !== monthKey) animateCalendarMonth(calendar);
 }
 function calendarValue(mode, key) {
   if (mode === "expense") {
@@ -234,6 +256,7 @@ const app = {
   makeId,
   bindTimeInput,
   renderMonthCalendar,
+  animateCalendarDetails,
 };
 
 const shift = initShift(app);

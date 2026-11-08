@@ -1,5 +1,5 @@
 export const MAX_CARD_TILT_DEGREES = 7;
-const TILT_TARGETS = '.interactive-card, .calendar-tilt-card';
+const TILT_TARGETS = '.interactive-card';
 
 function clampUnit(value) {
   return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.5;

@@ -2,7 +2,8 @@ import { initReminderControls } from "./reminder-controls.mjs";
 import { currentTimeZone, readReminderSettings, writeReminderSettings } from "./reminders.mjs";
 
 export function initCalendar(app) {
-  const { $, state, view, renderMonthCalendar, changeMonth, parseDate, makeId, saveState, dateLabel, bindTimeInput } = app;
+  const { $, state, view, renderMonthCalendar, animateCalendarDetails, changeMonth, parseDate, makeId, saveState, dateLabel, bindTimeInput } = app;
+  let lastRenderedAgendaDate = null;
 
   function agendaEntries(key) {
     const entries = [];
@@ -100,6 +101,10 @@ export function initCalendar(app) {
         view.reminderEventId = null;
       }
     }
+    if (lastRenderedAgendaDate !== null && lastRenderedAgendaDate !== selectedDate) {
+      animateCalendarDetails($("agenda-events").closest(".calendar-details-panel"));
+    }
+    lastRenderedAgendaDate = selectedDate;
   }
   function syncTimeFields() {
     const allDay = $("event-all-day").checked;
