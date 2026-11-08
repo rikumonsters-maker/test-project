@@ -244,6 +244,7 @@ test('selectable icon and budget rows share the effect without changing their ac
   await page.locator('#close-group-manage').click();
 
   await page.locator('.nav-button[data-page="money"]').click();
+  await page.locator('#expense-category-toggle').click();
   const category=page.locator('#expense-category-chart-list .chart-category').first();
   await expect(category).toHaveClass(/interactive-card/);
   await category.click();
