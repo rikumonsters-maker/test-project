@@ -150,20 +150,6 @@
             </article>
           </div>
         </div>
-        <article class="card personal-sync-management" id="personal-sync-management" aria-labelledby="personal-sync-management-title" hidden>
-          <h3 id="personal-sync-management-title">個人予定の管理</h3>
-          <p class="card-description">同期やバックアップの保存・復元を行います。</p>
-          <div class="actions personal-sync-controls" id="personal-sync-controls" hidden>
-            <button class="action-button" id="personal-sync-retry" type="button">同期</button>
-            <button class="action-button" id="personal-backup-export" type="button">個人予定のバックアップを保存</button>
-            <button class="action-button" id="personal-backup-import-trigger" type="button">バックアップから予定を復元</button>
-            <input id="personal-backup-import-file" type="file" accept="application/json,.json" hidden>
-          </div>
-          <label class="personal-backup-help" id="personal-backup-archive-option" hidden><input id="personal-backup-import-archive" type="checkbox"> バックアップ内の「切替前の旧予定」を復元する</label>
-          <p class="personal-backup-help" id="personal-backup-help" hidden>バックアップを選んだ後、復元内容を確認してから追加します。元データは削除されません。個人予定の詳細はグループに公開されず、時間帯と「予定あり」のみ表示されます。</p>
-          <p id="personal-backup-import-status" class="status" role="status" aria-live="polite" hidden></p>
-          <div id="personal-sync-conflicts"></div>
-        </article>
       </section>
       </section>
 
@@ -466,15 +452,22 @@
         <section class="card expense-charts" aria-labelledby="expense-charts-title">
           <h3 id="expense-charts-title">支出の見える化</h3>
           <p class="card-description">記録済みの支出から集計します。カテゴリや月の金額は一覧でも確認できます。</p>
-          <div class="expense-chart-grid">
+          <div class="expense-chart-grid" id="expense-chart-grid">
             <div class="expense-chart-section">
-              <h4>カテゴリ別の内訳</h4>
-              <div class="expense-donut-wrap">
-                <svg id="expense-donut" viewBox="0 0 128 128" role="img" aria-label="カテゴリ別支出"></svg>
-                <div class="expense-donut-center"><small>支出合計</small><strong id="expense-donut-total">¥0</strong></div>
+              <div class="expense-category-heading">
+                <h4 id="expense-category-title">カテゴリ別の内訳</h4>
+                <button class="expense-category-toggle" id="expense-category-toggle" type="button" aria-expanded="false" aria-controls="expense-category-content" aria-label="カテゴリ別の内訳を展開">＋</button>
               </div>
-              <p id="expense-chart-empty" class="chart-note">この月の支出記録はありません。</p>
-              <ul id="expense-category-chart-list" class="chart-category-list" aria-label="カテゴリ別の金額と割合"></ul>
+              <div class="expense-category-content" id="expense-category-content" aria-labelledby="expense-category-title" aria-hidden="true" inert>
+                <div class="expense-category-content-inner">
+                  <div class="expense-donut-wrap">
+                    <svg id="expense-donut" viewBox="0 0 128 128" role="img" aria-label="カテゴリ別支出"></svg>
+                    <div class="expense-donut-center"><small>支出合計</small><strong id="expense-donut-total">¥0</strong></div>
+                  </div>
+                  <p id="expense-chart-empty" class="chart-note">この月の支出記録はありません。</p>
+                  <ul id="expense-category-chart-list" class="chart-category-list" aria-label="カテゴリ別の金額と割合"></ul>
+                </div>
+              </div>
             </div>
             <div class="expense-chart-section">
               <h4>直近6か月の支出</h4>
@@ -605,6 +598,23 @@
       <section class="page-panel" id="page-profile" aria-labelledby="profile-page-title" hidden>
         <div class="page-heading"><h2 id="profile-page-title">プロフィール</h2><p>アカウントと通知の設定</p></div>
         <div class="profile-layout">
+          <details class="card profile-data-management" id="profile-data-management">
+            <summary id="profile-data-management-summary">データ管理</summary>
+            <p class="card-description">個人予定の同期、バックアップの保存・復元を行います。</p>
+            <article class="personal-sync-management" id="personal-sync-management" aria-labelledby="personal-sync-management-title" hidden>
+              <h3 id="personal-sync-management-title">個人予定の管理</h3>
+              <div class="actions personal-sync-controls" id="personal-sync-controls" hidden>
+                <button class="action-button" id="personal-sync-retry" type="button">同期</button>
+                <button class="action-button" id="personal-backup-export" type="button">個人予定のバックアップを保存</button>
+                <button class="action-button" id="personal-backup-import-trigger" type="button">バックアップから予定を復元</button>
+                <input id="personal-backup-import-file" type="file" accept="application/json,.json" hidden>
+              </div>
+              <label class="personal-backup-help" id="personal-backup-archive-option" hidden><input id="personal-backup-import-archive" type="checkbox"> バックアップ内の「切替前の旧予定」を復元する</label>
+              <p class="personal-backup-help" id="personal-backup-help" hidden>バックアップを選んだ後、復元内容を確認してから追加します。元データは削除されません。個人予定の詳細はグループに公開されず、時間帯と「予定あり」のみ表示されます。</p>
+              <p id="personal-backup-import-status" class="status" role="status" aria-live="polite" hidden></p>
+              <div id="personal-sync-conflicts"></div>
+            </article>
+          </details>
           <article class="card profile-card">
             <div class="profile-avatar" id="profile-icon" aria-hidden="true">🌿</div>
             <h3 id="profile-name"></h3>

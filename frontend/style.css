@@ -449,7 +449,7 @@ button:disabled { opacity:.6; cursor:wait; }
 .month-nav { display:flex; gap:7px; }
 .icon-button { display:grid; width:44px; height:44px; flex:0 0 44px; place-items:center; border:1px solid var(--line); border-radius:9px; color:var(--ink); background:var(--surface); cursor:pointer; font-size:1.25rem; }
 .icon-button:hover,.icon-button:focus-visible { border-color:var(--green); color:var(--green); }
-button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible { outline:3px solid var(--focus); outline-offset:2px; }
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible { outline:3px solid var(--focus); outline-offset:2px; }
 .calendar { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); border-top:1px solid var(--line); border-left:1px solid var(--line); }
 .weekday { display:grid; min-width:0; min-height:34px; place-items:center; border-right:1px solid var(--line); border-bottom:1px solid var(--line); color:var(--muted); background:var(--surface-soft); font-size:.78rem; font-weight:800; }
 .weekday:first-child { color:var(--calendar-sunday); }
@@ -517,8 +517,16 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
 .money-panel .page-heading { margin-bottom:16px; }
 .expense-charts { margin:16px 0 18px; }
 .expense-charts h4 { margin:0 0 12px; font-size:.96rem; }
-.expense-chart-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:22px; }
+.expense-chart-grid { display:grid; grid-template-columns:minmax(0,1fr); gap:22px; transition:grid-template-columns 200ms ease; }
+.expense-chart-grid.category-breakdown-open { grid-template-columns:repeat(2,minmax(0,1fr)); }
 .expense-chart-section { min-width:0; }
+.expense-category-heading { display:flex; min-width:0; min-height:44px; align-items:center; justify-content:space-between; gap:8px; }
+.expense-category-heading h4 { min-width:0; margin:0; }
+.expense-category-toggle { display:grid; width:44px; min-width:44px; min-height:44px; place-items:center; padding:0; border:1px solid var(--line); border-radius:10px; color:var(--green); background:var(--surface); cursor:pointer; font-size:1.25rem; font-weight:800; transition:background-color 180ms ease,border-color 180ms ease; }
+.expense-category-toggle:hover { border-color:var(--accent-border); background:var(--surface-soft); }
+.expense-category-content { display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows 200ms ease,opacity 200ms ease; }
+.expense-category-content.is-open { grid-template-rows:1fr; opacity:1; }
+.expense-category-content-inner { min-height:0; overflow:hidden; }
 .expense-donut-wrap { position:relative; width:min(184px,100%); margin:4px auto 16px; aspect-ratio:1; }
 .expense-donut-wrap svg { display:block; width:100%; height:100%; }
 .expense-donut-center { position:absolute; inset:26%; display:grid; align-content:center; text-align:center; pointer-events:none; }
@@ -541,7 +549,7 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
 .chart-income-bar { background:var(--accent-solid); }
 .chart-spent-bar { background:var(--danger); }
 .chart-note { color:var(--muted); font-size:.78rem; line-height:1.5; }
-@media (max-width:700px) { .expense-chart-grid { grid-template-columns:minmax(0,1fr); gap:20px; } }
+@media (max-width:700px) { .expense-chart-grid,.expense-chart-grid.category-breakdown-open { grid-template-columns:minmax(0,1fr); gap:20px; } }
 @media (max-width:390px) { .expense-charts { padding:14px; } .chart-month { grid-template-columns:70px minmax(0,1fr) 70px; gap:5px; font-size:.74rem; } .chart-category strong { font-size:.8rem; } }
 
 /* Pointer-driven 3D remains limited to explicitly selectable cards. */
@@ -569,7 +577,7 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
   }
 }
 @media (prefers-reduced-motion:reduce) {
-  .interactive-card,.day,.calendar-day > .day-value { transition:none; }
+  .interactive-card,.day,.calendar-day > .day-value,.expense-chart-grid,.expense-category-content { transition:none; }
 }
 #page-my .page-heading,#page-group .page-heading,#page-money > .page-heading { margin-bottom:16px; }
 #group-calendar-view > section { margin-top:18px; }
@@ -628,9 +636,15 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
 .daily-total strong { color:var(--green); }
 .personal-sync-card { margin-bottom:16px; padding:12px 16px; }
 .personal-sync-card p { margin:0; overflow-wrap:anywhere; line-height:1.5; }
-.personal-sync-management { margin-top:16px; }
+.profile-data-management { min-width:0; }
+.profile-data-management > summary { display:flex; min-height:44px; align-items:center; gap:8px; cursor:pointer; font-size:1.02rem; font-weight:800; list-style:none; }
+.profile-data-management > summary::-webkit-details-marker { display:none; }
+.profile-data-management > summary::after { content:"＋"; margin-left:auto; color:var(--green); font-size:1.2rem; }
+.profile-data-management[open] > summary::after { content:"−"; }
+.profile-data-management > .card-description { margin:8px 0 0; }
+.personal-sync-management { margin-top:14px; }
 .personal-sync-management > h3 { margin:0 0 6px; font-size:1.02rem; }
-.personal-sync-management .card-description { margin:0; }
+.personal-sync-management[hidden] { display:none; }
 .personal-sync-controls { gap:8px; margin-top:12px; }
 .personal-sync-controls .action-button { flex:0 1 auto; max-width:100%; min-height:44px; padding:9px 13px; font-size:.9rem; }
 .personal-sync-controls #personal-sync-retry { min-width:72px; }

@@ -7,8 +7,8 @@ const members=[{memberId:'member-a',userId:user.id,memberName:user.displayName},
 const privateMarkers=['私的タイトルSECRET','私的メモSECRET','勤務先SECRET','給与SECRET','家計簿SECRET'];
 const date=tokyoToday();
 
-export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,groups=[group]}={}) {
-  const state={legacyEnabled,acknowledged,requests:[],outside:[],groups};
+export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,personalSyncActive=false,groups=[group]}={}) {
+  const state={legacyEnabled,acknowledged,personalSyncActive,requests:[],outside:[],groups};
   const event=()=>({id:'anonymous-busy',sourceType:'busy',eventDate:date,start:'13:00',end:'15:00',
     title:'予定あり',busyDisplayName:'田中'});
   async function attach(context) {
@@ -29,9 +29,16 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
       state.requests.push({path,method:request.method(),body});
       let status=200,data={};
       if(path==='/api/auth/me') data={user};
-      else if(path==='/api/personal/events/status') data={active:false};
+      else if(path==='/api/personal/events/status') data={active:personalSyncActive};
+      else if(path==='/api/personal/events/sync') data={events:[],cursor:Number(url.searchParams.get('cursor')||0),hasMore:false};
+      else if(path==='/api/personal/events') data={events:[]};
+      else if(path==='/api/personal/events/import') {
+        const input=body.event||{};
+        data={event:{...input,id:`restored-${body.sourceId}`,version:1,deleted:false},migrationConflict:false};
+      }
       else if(path==='/api/groups/mine') data={groups};
       else if(path==='/api/profile') data={profile:{displayName:user.displayName,profileIcon:'🌿',email:'synthetic@example.invalid'}};
+      else if(path==='/api/push/config') data={publicKey:'synthetic-public-key'};
       else if(path==='/api/notifications/count') data={count:0};
       else if(path==='/api/shared/named-busy/notice') {
         data={acknowledged:true,policy:'group',requiresAcknowledgement:false};

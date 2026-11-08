@@ -5,7 +5,37 @@ export function initBudget(app) {
   const expenseTotal = (expenses) => expenses.reduce((total, expense) => total + Number(expense.amount || 0), 0);
   const chartColors = ["#16876a", "#4379c0", "#a15bb0", "#d48635", "#c95874", "#789042", "#747e8a"];
   const svgNS = "http://www.w3.org/2000/svg";
+  const categoryBreakdownPreferenceKey = "daysync-expense-category-breakdown";
   let selectedCategory = null;
+
+  function setCategoryBreakdownExpanded(expanded, persist = false) {
+    const toggle = $("expense-category-toggle");
+    const content = $("expense-category-content");
+    if (!toggle || !content) return;
+    toggle.setAttribute("aria-expanded", String(expanded));
+    toggle.setAttribute("aria-label", expanded ? "カテゴリ別の内訳を折りたたむ" : "カテゴリ別の内訳を展開");
+    toggle.textContent = expanded ? "−" : "＋";
+    content.classList.toggle("is-open", expanded);
+    content.setAttribute("aria-hidden", String(!expanded));
+    content.inert = !expanded;
+    $("expense-chart-grid")?.classList.toggle("category-breakdown-open", expanded);
+    if (persist) {
+      try { localStorage.setItem(categoryBreakdownPreferenceKey, expanded ? "open" : "closed"); }
+      catch { /* The disclosure still works when browser storage is unavailable. */ }
+    }
+  }
+
+  function initCategoryBreakdownDisclosure() {
+    const toggle = $("expense-category-toggle");
+    if (!toggle) return;
+    let expanded = false;
+    try { expanded = localStorage.getItem(categoryBreakdownPreferenceKey) === "open"; }
+    catch { /* Keep the default collapsed when browser storage is unavailable. */ }
+    setCategoryBreakdownExpanded(expanded);
+    toggle.addEventListener("click", () => {
+      setCategoryBreakdownExpanded(toggle.getAttribute("aria-expanded") !== "true", true);
+    });
+  }
 
   function renderCharts() {
     if (!$('expense-donut') || $('page-budget')?.hidden || $('page-money')?.hidden || $('app-root')?.hidden) return;
@@ -234,6 +264,7 @@ export function initBudget(app) {
     renderCalendar(); renderDay(); renderCharts(); schedule();
   }
   function init() {
+    initCategoryBreakdownDisclosure();
     window.addEventListener('daysync:logout', () => {
       selectedCategory=null;
       clearTimeout(view.budgetTimer);
