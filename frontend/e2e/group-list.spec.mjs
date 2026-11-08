@@ -105,3 +105,114 @@ for(const width of [320,375,390,430,768,1280]) {
     await page.locator('#close-group-invite-qr').click();
   });
 }
+
+test('interactive group cards lift on mouse hover and return without changing document flow',async({page})=>{
+  await openGroupHome(page,{width:1280,height:900});
+  const card=page.locator('#group-list .group-card').first();
+  const nextCard=page.locator('#group-list .group-card').nth(1);
+  const initial=await card.boundingBox();
+  const nextTop= (await nextCard.boundingBox()).y;
+  expect(await card.evaluate(el=>el.classList.contains('interactive-card'))).toBe(true);
+
+  const box=await card.boundingBox();
+  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+  await page.waitForTimeout(250);
+  const hovered=await card.evaluate(el=>{
+    const style=getComputedStyle(el);
+    return {transformY:style.transform==='none'?0:new DOMMatrixReadOnly(style.transform).m42,
+      shadow:style.boxShadow,border:style.borderTopColor,rect:el.getBoundingClientRect().top};
+  });
+  expect(hovered.transformY).toBeCloseTo(-4,0);
+  expect(hovered.shadow).not.toBe('none');
+  expect(hovered.border).toBe('rgb(147, 197, 253)');
+  expect(hovered.rect).toBeCloseTo(initial.y-4,0);
+  expect((await nextCard.boundingBox()).y).toBe(nextTop);
+
+  await page.mouse.move(1,1);
+  await page.waitForTimeout(250);
+  const restored=await card.evaluate(el=>({
+    transform:getComputedStyle(el).transform,
+    top:el.getBoundingClientRect().top,
+  }));
+  expect(restored.transform==='none'?0:new DOMMatrixReadOnly(restored.transform).m42).toBe(0);
+  expect(restored.top).toBeCloseTo(initial.y,0);
+});
+
+test('interactive card hover supports dark theme, keyboard focus and reduced motion',async({page})=>{
+  await openGroupHome(page,{width:390,height:844});
+  const card=page.locator('#group-list .group-card').first();
+  await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+  const box=await card.boundingBox();
+  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+  await page.waitForTimeout(250);
+  const dark=await card.evaluate(el=>({
+    border:getComputedStyle(el).borderTopColor,
+    shadow:getComputedStyle(el).boxShadow,
+  }));
+  expect(dark.border).toBe('rgb(120, 169, 214)');
+  expect(dark.shadow).toContain('rgba(0, 0, 0, 0.38)');
+
+  await page.mouse.move(1,1);
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
+  const target=card.getByRole('button',{name:'家族の共有カレンダーを表示'});
+  for(let i=0;i<24;i++) {
+    if(await target.evaluate(el=>el===document.activeElement)) break;
+    await page.keyboard.press('Tab');
+  }
+  await expect(target).toBeFocused();
+  expect(await target.evaluate(el=>el.matches(':focus-visible'))).toBe(true);
+  expect(await target.evaluate(el=>getComputedStyle(el).outlineStyle)).not.toBe('none');
+
+  await page.emulateMedia({reducedMotion:'reduce'});
+  const reducedBox=await card.boundingBox();
+  await page.mouse.move(reducedBox.x+reducedBox.width/2,reducedBox.y+reducedBox.height/2);
+  await page.waitForTimeout(30);
+  const reduced=await card.evaluate(el=>({
+    transform:getComputedStyle(el).transform,
+    transition:getComputedStyle(el).transitionDuration,
+  }));
+  expect(reduced.transform==='none'?0:new DOMMatrixReadOnly(reduced.transform).m42).toBe(0);
+  expect(reduced.transition.split(',').every(value=>parseFloat(value)===0)).toBe(true);
+});
+
+test('touch input suppresses hover motion and still opens the selected group',async({browser})=>{
+  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  try {
+    await syntheticApi({groups}).attach(context);
+    const page=await context.newPage();
+    await page.goto('http://127.0.0.1:5517/');
+    await expect(page.locator('#app-root')).toBeVisible();
+    await page.locator('.nav-button[data-page="group"]').click();
+    const card=page.locator('#group-list .group-card').first();
+    expect(await page.evaluate(()=>matchMedia('(hover:hover) and (pointer:fine)').matches)).toBe(false);
+    const box=await card.boundingBox();
+    await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+    expect(await card.evaluate(el=>getComputedStyle(el).transform)).toBe('none');
+    const select=card.getByRole('button',{name:'家族の共有カレンダーを表示'});
+    const selectBox=await select.boundingBox();
+    await page.touchscreen.tap(selectBox.x+selectBox.width/2,selectBox.y+selectBox.height/2);
+    await expect(page.locator('#group-calendar-view')).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test('selectable icon and budget rows share the effect without changing their actions',async({page})=>{
+  const api=await openGroupHome(page);
+  const card=page.locator('#group-list .group-card').first();
+  await card.getByRole('button',{name:'家族の管理'}).click();
+  await page.locator('#group-icon-change').click();
+  const icon=page.locator('#group-icon-options .group-icon-option').first();
+  await expect(icon).toHaveClass(/interactive-card/);
+  await icon.click();
+  await expect(icon).toHaveAttribute('aria-pressed','true');
+  await page.locator('#group-icon-cancel').click();
+  await page.locator('#close-group-manage').click();
+
+  await page.locator('.nav-button[data-page="money"]').click();
+  const category=page.locator('#expense-category-chart-list .chart-category').first();
+  await expect(category).toHaveClass(/interactive-card/);
+  await category.click();
+  await expect(category).toHaveAttribute('aria-pressed','true');
+  expect(api.state.outside).toEqual([]);
+});
