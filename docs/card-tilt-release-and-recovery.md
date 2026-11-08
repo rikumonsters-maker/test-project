@@ -1,20 +1,26 @@
-# Card tilt release and recovery
+# Calendar tilt release and recovery
 
-## Pre-change Production baseline
+## Verified Production baseline before this change
 
-- Vercel project: `test-project`
-- Production Deployment ID: `dpl_HYR7GNqBuRNNnRt3uXjpkWWRSUxH`
-- Production source commit: `405ccf217e1666086554237bebbfb330200321dc`
-- Verified state: `READY`, target `production`, official alias `daysync-app.vercel.app`
+- Project: `test-project` (team `fff-7e58`)
+- Production Deployment ID: `dpl_DHFcwjjbrfdr7iobd273WZSRDPSj`
+- Source commit: `a699406717e644460814964e455c83a3415c8664`
+- State: `READY`, target `production`
+- Official domain: `daysync-app.vercel.app`
 
-This change is frontend-only. It does not alter the Worker, D1 schema, API behavior, or user data.
+This is a frontend-only change. It does not modify the Worker, D1 schema, API behavior, or user data. The legacy `daysync-card-3d-tilt` local-storage key is ignored; it is neither read nor written. There is no user-facing tilt switch.
 
-## Disable 3D tilt for one browser
+## Targeted recovery: disable calendar-cell 3D only
 
-Open **プロフィール → 表示設定** and turn off **カードの3Dチルト**. The preference is stored in that browser's local storage under `daysync-card-3d-tilt`; no server request is made. Turning it off removes card rotation, lift, and pointer-follow highlight. Calendar content, selection, editing, and buttons continue to work. The 2D focus outline remains available to keyboard users.
+If calendar-cell tilt causes a visual or interaction regression, keep the profile switch removed and preserve all calendar operations:
 
-If local storage is unavailable, the UI reports that the choice may not persist after reload; the feature remains enabled by default in that browser session.
+1. In `frontend/app.js`, remove `calendar-tilt-card` from the class assigned by `renderMonthCalendar` (retain `day calendar-day`).
+2. In `frontend/card-tilt.mjs`, remove `.calendar-tilt-card` from the delegated target selector so pointer tracking remains available to `.interactive-card` group cards only.
+3. In `frontend/style.css`, remove the `.calendar-tilt-card` hover, focus, transition, and reduced-motion selectors. Keep the `.interactive-card` rules and calendar selected/today styles.
+4. Run Frontend tests and Browser E2E, open a Preview, then merge through the protected GitHub flow to let Vercel deploy the hotfix.
 
-## Global release recovery
+This disables only the new calendar-cell 3D effect. Date selection, event display, editing, deletion, and the existing interactive group-card effect remain in place. No Worker or D1 rollback is needed.
 
-If the Production release has a broader regression, use Vercel's normal rollback/promote flow to restore the verified baseline Deployment ID above, whose source commit was `405ccf217e1666086554237bebbfb330200321dc`. This visual-only change needs no Worker rollback or D1 action. Keep the current release available for diagnosis and do not remove deployments or user data.
+## Full frontend recovery
+
+If a broader Production regression requires immediate recovery, use Vercel's normal rollback/promote flow to restore the verified baseline Deployment ID above. This reverts the entire frontend to the pre-change deployment, so use the targeted recovery hotfix when only calendar-cell tilt is affected. Keep the current deployment available for diagnosis; do not remove deployments or user data.

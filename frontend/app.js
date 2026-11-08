@@ -161,7 +161,7 @@ function renderMonthCalendar({ calendarId, month, selectedDate, mode, onSelect, 
     const cell = document.createElement("button");
     const number = document.createElement("span");
     cell.type = "button";
-    cell.className = "day calendar-day";
+    cell.className = "day calendar-day calendar-tilt-card";
     cell.setAttribute("role", "gridcell");
     cell.setAttribute("aria-pressed", String(key === selectedDate));
     if (date.getMonth() !== month.getMonth()) cell.classList.add("outside");

@@ -1,23 +1,20 @@
-export const CARD_TILT_STORAGE_KEY = 'daysync-card-3d-tilt';
-const ROTATION_LIMIT_DEGREES = 7;
+export const MAX_CARD_TILT_DEGREES = 7;
+const TILT_TARGETS = '.interactive-card, .calendar-tilt-card';
 
-export function readCardTiltPreference(storage) {
-  try { return storage?.getItem(CARD_TILT_STORAGE_KEY) !== 'off'; }
-  catch { return true; }
+function clampUnit(value) {
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.5;
 }
 
-function browserStorage() {
-  try { return globalThis.localStorage; }
-  catch { return null; }
+export function cardTiltAngles(x, y) {
+  const horizontal = clampUnit(x);
+  const vertical = clampUnit(y);
+  return {
+    rotateX:Number(((0.5 - vertical) * MAX_CARD_TILT_DEGREES * 2).toFixed(2)),
+    rotateY:Number(((horizontal - 0.5) * MAX_CARD_TILT_DEGREES * 2).toFixed(2)),
+  };
 }
 
-export function initCardTilt({
-  root = document.documentElement,
-  storage = browserStorage(),
-  toggle = document.getElementById('card-tilt-toggle'),
-  status = document.getElementById('card-tilt-status'),
-} = {}) {
-  let enabled = readCardTiltPreference(storage);
+export function initCardTilt() {
   let activeCard = null;
   const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -31,41 +28,16 @@ export function initCardTilt({
   }
 
   function resetAll() {
-    document.querySelectorAll('.interactive-card').forEach(resetCard);
+    document.querySelectorAll(TILT_TARGETS).forEach(resetCard);
     activeCard = null;
   }
 
   function canTilt() {
-    return enabled && finePointer.matches && !reducedMotion.matches;
-  }
-
-  function showStatus(message, kind = '') {
-    if (!status) return;
-    status.textContent = message;
-    status.className = `status ${kind}`.trim();
-    status.hidden = !message;
-  }
-
-  function applyPreference(value, persist = false) {
-    enabled = Boolean(value);
-    root.dataset.cardTilt = enabled ? 'on' : 'off';
-    if (toggle) toggle.checked = enabled;
-    if (!canTilt()) resetAll();
-    if (!persist) return;
-
-    try {
-      if (!storage) throw new Error('Storage unavailable');
-      storage.setItem(CARD_TILT_STORAGE_KEY, enabled ? 'on' : 'off');
-      showStatus(enabled
-        ? '3DチルトをONにしました。この設定はこのブラウザーに保存されます。'
-        : '3DチルトをOFFにしました。予定やボタンの操作は変わりません。', 'safe');
-    } catch {
-      showStatus('設定をこのブラウザーに保存できませんでした。再読み込み後は初期設定に戻る場合があります。', 'caution');
-    }
+    return finePointer.matches && !reducedMotion.matches;
   }
 
   function onPointerMove(event) {
-    const card = event.target?.closest?.('.interactive-card');
+    const card = event.target?.closest?.(TILT_TARGETS);
     if (event.pointerType !== 'mouse' || !canTilt() || !card) {
       if (activeCard) resetCard(activeCard);
       activeCard = null;
@@ -78,10 +50,9 @@ export function initCardTilt({
     if (!rect.width || !rect.height) { resetCard(card); activeCard = null; return; }
     const x = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
     const y = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
-    const xRotation = (0.5 - y) * ROTATION_LIMIT_DEGREES * 2;
-    const yRotation = (x - 0.5) * ROTATION_LIMIT_DEGREES * 2;
-    card.style.setProperty('--card-rotate-x', `${xRotation.toFixed(2)}deg`);
-    card.style.setProperty('--card-rotate-y', `${yRotation.toFixed(2)}deg`);
+    const { rotateX, rotateY } = cardTiltAngles(x, y);
+    card.style.setProperty('--card-rotate-x', `${rotateX}deg`);
+    card.style.setProperty('--card-rotate-y', `${rotateY}deg`);
     card.style.setProperty('--card-highlight-x', `${(x * 100).toFixed(1)}%`);
     card.style.setProperty('--card-highlight-y', `${(y * 100).toFixed(1)}%`);
   }
@@ -94,8 +65,6 @@ export function initCardTilt({
     }
   }
 
-  applyPreference(enabled);
-  toggle?.addEventListener('change', () => applyPreference(toggle.checked, true));
   document.addEventListener('pointermove', onPointerMove, { passive:true });
   document.addEventListener('pointerout', onPointerOut);
   window.addEventListener('blur', resetAll);
@@ -103,5 +72,5 @@ export function initCardTilt({
   finePointer.addEventListener?.('change', () => { if (!canTilt()) resetAll(); });
   reducedMotion.addEventListener?.('change', () => { if (!canTilt()) resetAll(); });
 
-  return { isEnabled:() => enabled };
+  return { reset:resetAll };
 }
