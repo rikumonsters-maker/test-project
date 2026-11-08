@@ -32,7 +32,7 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const NAMED_BUSY_ACTIVATION_MS = Date.parse("2026-11-06T09:00:00Z");
 
 export function initShared(app) {
-  const { $, state, view, parseDate, requestJson, saveState, renderMonthCalendar, changeMonth, dateLabel, QrScanner, qrcode } = app;
+  const { $, state, view, parseDate, requestJson, saveState, renderMonthCalendar, animateCalendarDetails, changeMonth, dateLabel, QrScanner, qrcode } = app;
   let activeGroupId = null;
   let namedBusyCutoffRefreshed = false;
   const refreshAtNamedBusyCutoff = () => {
@@ -55,6 +55,8 @@ export function initShared(app) {
   let loadedMonths = new Set();
   let loadingMonths = new Set();
   let monthPromises = new Map();
+  let lastRenderedGroupDate = null;
+  let lastRenderedGroupId = null;
   let loadGeneration = 0;
   let syncing = false;
   let convertedWishId = null;
@@ -1001,6 +1003,11 @@ export function initShared(app) {
         view.reminderEventId = null;
       }
     }
+    if (lastRenderedGroupDate !== null && lastRenderedGroupId === activeGroupId && lastRenderedGroupDate !== view.groupDate) {
+      animateCalendarDetails($("group-shared-events").closest(".calendar-details-panel"));
+    }
+    lastRenderedGroupDate = view.groupDate;
+    lastRenderedGroupId = activeGroupId;
   }
   async function refreshCurrentMonth() {
     if (!activeGroup()) return;
