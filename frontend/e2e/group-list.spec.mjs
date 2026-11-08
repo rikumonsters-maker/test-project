@@ -138,6 +138,99 @@ test('interactive group cards lift on mouse hover and return without changing do
   expect(restored.top).toBeCloseTo(initial.y,0);
 });
 
+test('3D tilt defaults on, follows the pointer within seven degrees and preserves the group action',async({page})=>{
+  const api=await openGroupHome(page,{width:1280,height:900});
+  const card=page.locator('#group-list .group-card').first();
+  expect(await page.evaluate(()=>document.documentElement.dataset.cardTilt)).toBe('on');
+  const box=await card.boundingBox();
+  await page.mouse.move(box.x+Math.min(4,box.width*.05),box.y+box.height/2);
+  await expect.poll(()=>card.evaluate(el=>el.style.getPropertyValue('--card-rotate-y'))).not.toBe('');
+  const state=await card.evaluate(el=>({
+    x:parseFloat(el.style.getPropertyValue('--card-rotate-x')),
+    y:parseFloat(el.style.getPropertyValue('--card-rotate-y')),
+    highlightX:el.style.getPropertyValue('--card-highlight-x'),
+    highlightY:el.style.getPropertyValue('--card-highlight-y'),
+    background:getComputedStyle(el).backgroundImage,
+  }));
+  expect(Math.abs(state.x)).toBeLessThanOrEqual(7);
+  expect(Math.abs(state.y)).toBeLessThanOrEqual(7);
+  expect(state.highlightX).not.toBe('');
+  expect(state.highlightY).not.toBe('');
+  expect(state.background).toContain('radial-gradient');
+
+  const requests=[];
+  page.on('request',request=>requests.push({url:request.url(),method:request.method()}));
+  await page.locator('#account-open').click();
+  await expect(page.locator('#page-profile')).toBeVisible();
+  const toggle=page.locator('#card-tilt-toggle');
+  await expect(toggle).toBeChecked();
+  requests.length=0;
+  await toggle.uncheck();
+  await expect(page.locator('html')).toHaveAttribute('data-card-tilt','off');
+  expect(await page.evaluate(()=>localStorage.getItem('daysync-card-3d-tilt'))).toBe('off');
+  expect(requests).toEqual([]);
+
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-card-tilt','off');
+  await page.locator('.nav-button[data-page="group"]').click();
+  await expect(page.locator('#group-home')).toBeVisible();
+  await expect(page.locator('#group-list .group-card')).toHaveCount(groups.length);
+  const offCard=page.locator('#group-list .group-card').first();
+  const offBox=await offCard.boundingBox();
+  await page.mouse.move(offBox.x+1,offBox.y+1);
+  const offState=await offCard.evaluate(el=>({
+    transform:getComputedStyle(el).transform,
+    background:getComputedStyle(el).backgroundImage,
+    rotation:el.style.getPropertyValue('--card-rotate-x'),
+    highlight:el.style.getPropertyValue('--card-highlight-x'),
+  }));
+  expect(offState.transform).toBe('none');
+  expect(offState.background).toBe('none');
+  expect(offState.rotation).toBe('');
+  expect(offState.highlight).toBe('');
+  await offCard.locator('.group-name-button').click();
+  await expect(page.locator('#group-calendar-view')).toBeVisible();
+  expect(api.state.outside).toEqual([]);
+});
+
+test('3D tilt can be enabled again and preference survives reload without a server setting',async({page})=>{
+  await openGroupHome(page);
+  await page.evaluate(()=>localStorage.setItem('daysync-card-3d-tilt','off'));
+  await page.reload();
+  await page.locator('#account-open').click();
+  const toggle=page.locator('#card-tilt-toggle');
+  await expect(toggle).not.toBeChecked();
+  const requests=[];
+  page.on('request',request=>requests.push({url:request.url(),method:request.method()}));
+  await toggle.focus();
+  await page.keyboard.press('Space');
+  await expect(page.locator('html')).toHaveAttribute('data-card-tilt','on');
+  await expect(toggle).toBeChecked();
+  expect(await page.evaluate(()=>localStorage.getItem('daysync-card-3d-tilt'))).toBe('on');
+  expect(requests).toEqual([]);
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-card-tilt','on');
+  await page.locator('#account-open').click();
+  await expect(page.locator('#card-tilt-toggle')).toBeChecked();
+});
+
+for(const width of [320,375,390,430,768,1280]) {
+  test(`3D tilt preference remains accessible at ${width}px`,async({page})=>{
+    await openGroupHome(page,{width,height:844});
+    await page.locator('#account-open').click();
+    const row=page.locator('.card-tilt-toggle-row');
+    const toggle=page.locator('#card-tilt-toggle');
+    await expect(row).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-describedby','card-tilt-help');
+    const rowBox=await row.boundingBox();
+    const toggleBox=await toggle.boundingBox();
+    expect(rowBox?.height).toBeGreaterThanOrEqual(48);
+    expect(toggleBox?.width).toBeGreaterThanOrEqual(24);
+    expect(toggleBox?.height).toBeGreaterThanOrEqual(24);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  });
+}
+
 test('interactive card hover supports dark theme, keyboard focus and reduced motion',async({page})=>{
   await openGroupHome(page,{width:390,height:844});
   const card=page.locator('#group-list .group-card').first();
@@ -172,6 +265,8 @@ test('interactive card hover supports dark theme, keyboard focus and reduced mot
     transition:getComputedStyle(el).transitionDuration,
   }));
   expect(reduced.transform==='none'?0:new DOMMatrixReadOnly(reduced.transform).m42).toBe(0);
+  expect(await card.evaluate(el=>el.style.getPropertyValue('--card-rotate-x'))).toBe('');
+  expect(await card.evaluate(el=>getComputedStyle(el).backgroundImage)).toBe('none');
   expect(reduced.transition.split(',').every(value=>parseFloat(value)===0)).toBe(true);
 });
 

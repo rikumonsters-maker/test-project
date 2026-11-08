@@ -74,10 +74,12 @@ test('expired wishes stay absent from the list, count and calendar with a stale 
 test('an open group removes a proposal when Tokyo midnight passes',async({page})=>{
   const api=syntheticApi({legacyEnabled:true});
   const midnight=Date.parse(`${api.date}T15:00:00Z`);
-  await page.clock.install({time:new Date(midnight-1000)});
+  // Leave enough time for the initial API-backed render before advancing the
+  // synthetic browser clock across Tokyo midnight.
+  await page.clock.install({time:new Date(midnight-60_000)});
   await openShared(page,api);
   await expect(page.locator('#group-wishes-list .group-wish-card')).toHaveCount(3);
-  await page.clock.fastForward(2000);
+  await page.clock.fastForward(60_001);
   await expect(page.locator('#group-wishes-list .group-wish-card')).toHaveCount(0);
   await expect(page.locator('#group-calendar')).not.toContainText('合成の遊びたい日');
   await expect(page.locator('#group-wishes-more')).toBeHidden();

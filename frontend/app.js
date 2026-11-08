@@ -12,12 +12,14 @@ import { LEGACY_STORAGE_KEY, userStorageKey, readStoredState, savePersonalState,
 import { API_BASE } from "./config.mjs";
 import { initTheme, normalizeTheme, setTheme } from "./theme.mjs";
 import { initNotificationCenter } from "./notifications.mjs";
+import { initCardTilt } from "./card-tilt.mjs";
 
 const CATEGORIES = ["食費", "交通", "娯楽", "買い物", "交際費", "固定費", "その他"];
 const money = new Intl.NumberFormat("ja-JP", { maximumFractionDigits:0 });
 const monthLabel = new Intl.DateTimeFormat("ja-JP", { year:"numeric", month:"long" });
 const dateLabel = new Intl.DateTimeFormat("ja-JP", { year:"numeric", month:"long", day:"numeric", weekday:"short" });
 const $ = (id) => document.getElementById(id);
+initCardTilt();
 const emptyBudget = { fixed:"", saving:"", spent:"" };
 
 let activeStorageKey = null;
