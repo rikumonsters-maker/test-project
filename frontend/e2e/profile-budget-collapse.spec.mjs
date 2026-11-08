@@ -6,7 +6,8 @@ import { syntheticApi } from './synthetic-api.mjs';
 const userId = '00000000-0000-4000-8000-000000000001';
 const accountKey = `daysync-user-${userId}`;
 const syncKey = `${accountKey}-personal-sync-v2`;
-const chartPreferenceKey = 'daysync-expense-category-breakdown';
+const chartPreferenceKey = 'daysync-expense-category-list';
+const trendPreferenceKey = 'daysync-expense-trend';
 
 async function screenshot(page, name) {
   await page.screenshot({ path:`test-results/screenshots/${name}`, fullPage:false });
@@ -96,31 +97,58 @@ test('personal sync and backup tools stay in the collapsed profile data section 
   expect(api.state.outside).toEqual([]);
 });
 
-test('category breakdown collapses by default, persists preference, and keeps totals and six-month trend visible', async ({ page }) => {
+test('budget layout follows keyboard order and chart disclosures persist independently', async ({ page }) => {
   const api = syntheticApi({ groups:[] });
   await api.attach(page.context());
-  await page.addInitScript(({ accountKey, date, category, chartPreferenceKey }) => {
+  await page.addInitScript(({ accountKey, date, category, chartPreferenceKey, trendPreferenceKey }) => {
     if (!localStorage.getItem(accountKey)) {
       localStorage.setItem(accountKey, JSON.stringify({
         expenses:{ [date]:[{ id:'seed-expense', amount:1200, category, note:'Seed synthetic expense' }] },
         budget:{ fixed:'', saving:'' },
       }));
       localStorage.removeItem(chartPreferenceKey);
+      localStorage.removeItem(trendPreferenceKey);
     }
-  }, { accountKey, date:api.date, category:EXPENSE_CATEGORIES[0], chartPreferenceKey });
+  }, { accountKey, date:api.date, category:EXPENSE_CATEGORIES[0], chartPreferenceKey, trendPreferenceKey });
   await page.setViewportSize({ width:1280, height:900 });
   await page.goto('/');
   await page.locator('.nav-button[data-page="money"]').click();
+  const budgetOrder = await page.locator('#page-budget').evaluate(panel => {
+    const children = [...panel.children];
+    return {
+      metrics:children.findIndex(el => el.matches('.metrics')),
+      calendar:children.findIndex(el => el.matches('.layout-two')),
+      charts:children.findIndex(el => el.matches('.expense-charts')),
+      settings:children.findIndex(el => el.matches('.budget-settings-card')),
+      sideCards:panel.querySelectorAll('.side-stack > .card').length,
+    };
+  });
+  expect(budgetOrder.metrics).toBeLessThan(budgetOrder.calendar);
+  expect(budgetOrder.calendar).toBeLessThan(budgetOrder.charts);
+  expect(budgetOrder.charts).toBeLessThan(budgetOrder.settings);
+  expect(budgetOrder.sideCards).toBe(2);
   const toggle = page.locator('#expense-category-toggle');
   const content = page.locator('#expense-category-content');
+  const trendToggle = page.locator('#expense-trend-toggle');
+  const trendContent = page.locator('#expense-trend-content');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(toggle).toHaveAttribute('aria-controls', 'expense-category-content');
+  await expect(trendToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(trendToggle).toHaveAttribute('aria-controls', 'expense-trend-content');
   await expect(content).toHaveAttribute('aria-hidden', 'true');
+  await expect(trendContent).toHaveAttribute('aria-hidden', 'true');
   await expect(content).toHaveJSProperty('inert', true);
+  await expect(trendContent).toHaveJSProperty('inert', true);
   await expect(page.locator('#expense-month-total')).toContainText('1,200');
+  await expect(page.locator('#expense-donut')).toBeVisible();
+  await expect(page.locator('#expense-donut-total')).toContainText('1,200');
+  await expect(page.locator('#expense-income-forecast')).toBeVisible();
+  await expect(page.locator('#expense-income-spent')).toContainText('1,200');
   await expect(page.locator('#expense-trend-bars li')).toHaveCount(6);
   await expect.poll(() => page.locator('#expense-category-content').evaluate(el => el.getBoundingClientRect().height)).toBe(0);
+  await expect.poll(() => page.locator('#expense-trend-content').evaluate(el => el.getBoundingClientRect().height)).toBe(0);
   await screenshot(page, 'budget-category-breakdown-collapsed.png');
+  await page.screenshot({ path:'test-results/screenshots/budget-after-desktop-full.png', fullPage:true, animations:'disabled' });
 
   await toggle.focus();
   await page.keyboard.press('Enter');
@@ -128,25 +156,41 @@ test('category breakdown collapses by default, persists preference, and keeps to
   await expect(content).toHaveAttribute('aria-hidden', 'false');
   await expect(content).toHaveJSProperty('inert', false);
   await expect(page.locator('#expense-category-chart-list .chart-category')).toHaveCount(EXPENSE_CATEGORIES.length);
-  await expect(page.locator('#expense-donut-total')).toContainText('1,200');
   await expect.poll(() => page.locator('#expense-category-content').evaluate(el => el.getBoundingClientRect().height)).toBeGreaterThan(100);
   await expect.poll(() => page.evaluate(key => localStorage.getItem(key), chartPreferenceKey)).toBe('open');
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), trendPreferenceKey)).toBeNull();
   const desktopColumns = await page.locator('#expense-chart-grid').evaluate(el => getComputedStyle(el).gridTemplateColumns.trim().split(/\s+/).length);
   expect(desktopColumns).toBe(2);
   await screenshot(page, 'budget-category-breakdown-expanded.png');
 
+  await trendToggle.focus();
+  await page.keyboard.press('Enter');
+  await expect(trendToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(trendContent).toHaveAttribute('aria-hidden', 'false');
+  await expect(trendContent).toHaveJSProperty('inert', false);
+  await expect(page.locator('#expense-trend-bars li')).toHaveCount(6);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), trendPreferenceKey)).toBe('open');
+  await screenshot(page, 'budget-trend-expanded.png');
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(trendToggle).toHaveAttribute('aria-expanded', 'true');
   await page.reload();
   await page.locator('.nav-button[data-page="money"]').click();
-  await expect(page.locator('#expense-category-toggle')).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.locator('#expense-category-chart-list .chart-category')).toHaveCount(EXPENSE_CATEGORIES.length);
-  await page.locator('#expense-category-toggle').focus();
-  await page.keyboard.press('Space');
   await expect(page.locator('#expense-category-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('#expense-trend-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#expense-category-chart-list .chart-category')).toHaveCount(EXPENSE_CATEGORIES.length);
+  await expect(page.locator('#expense-donut')).toBeVisible();
+  await page.locator('#expense-trend-toggle').focus();
+  await page.keyboard.press('Space');
+  await expect(page.locator('#expense-trend-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('#expense-month-total')).toContainText('1,200');
   await expect(page.locator('#expense-trend-bars li')).toHaveCount(6);
   await expect.poll(() => page.evaluate(key => localStorage.getItem(key), chartPreferenceKey)).toBe('closed');
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), trendPreferenceKey)).toBe('closed');
   const collapsedColumns = await page.locator('#expense-chart-grid').evaluate(el => getComputedStyle(el).gridTemplateColumns.trim().split(/\s+/).length);
-  expect(collapsedColumns).toBe(1);
+  expect(collapsedColumns).toBe(2);
 
   for (const width of [320, 375, 390, 430, 768, 1280]) {
     await page.setViewportSize({ width, height:844 });
@@ -156,6 +200,13 @@ test('category breakdown collapses by default, persists preference, and keeps to
     const columns = await page.locator('#expense-chart-grid').evaluate(el => getComputedStyle(el).gridTemplateColumns.trim().split(/\s+/).length);
     expect(columns).toBe(width <= 700 ? 1 : 2);
     await page.locator('#expense-category-toggle').click();
+    await page.locator('#expense-trend-toggle').click();
+    await expect(page.locator('#expense-trend-toggle')).toHaveAttribute('aria-expanded', 'true');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `trend horizontal overflow at ${width}px`).toBe(true);
+    await page.locator('#expense-trend-toggle').click();
+    if (width === 390 || width === 1280) {
+      await page.screenshot({ path:`test-results/screenshots/budget-after-${width}px-full.png`, fullPage:true, animations:'disabled' });
+    }
   }
   await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
   await page.locator('#expense-category-toggle').click();
@@ -206,7 +257,7 @@ test('expense chart refreshes after adding, editing and deleting a record and ho
     const reducedPage = await reducedContext.newPage();
     await reducedPage.goto('/');
     await reducedPage.locator('.nav-button[data-page="money"]').click();
-    const reducedContent = reducedPage.locator('#expense-category-content');
+    const reducedContent = reducedPage.locator('#expense-trend-content');
     const transitionDuration = await reducedContent.evaluate(el => getComputedStyle(el).transitionDuration);
     expect(transitionDuration.split(',').every(duration => duration.trim() === '0s')).toBe(true);
     expect(reducedApi.state.outside).toEqual([]);

@@ -449,36 +449,6 @@
           <article class="metric"><div class="metric-label">1日平均使用可能額</div><p class="metric-value"><span id="daily">—</span><small>円</small></p></article>
           <article class="metric"><div class="metric-label" id="expense-month-total-label">今月の支出合計</div><p class="metric-value"><span id="expense-month-total">¥0</span></p></article>
         </div>
-        <section class="card expense-charts" aria-labelledby="expense-charts-title">
-          <h3 id="expense-charts-title">支出の見える化</h3>
-          <p class="card-description">記録済みの支出から集計します。カテゴリや月の金額は一覧でも確認できます。</p>
-          <div class="expense-chart-grid" id="expense-chart-grid">
-            <div class="expense-chart-section">
-              <div class="expense-category-heading">
-                <h4 id="expense-category-title">カテゴリ別の内訳</h4>
-                <button class="expense-category-toggle" id="expense-category-toggle" type="button" aria-expanded="false" aria-controls="expense-category-content" aria-label="カテゴリ別の内訳を展開">＋</button>
-              </div>
-              <div class="expense-category-content" id="expense-category-content" aria-labelledby="expense-category-title" aria-hidden="true" inert>
-                <div class="expense-category-content-inner">
-                  <div class="expense-donut-wrap">
-                    <svg id="expense-donut" viewBox="0 0 128 128" role="img" aria-label="カテゴリ別支出"></svg>
-                    <div class="expense-donut-center"><small>支出合計</small><strong id="expense-donut-total">¥0</strong></div>
-                  </div>
-                  <p id="expense-chart-empty" class="chart-note">この月の支出記録はありません。</p>
-                  <ul id="expense-category-chart-list" class="chart-category-list" aria-label="カテゴリ別の金額と割合"></ul>
-                </div>
-              </div>
-            </div>
-            <div class="expense-chart-section">
-              <h4>直近6か月の支出</h4>
-              <ul id="expense-trend-bars" class="chart-trend" aria-label="月別の記録済み支出"></ul>
-              <h4>収入見込みと支出</h4>
-              <div class="chart-comparison-values"><span>収入見込み <strong id="expense-income-forecast">未設定</strong></span><span>記録済み支出 <strong id="expense-income-spent">¥0</strong></span></div>
-              <div id="expense-income-comparison" class="chart-comparison" aria-hidden="true" hidden><span id="expense-income-bar" class="chart-income-bar"></span><span id="expense-spent-bar" class="chart-spent-bar"></span></div>
-              <p id="expense-income-note" class="chart-note">収入見込みは未設定です。</p>
-            </div>
-          </div>
-        </section>
         <div class="layout-two">
           <article class="card calendar-card">
             <div class="month-bar">
@@ -516,23 +486,67 @@
               </form>
             </article>
 
-            <article class="card">
-              <h3>家計簿の設定</h3>
-              <form id="budget-form" class="form-stack">
-                <label>今月の収入見込み
-                  <span class="segmented" role="group" aria-label="収入見込みの入力方法">
-                    <button id="auto-income" type="button" aria-pressed="true">シフトから自動</button>
-                    <button id="manual-income" type="button" aria-pressed="false">手動入力</button>
-                  </span>
-                  <span class="input-with-unit"><input id="income" type="number" min="0" step="1" inputmode="numeric" placeholder="例：80000" /><span class="unit">円</span></span>
-                </label>
-                <label>固定費<span class="input-with-unit"><input id="fixed" type="number" min="0" inputmode="numeric" placeholder="例：20000" required /><span class="unit">円</span></span></label>
-                <label>目標貯金額<span class="input-with-unit"><input id="saving" type="number" min="0" inputmode="numeric" placeholder="例：10000" required /><span class="unit">円</span></span></label>
-              </form>
-              <div class="status" id="budget-status" aria-live="polite"><strong>予算を計算できます</strong><p>収入見込み・固定費・目標貯金額を入力してください。</p></div>
-            </article>
           </div>
         </div>
+        <section class="card expense-charts" aria-labelledby="expense-charts-title">
+          <h3 id="expense-charts-title">支出の見える化</h3>
+          <p class="card-description">記録済みの支出から集計します。</p>
+          <div class="expense-chart-grid" id="expense-chart-grid">
+            <section class="expense-chart-section expense-donut-section" aria-labelledby="expense-donut-title">
+              <h4 id="expense-donut-title">カテゴリ別支出</h4>
+              <div class="expense-donut-wrap">
+                <svg id="expense-donut" viewBox="0 0 128 128" role="img" aria-label="カテゴリ別支出"></svg>
+                <div class="expense-donut-center"><small>支出合計</small><strong id="expense-donut-total">¥0</strong></div>
+              </div>
+              <p id="expense-chart-empty" class="chart-note">この月の支出記録はありません。</p>
+            </section>
+            <div class="expense-chart-insights">
+              <section class="expense-chart-section" aria-labelledby="expense-category-title">
+                <div class="expense-disclosure-heading">
+                  <h4 id="expense-category-title">カテゴリ別の記録</h4>
+                  <button class="expense-category-toggle" id="expense-category-toggle" type="button" aria-expanded="false" aria-controls="expense-category-content" aria-label="カテゴリ別の記録を展開">＋</button>
+                </div>
+                <div class="expense-disclosure-content" id="expense-category-content" aria-labelledby="expense-category-title" aria-hidden="true" inert>
+                  <div class="expense-disclosure-content-inner">
+                    <ul id="expense-category-chart-list" class="chart-category-list" aria-label="カテゴリ別の金額と割合"></ul>
+                  </div>
+                </div>
+              </section>
+              <section class="expense-chart-section" aria-labelledby="expense-trend-title">
+                <div class="expense-disclosure-heading">
+                  <h4 id="expense-trend-title">直近6か月の支出</h4>
+                  <button class="expense-category-toggle" id="expense-trend-toggle" type="button" aria-expanded="false" aria-controls="expense-trend-content" aria-label="直近6か月の支出を展開">＋</button>
+                </div>
+                <div class="expense-disclosure-content" id="expense-trend-content" aria-labelledby="expense-trend-title" aria-hidden="true" inert>
+                  <div class="expense-disclosure-content-inner">
+                    <ul id="expense-trend-bars" class="chart-trend" aria-label="月別の記録済み支出"></ul>
+                  </div>
+                </div>
+              </section>
+              <section class="expense-chart-section" aria-labelledby="expense-income-title">
+                <h4 id="expense-income-title">収入見込みと支出</h4>
+                <div class="chart-comparison-values"><span>収入見込み <strong id="expense-income-forecast">未設定</strong></span><span>記録済み支出 <strong id="expense-income-spent">¥0</strong></span></div>
+                <div id="expense-income-comparison" class="chart-comparison" aria-hidden="true" hidden><span id="expense-income-bar" class="chart-income-bar"></span><span id="expense-spent-bar" class="chart-spent-bar"></span></div>
+                <p id="expense-income-note" class="chart-note">収入見込みは未設定です。</p>
+              </section>
+            </div>
+          </div>
+        </section>
+        <article class="card budget-settings-card" aria-labelledby="budget-settings-title">
+          <h3 id="budget-settings-title">家計簿の設定</h3>
+          <form id="budget-form" class="form-stack">
+            <label>今月の収入見込み
+              <span class="segmented" role="group" aria-label="収入見込みの入力方法">
+                <button id="auto-income" type="button" aria-pressed="true">シフトから自動</button>
+                <button id="manual-income" type="button" aria-pressed="false">手動入力</button>
+              </span>
+              <span class="input-with-unit"><input id="income" type="number" min="0" step="1" inputmode="numeric" placeholder="例：80000" /><span class="unit">円</span></span>
+            </label>
+            <label>固定費<span class="input-with-unit"><input id="fixed" type="number" min="0" inputmode="numeric" placeholder="例：20000" required /><span class="unit">円</span></span></label>
+            <label>目標貯金額<span class="input-with-unit"><input id="saving" type="number" min="0" inputmode="numeric" placeholder="例：10000" required /><span class="unit">円</span></span></label>
+          </form>
+          <div class="status" id="budget-status" aria-live="polite"><strong>予算を計算できます</strong><p>収入見込み・固定費・目標貯金額を入力してください。</p></div>
+        </article>
       </section>
 
       <section class="money-panel" id="page-shift" role="tabpanel" aria-labelledby="money-tab-shift" hidden>

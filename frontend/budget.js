@@ -5,36 +5,41 @@ export function initBudget(app) {
   const expenseTotal = (expenses) => expenses.reduce((total, expense) => total + Number(expense.amount || 0), 0);
   const chartColors = ["#16876a", "#4379c0", "#a15bb0", "#d48635", "#c95874", "#789042", "#747e8a"];
   const svgNS = "http://www.w3.org/2000/svg";
-  const categoryBreakdownPreferenceKey = "daysync-expense-category-breakdown";
+  const categoryBreakdownPreferenceKey = "daysync-expense-category-list";
+  const expenseTrendPreferenceKey = "daysync-expense-trend";
   let selectedCategory = null;
 
-  function setCategoryBreakdownExpanded(expanded, persist = false) {
-    const toggle = $("expense-category-toggle");
-    const content = $("expense-category-content");
+  function setDisclosureExpanded(toggleId, contentId, preferenceKey, label, expanded, persist = false) {
+    const toggle = $(toggleId);
+    const content = $(contentId);
     if (!toggle || !content) return;
     toggle.setAttribute("aria-expanded", String(expanded));
-    toggle.setAttribute("aria-label", expanded ? "カテゴリ別の内訳を折りたたむ" : "カテゴリ別の内訳を展開");
+    toggle.setAttribute("aria-label", `${label}を${expanded ? "折りたたむ" : "展開"}`);
     toggle.textContent = expanded ? "−" : "＋";
     content.classList.toggle("is-open", expanded);
     content.setAttribute("aria-hidden", String(!expanded));
     content.inert = !expanded;
-    $("expense-chart-grid")?.classList.toggle("category-breakdown-open", expanded);
     if (persist) {
-      try { localStorage.setItem(categoryBreakdownPreferenceKey, expanded ? "open" : "closed"); }
+      try { localStorage.setItem(preferenceKey, expanded ? "open" : "closed"); }
       catch { /* The disclosure still works when browser storage is unavailable. */ }
     }
   }
 
-  function initCategoryBreakdownDisclosure() {
-    const toggle = $("expense-category-toggle");
+  function initDisclosure(toggleId, contentId, preferenceKey, label) {
+    const toggle = $(toggleId);
     if (!toggle) return;
     let expanded = false;
-    try { expanded = localStorage.getItem(categoryBreakdownPreferenceKey) === "open"; }
+    try { expanded = localStorage.getItem(preferenceKey) === "open"; }
     catch { /* Keep the default collapsed when browser storage is unavailable. */ }
-    setCategoryBreakdownExpanded(expanded);
+    setDisclosureExpanded(toggleId, contentId, preferenceKey, label, expanded);
     toggle.addEventListener("click", () => {
-      setCategoryBreakdownExpanded(toggle.getAttribute("aria-expanded") !== "true", true);
+      setDisclosureExpanded(toggleId, contentId, preferenceKey, label, toggle.getAttribute("aria-expanded") !== "true", true);
     });
+  }
+
+  function initChartDisclosures() {
+    initDisclosure("expense-category-toggle", "expense-category-content", categoryBreakdownPreferenceKey, "カテゴリ別の記録");
+    initDisclosure("expense-trend-toggle", "expense-trend-content", expenseTrendPreferenceKey, "直近6か月の支出");
   }
 
   function renderCharts() {
@@ -264,7 +269,7 @@ export function initBudget(app) {
     renderCalendar(); renderDay(); renderCharts(); schedule();
   }
   function init() {
-    initCategoryBreakdownDisclosure();
+    initChartDisclosures();
     window.addEventListener('daysync:logout', () => {
       selectedCategory=null;
       clearTimeout(view.budgetTimer);
