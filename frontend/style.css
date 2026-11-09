@@ -225,7 +225,9 @@ button:disabled { opacity:.6; cursor:wait; }
 }
 .group-member { margin:4px 0 14px; color:var(--muted); font-size:.88rem; }
 .group-home { max-width:680px; }
-.group-list-title { margin:0 0 8px; font-size:1rem; }
+.group-home-toolbar { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:10px; margin:0 0 8px; }
+.group-list-title { min-width:0; margin:0; font-size:1rem; }
+.group-home-toolbar .group-add-trigger { width:auto; flex:0 0 auto; min-height:44px; padding:8px 12px; white-space:nowrap; }
 .group-list { display:grid; gap:8px; margin-bottom:10px; }
 .group-card { min-width:0; padding:10px 12px; }
 .group-card .group-name { gap:6px; margin:0; }
@@ -237,6 +239,33 @@ button:disabled { opacity:.6; cursor:wait; }
 .group-card-member-count strong { color:var(--ink); font-size:.9rem; font-weight:750; }
 .group-invite-button { min-width:72px; min-height:44px; padding:8px 14px; }
 .group-card :focus-visible { outline:3px solid var(--accent-border); outline-offset:2px; }
+.group-add-dialog { width:min(500px,calc(100vw - 20px)); max-width:calc(100vw - 20px); max-height:calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow:auto; overscroll-behavior:contain; padding:clamp(14px,4vw,22px); }
+.group-add-dialog .group-add-dialog-panel { opacity:0; transform:translateY(6px); transition:opacity 180ms ease,transform 180ms ease; }
+.group-add-dialog.is-visible .group-add-dialog-panel { opacity:1; transform:translateY(0); }
+.group-add-dialog::backdrop { background:transparent; transition:background-color 180ms ease; }
+.group-add-dialog.is-visible::backdrop { background:var(--backdrop); }
+.group-add-dialog-heading { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.group-add-dialog-heading h3 { min-width:0; margin:0; font-size:1.15rem; }
+.group-add-dialog-heading .group-add-close { width:auto; flex:0 0 auto; min-height:44px; }
+.group-add-privacy { margin:0 0 16px; padding:10px 12px; border-radius:9px; background:var(--surface-soft); color:var(--muted); font-size:.84rem; line-height:1.65; overflow-wrap:anywhere; }
+.group-add-tabs { display:grid; grid-template-columns:1fr 1fr; gap:4px; margin:0 0 14px; padding:4px; border:1px solid var(--line); border-radius:10px; background:var(--surface-soft); }
+.group-add-tab { min-width:0; min-height:44px; padding:8px 10px; border:0; border-radius:7px; color:var(--muted); background:transparent; font:inherit; font-weight:700; cursor:pointer; }
+.group-add-tab[aria-selected="true"] { color:var(--ink); background:var(--surface); box-shadow:0 1px 3px rgba(15,23,42,.12); }
+.group-add-tab:focus-visible,.group-add-dialog :focus-visible { outline:3px solid var(--accent-border); outline-offset:2px; }
+.group-add-panel { min-width:0; }
+.group-add-panel[hidden] { display:none; }
+.group-add-dialog .group-join-form { padding-top:0; border-top:0; }
+.group-add-dialog .qr-scan-panel { padding-top:10px; }
+.group-add-dialog .status { overflow-wrap:anywhere; }
+@media (max-width:360px) {
+  .group-home-toolbar { align-items:flex-start; flex-wrap:wrap; }
+  .group-add-trigger { max-width:100%; }
+  .group-add-dialog-heading h3 { font-size:1.05rem; }
+  .group-add-privacy { font-size:.8rem; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .group-add-dialog .group-add-dialog-panel,.group-add-dialog::backdrop { transition-duration:0ms; }
+}
 .group-calendar-name { margin:0 0 14px; font-size:1.1rem; }
 .qr-divider { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:10px; color:var(--muted); font-size:.85rem; text-align:center; }
 .qr-divider::before,.qr-divider::after { height:1px; background:var(--line); content:""; }

@@ -21,6 +21,9 @@ async function openGroupHome(page,viewport={width:390,height:844}) {
   await page.locator('.nav-button[data-page="group"]').click();
   await expect(page.locator('#group-home')).toBeVisible();
   await expect(page.locator('#group-list .group-card')).toHaveCount(groups.length);
+  await expect(page.locator('#open-group-add')).toBeVisible();
+  await expect(page.locator('#create-group-form')).toBeHidden();
+  await expect(page.locator('#join-group-form')).toBeHidden();
   return api;
 }
 
@@ -93,6 +96,19 @@ for(const width of [320,375,390,430,768,1280]) {
     await openGroupHome(page,{width,height:844});
     const before=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
     expect(before.scroll).toBeLessThanOrEqual(before.width);
+    const add=page.locator('#open-group-add');
+    const addSize=await add.boundingBox();
+    expect(addSize?.height).toBeGreaterThanOrEqual(44);
+    await add.click();
+    const addDialog=page.locator('#group-add-dialog');
+    await expect(addDialog).toBeVisible();
+    await expect(page.locator('#create-group-form')).toBeVisible();
+    await expect(page.locator('#join-group-form')).toBeHidden();
+    await expect(page.locator('#close-group-add-dialog')).toBeInViewport();
+    const addAfter=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
+    expect(addAfter.scroll).toBeLessThanOrEqual(addAfter.width);
+    await page.locator('#close-group-add-dialog').click();
+    await expect(addDialog).toBeHidden();
     const invite=page.getByRole('button',{name:`${groups[1].groupName}にメンバーを招待`});
     const size=await invite.boundingBox();
     expect(size?.height).toBeGreaterThanOrEqual(44);
@@ -249,5 +265,139 @@ test('selectable icon and budget rows share the effect without changing their ac
   await expect(category).toHaveClass(/interactive-card/);
   await category.click();
   await expect(category).toHaveAttribute('aria-pressed','true');
+  expect(api.state.outside).toEqual([]);
+});
+
+test('group add dialog uses one accessible form at a time and restores focus',async({page})=>{
+  await openGroupHome(page,{width:390,height:844});
+  const add=page.locator('#open-group-add');
+  await add.click();
+  const dialog=page.locator('#group-add-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('#group-name')).toBeFocused();
+  await expect(page.locator('#group-member-name')).toHaveValue('テスト利用者');
+  await expect(page.locator('#join-member-name')).toHaveValue('テスト利用者');
+  await expect(page.locator('#group-add-create-tab')).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('#create-group-form')).toBeVisible();
+  await expect(page.locator('#join-group-form')).toBeHidden();
+  await expect(page.locator('#group-add-privacy')).toContainText('予定のタイトル・内容・メモ');
+  await expect(page.locator('#group-add-privacy')).toContainText('個人予定の詳細');
+  await page.evaluate(()=>document.documentElement.dataset.theme='dark');
+  const darkColors=await dialog.evaluate(element=>({background:getComputedStyle(element).backgroundColor,color:getComputedStyle(element).color}));
+  expect(darkColors.background).not.toBe(darkColors.color);
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
+
+  const joinTab=page.locator('#group-add-join-tab');
+  await joinTab.click();
+  await expect(joinTab).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('#group-add-join-panel')).toBeVisible();
+  await expect(page.locator('#create-group-form')).toBeHidden();
+  await joinTab.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.locator('#group-add-create-tab')).toBeFocused();
+  await expect(page.locator('#create-group-form')).toBeVisible();
+
+  for(let i=0;i<12;i++) {
+    await page.keyboard.press('Tab');
+    const focusedInside=await dialog.evaluate(element=>element.contains(document.activeElement));
+    expect(focusedInside).toBe(true);
+  }
+
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(add).toBeFocused();
+  expect(await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth})).then(x=>x.scroll<=x.width)).toBe(true);
+
+  await add.click();
+  await dialog.evaluate(element=>element.dispatchEvent(new MouseEvent('click',{bubbles:true})));
+  await expect(dialog).toBeHidden();
+  await expect(add).toBeFocused();
+
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await add.click();
+  await expect(dialog).toBeVisible();
+  expect(await dialog.locator('.group-add-dialog-panel').evaluate(element=>getComputedStyle(element).transitionDuration.split(',').every(value=>parseFloat(value)===0))).toBe(true);
+  await page.locator('#close-group-add-dialog').click();
+  await expect(dialog).toBeHidden();
+});
+
+test('group creation and invite-code joining submit the preserved forms',async({page})=>{
+  const api=await openGroupHome(page);
+  await page.locator('#open-group-add').click();
+  await page.locator('#group-name').fill('週末の友達');
+  await page.locator('#create-group-form button[type="submit"]').click();
+  await expect(page.locator('#group-add-dialog')).toBeHidden();
+  await expect(page.locator('#group-status')).toContainText('週末の友達を作成しました');
+  await expect(page.locator('#group-list .group-card')).toHaveCount(3);
+  const created=api.state.requests.find(request=>request.path==='/api/groups/create');
+  expect(created?.method).toBe('POST');
+  expect(created?.body).toEqual({name:'週末の友達',memberName:'テスト利用者'});
+
+  await page.locator('#open-group-add').click();
+  await page.locator('#group-add-join-tab').click();
+  await page.locator('#group-invite-code').fill('mp-join-code');
+  await page.locator('#join-group-form button[type="submit"]').click();
+  await expect(page.locator('#group-add-dialog')).toBeHidden();
+  await expect(page.locator('#group-list .group-card')).toHaveCount(4);
+  const joined=api.state.requests.find(request=>request.path==='/api/groups/join');
+  expect(joined?.method).toBe('POST');
+  expect(joined?.body).toEqual({inviteCode:'MP-JOIN-CODE',memberName:'テスト利用者'});
+  expect(api.state.outside).toEqual([]);
+});
+
+test('group add validation and API errors remain visible inside the dialog',async({page})=>{
+  const api=syntheticApi({groups,groupErrorPath:'/api/groups/create'});
+  await api.attach(page.context());
+  await page.goto('/');
+  await page.locator('.nav-button[data-page="group"]').click();
+  await page.locator('#open-group-add').click();
+  const create=page.locator('#create-group-form');
+  await create.locator('button[type="submit"]').click();
+  expect(await page.locator('#group-name').evaluate(element=>element.validity.valueMissing)).toBe(true);
+  expect(api.state.requests.some(request=>request.path==='/api/groups/create')).toBe(false);
+  await page.locator('#group-name').fill('エラー確認グループ');
+  await create.locator('button[type="submit"]').click();
+  await expect(page.locator('#group-add-error')).toBeVisible();
+  await expect(page.locator('#group-add-error')).toHaveText('合成テストのグループエラーです。');
+  await expect(page.locator('#group-add-dialog')).toBeVisible();
+  await page.locator('#group-add-join-tab').click();
+  await page.locator('#join-group-form button[type="submit"]').click();
+  expect(await page.locator('#group-invite-code').evaluate(element=>element.validity.valueMissing)).toBe(true);
+  expect(api.state.requests.some(request=>request.path==='/api/groups/join')).toBe(false);
+  await expect(page.locator('#group-add-error')).toBeHidden();
+  expect(api.state.outside).toEqual([]);
+});
+
+test('invite deep links open the join tab and preserve the invite code',async({page})=>{
+  const api=syntheticApi({groups});
+  await api.attach(page.context());
+  await page.goto('/?invite=MP-DEEP-LINK');
+  await expect(page.locator('#group-add-dialog')).toBeVisible();
+  await expect(page.locator('#group-add-join-tab')).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('#group-invite-code')).toHaveValue('MP-DEEP-LINK');
+  await expect(page.locator('#join-member-name')).toHaveValue('テスト利用者');
+  expect(api.state.outside).toEqual([]);
+});
+
+test('closing group add while camera permission is pending releases the late stream',async({page})=>{
+  const api=syntheticApi({groups});
+  await api.attach(page.context());
+  await page.addInitScript(()=>{
+    window.__cameraTrackStops=0;
+    Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{
+      getUserMedia:()=>new Promise(resolve=>{window.__resolveCamera=resolve;}),
+    }});
+  });
+  await page.goto('/');
+  await page.locator('.nav-button[data-page="group"]').click();
+  await page.locator('#open-group-add').click();
+  await page.locator('#group-add-join-tab').click();
+  await page.locator('#open-invite-qr-scanner').click();
+  await expect.poll(()=>page.evaluate(()=>typeof window.__resolveCamera)).toBe('function');
+  await page.locator('#close-group-add-dialog').click();
+  await expect(page.locator('#group-add-dialog')).toBeHidden();
+  await page.evaluate(()=>window.__resolveCamera({getTracks:()=>[{stop:()=>{window.__cameraTrackStops+=1;}}]}));
+  await expect.poll(()=>page.evaluate(()=>window.__cameraTrackStops)).toBe(1);
+  expect(await page.locator('#invite-qr-video').evaluate(video=>video.srcObject)).toBeNull();
   expect(api.state.outside).toEqual([]);
 });
