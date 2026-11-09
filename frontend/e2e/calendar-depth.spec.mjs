@@ -181,9 +181,13 @@ test('personal event labels lift without moving cells; selection details, edit a
   await expect.poll(() => page.locator('#agenda-calendar').getAttribute('data-rendered-month-key')).toBe(nextMonthBefore);
   await page.locator('#agenda-calendar .calendar-day.today .calendar-event').click();
   await expect(page.locator('#agenda-calendar .calendar-day.today')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#event-dialog')).toBeHidden();
+  await expect(page.locator('#open-event-dialog')).toBeVisible();
   await page.locator('#agenda-events .agenda-personal .agenda-actions button').first().click();
+  await expect(page.locator('#event-dialog')).toBeVisible();
   await page.locator('#event-title').fill('Edited synthetic event');
   await page.locator('#save-event').click();
+  await expect(page.locator('#event-dialog')).toBeHidden();
   await expect(page.locator('#agenda-events .agenda-personal')).toContainText('Edited synthetic event');
   await page.locator('#agenda-events .agenda-personal .agenda-actions button').nth(1).click();
   await expect(page.locator('#agenda-events .agenda-personal')).toHaveCount(0);

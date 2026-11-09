@@ -257,14 +257,35 @@ button:disabled { opacity:.6; cursor:wait; }
 .group-add-dialog .group-join-form { padding-top:0; border-top:0; }
 .group-add-dialog .qr-scan-panel { padding-top:10px; }
 .group-add-dialog .status { overflow-wrap:anywhere; }
+.calendar-details-heading { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:10px; margin:0 0 12px; }
+.calendar-details-heading h3 { min-width:0; margin:0; overflow-wrap:anywhere; }
+.entry-add-button { width:auto; flex:0 0 auto; min-height:44px; padding:8px 12px; white-space:nowrap; }
+.entry-dialog { width:min(500px,calc(100vw - 20px)); max-width:calc(100vw - 20px); max-height:calc(100vh - 24px); max-height:calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow:auto; overscroll-behavior:contain; padding:clamp(14px,4vw,22px); border:1px solid var(--line); border-radius:12px; color:var(--ink); background:var(--surface); box-shadow:var(--shadow); }
+.qr-dialog.entry-dialog { width:min(500px,calc(100vw - 20px)); max-width:calc(100vw - 20px); }
+.entry-dialog::backdrop { background:transparent; transition:background-color 200ms ease; }
+.qr-dialog.entry-dialog::backdrop { background:transparent; transition:background-color 200ms ease; }
+.entry-dialog.is-visible::backdrop { background:var(--backdrop); }
+.entry-dialog-panel { min-width:0; opacity:0; transform:translateY(5px); transition:opacity 200ms ease,transform 200ms ease; }
+.entry-dialog.is-visible .entry-dialog-panel { opacity:1; transform:translateY(0); }
+.entry-dialog-heading { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:10px; margin:0 0 12px; }
+.entry-dialog-heading h3 { min-width:0; margin:0; font-size:1.12rem; overflow-wrap:anywhere; }
+.entry-dialog-close { width:auto; flex:0 0 auto; min-height:44px; }
+.entry-dialog-date { margin:0 0 12px; color:var(--muted); font-size:.9rem; }
+.entry-dialog form { min-width:0; }
+.entry-dialog .actions { flex-wrap:wrap; }
+.entry-dialog .status { overflow-wrap:anywhere; }
+.entry-dialog :focus-visible { outline:3px solid var(--accent-border); outline-offset:2px; }
 @media (max-width:360px) {
   .group-home-toolbar { align-items:flex-start; flex-wrap:wrap; }
   .group-add-trigger { max-width:100%; }
   .group-add-dialog-heading h3 { font-size:1.05rem; }
   .group-add-privacy { font-size:.8rem; }
+  .calendar-details-heading { align-items:flex-start; flex-wrap:wrap; }
+  .calendar-details-heading .entry-add-button { width:100%; }
 }
 @media (prefers-reduced-motion:reduce) {
   .group-add-dialog .group-add-dialog-panel,.group-add-dialog::backdrop { transition-duration:0ms; }
+  .entry-dialog .entry-dialog-panel,.entry-dialog::backdrop { transition-duration:0ms; }
 }
 .group-calendar-name { margin:0 0 14px; font-size:1.1rem; }
 .qr-divider { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:10px; color:var(--muted); font-size:.85rem; text-align:center; }

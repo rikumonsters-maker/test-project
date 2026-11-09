@@ -1,9 +1,11 @@
 import { initReminderControls } from "./reminder-controls.mjs";
 import { currentTimeZone, readReminderSettings, writeReminderSettings } from "./reminders.mjs";
+import { initFormDialog } from "./form-dialog.mjs";
 
 export function initCalendar(app) {
   const { $, state, view, renderMonthCalendar, animateCalendarDetails, changeMonth, parseDate, makeId, saveState, dateLabel, bindTimeInput } = app;
   let lastRenderedAgendaDate = null;
+  let eventDialog = null;
 
   function agendaEntries(key) {
     const entries = [];
@@ -84,7 +86,7 @@ export function initCalendar(app) {
       edit.type = "button";
       edit.className = "action-button";
       edit.textContent = "編集";
-      edit.addEventListener("click", () => editEvent(selectedDate, event));
+      edit.addEventListener("click", () => editEvent(selectedDate, event, edit));
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "action-button danger";
@@ -127,7 +129,7 @@ export function initCalendar(app) {
     reminderControls?.set([]);
     updateReminderSyncNote();
   }
-  function editEvent(date, event) {
+  function editEvent(date, event, trigger) {
     view.editingEventVersion = event.version;
     view.editingEventExtra = event.extra || {};
     view.editingEventId = event.id;
@@ -147,7 +149,7 @@ export function initCalendar(app) {
     $("event-error").hidden = true;
     syncTimeFields();
     updateReminderSyncNote();
-    $("event-title").focus();
+    eventDialog.open({ trigger, focus:$('event-title') });
   }
   function submitEvent(event) {
     event.preventDefault();
@@ -187,8 +189,11 @@ export function initCalendar(app) {
       try { app.personalSync.queue(view.editingEventId ? "update" : "create",record.id,record,date,view.editingEventVersion); }
       catch(error) { $("event-error").textContent = error.message; $("event-error").hidden = false;return; }
       view.agendaDate = date;view.agendaMonth = new Date(parseDate(date).getFullYear(),parseDate(date).getMonth(),1);
-      render();resetForm();void app.personalSync.sync();return;
+      render();resetForm();eventDialog?.close({ force:true });void app.personalSync.sync();return;
     }
+    const changedDates = new Set([view.editingEventDate, date].filter(Boolean));
+    const previousByDate = new Map([...changedDates].map((key) => [key,
+      Array.isArray(state.events[key]) ? [...state.events[key]] : null]));
     if (view.editingEventId && view.editingEventDate) {
       const previous = (state.events[view.editingEventDate] || []).filter((item) => item.id !== view.editingEventId);
       if (previous.length) state.events[view.editingEventDate] = previous;
@@ -200,10 +205,20 @@ export function initCalendar(app) {
     view.agendaDate = date;
     const selectedDate = parseDate(date);
     view.agendaMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-    saveState();
+    try {
+      saveState();
+    } catch {
+      for (const [key, previous] of previousByDate) {
+        if (previous) state.events[key] = previous;
+        else delete state.events[key];
+      }
+      $("event-error").textContent = "予定を保存できませんでした。入力内容は保持されています。";
+      $("event-error").hidden = false;
+      return;
+    }
     app.shared?.markDirty(date.slice(0, 7));
     if (view.editingEventDate && view.editingEventDate !== date) app.shared?.markDirty(view.editingEventDate.slice(0, 7));
-    render(); resetForm();
+    render(); resetForm(); eventDialog?.close({ force:true });
   }
   function deleteEvent(date, id) {
     if(app.personalSync?.isActive?.()) {
@@ -221,8 +236,19 @@ export function initCalendar(app) {
     reminderControls = initReminderControls($("personal-reminder-controls"));
     bindTimeInput("event-start", "event-start-picker");
     bindTimeInput("event-end", "event-end-picker");
+    eventDialog = initFormDialog({
+      dialog:$('event-dialog'),
+      form:$('event-form'),
+      closeButton:$('close-event-dialog'),
+      fallbackOpener:()=>$('open-event-dialog'),
+      onClose:resetForm,
+    });
+    $('open-event-dialog').addEventListener('click', (event) => {
+      resetForm();
+      eventDialog.open({ trigger:event.currentTarget, focus:$('event-title') });
+    });
     $("event-form").addEventListener("submit", submitEvent);
-    $("cancel-event-edit").addEventListener("click", resetForm);
+    $("cancel-event-edit").addEventListener("click", () => eventDialog.close());
     $("event-all-day").addEventListener("change", syncTimeFields);
     $("agenda-previous").addEventListener("click", () => {
       view.agendaMonth = changeMonth(view.agendaMonth, -1);

@@ -105,16 +105,25 @@
           </article>
           <div class="side-stack">
             <article class="card calendar-details-panel">
-              <h3 id="agenda-date"></h3>
+              <div class="calendar-details-heading">
+                <h3 id="agenda-date"></h3>
+                <button class="action-button primary entry-add-button" id="open-event-dialog" type="button" aria-haspopup="dialog" aria-controls="event-dialog">＋ 予定を追加</button>
+              </div>
               <h4 class="agenda-list-title">シフト</h4>
               <div class="expense-list" id="agenda-shifts"></div>
               <h4 class="agenda-list-title">個人予定</h4>
               <div class="expense-list" id="agenda-events"></div>
             </article>
 
-            <article class="card">
+          </div>
+        </div>
+        <dialog class="qr-dialog entry-dialog" id="event-dialog" aria-labelledby="event-form-title">
+          <div class="entry-dialog-panel">
+            <div class="entry-dialog-heading">
               <h3 id="event-form-title">個人予定を追加</h3>
-              <form id="event-form" class="form-stack">
+              <button class="action-button entry-dialog-close" id="close-event-dialog" type="button" aria-label="予定フォームを閉じる">閉じる</button>
+            </div>
+            <form id="event-form" class="form-stack">
                 <label>タイトル<input id="event-title" type="text" maxlength="80" placeholder="例：飲み会" required /></label>
                 <label>日付<input id="event-date" type="date" required /></label>
                 <label class="checkbox-label"><span>終日予定</span><input id="event-all-day" type="checkbox" /></label>
@@ -146,10 +155,9 @@
                   <button class="action-button primary" id="save-event" type="submit">予定を追加</button>
                   <button class="action-button" id="cancel-event-edit" type="button" hidden>編集をやめる</button>
                 </div>
-              </form>
-            </article>
+            </form>
           </div>
-        </div>
+        </dialog>
       </section>
       </section>
 
@@ -480,14 +488,24 @@
 
           <div class="side-stack">
             <article class="card">
-              <h3 class="selected-date-title" id="expense-date"></h3>
+              <div class="calendar-details-heading">
+                <h3 class="selected-date-title" id="expense-date"></h3>
+                <button class="action-button primary entry-add-button" id="open-expense-dialog" type="button" aria-haspopup="dialog" aria-controls="expense-dialog">＋ 支出を追加</button>
+              </div>
               <ul class="expense-list" id="expense-list"></ul>
               <div class="daily-total"><span>本日の合計</span><strong id="expense-day-total">¥0</strong></div>
             </article>
 
-            <article class="card">
+          </div>
+        </div>
+        <dialog class="qr-dialog entry-dialog" id="expense-dialog" aria-labelledby="expense-form-title" aria-describedby="expense-form-date">
+          <div class="entry-dialog-panel">
+            <div class="entry-dialog-heading">
               <h3 id="expense-form-title">支出を追加</h3>
-              <form id="expense-form" class="form-stack">
+              <button class="action-button entry-dialog-close" id="close-expense-dialog" type="button" aria-label="支出フォームを閉じる">閉じる</button>
+            </div>
+            <p id="expense-form-date" class="entry-dialog-date"></p>
+            <form id="expense-form" class="form-stack">
                 <label>金額<span class="input-with-unit"><input id="expense-amount" type="number" min="1" step="1" inputmode="numeric" placeholder="例：850" required /><span class="unit">円</span></span></label>
                 <label>カテゴリ<select id="expense-category" required>
                   <option>食費</option><option>交通</option><option>娯楽</option><option>買い物</option><option>交際費</option><option>固定費</option><option>その他</option>
@@ -497,11 +515,10 @@
                   <button class="action-button primary" id="save-expense" type="submit">支出を追加</button>
                   <button class="action-button" id="cancel-expense-edit" type="button" hidden>編集をやめる</button>
                 </div>
-              </form>
-            </article>
-
+            <p class="status error" id="expense-form-error" hidden role="alert" aria-live="polite"></p>
+            </form>
           </div>
-        </div>
+        </dialog>
         <section class="card expense-charts" aria-labelledby="expense-charts-title">
           <h3 id="expense-charts-title">支出の見える化</h3>
           <p class="card-description">記録済みの支出から集計します。</p>

@@ -126,7 +126,7 @@ test('budget layout follows keyboard order and chart disclosures persist indepen
   expect(budgetOrder.metrics).toBeLessThan(budgetOrder.calendar);
   expect(budgetOrder.calendar).toBeLessThan(budgetOrder.charts);
   expect(budgetOrder.charts).toBeLessThan(budgetOrder.settings);
-  expect(budgetOrder.sideCards).toBe(2);
+  expect(budgetOrder.sideCards).toBe(1);
   const toggle = page.locator('#expense-category-toggle');
   const content = page.locator('#expense-category-content');
   const trendToggle = page.locator('#expense-trend-toggle');
@@ -229,15 +229,19 @@ test('expense chart refreshes after adding, editing and deleting a record and ho
   await page.locator('#expense-category-toggle').click();
   await expect(page.locator('#expense-month-total')).toContainText('1,200');
 
+  await page.locator('#open-expense-dialog').click();
+  await expect(page.locator('#expense-dialog')).toBeVisible();
   await page.locator('#expense-amount').fill('450');
   await page.locator('#expense-category').selectOption({ label:EXPENSE_CATEGORIES[1] });
   await page.locator('#expense-note').fill('Added synthetic expense');
   await page.locator('#save-expense').click();
+  await expect(page.locator('#expense-dialog')).toBeHidden();
   await expect(page.locator('#expense-month-total')).toContainText('1,650');
   await expect(page.locator('#expense-donut-total')).toContainText('1,650');
 
   const seedRow = page.locator('#expense-list .expense-item').filter({ hasText:'Seed synthetic expense' });
   await seedRow.locator('.expense-actions button').first().click();
+  await expect(page.locator('#expense-dialog')).toBeVisible();
   await page.locator('#expense-amount').fill('600');
   await page.locator('#expense-category').selectOption({ label:EXPENSE_CATEGORIES[2] });
   await page.locator('#expense-note').fill('Edited synthetic expense');
