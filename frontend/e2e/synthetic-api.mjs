@@ -7,8 +7,8 @@ const members=[{memberId:'member-a',userId:user.id,memberName:user.displayName},
 const privateMarkers=['私的タイトルSECRET','私的メモSECRET','勤務先SECRET','給与SECRET','家計簿SECRET'];
 const date=tokyoToday();
 
-export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,personalSyncActive=false,groupErrorPath='',frontendOrigin='http://127.0.0.1:5517',groups=[group]}={}) {
-  const state={legacyEnabled,acknowledged,personalSyncActive,groupErrorPath,requests:[],outside:[],groups};
+export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,personalSyncActive=false,syncFailures=0,groupErrorPath='',frontendOrigin='http://127.0.0.1:5517',groups=[group]}={}) {
+  const state={legacyEnabled,acknowledged,personalSyncActive,syncFailuresRemaining:syncFailures,groupErrorPath,requests:[],outside:[],groups};
   const event=()=>({id:'anonymous-busy',sourceType:'busy',eventDate:date,start:'13:00',end:'15:00',
     title:'予定あり',busyDisplayName:'田中'});
   async function attach(context) {
@@ -35,6 +35,9 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
       else if(path==='/api/groups/join') data={membership:{groupId:'synthetic-joined-group',memberId:'joined-member',memberName:body.memberName,
         groupName:'招待参加グループ',inviteCode:body.inviteCode,memberCount:2}};
       else if(path==='/api/personal/events/status') data={active:personalSyncActive};
+      else if(path==='/api/personal/events/sync'&&state.syncFailuresRemaining>0) {
+        state.syncFailuresRemaining-=1;status=503;data={error:'合成テストの一時的な同期エラーです。'};
+      }
       else if(path==='/api/personal/events/sync') data={events:[],cursor:Number(url.searchParams.get('cursor')||0),hasMore:false};
       else if(path==='/api/personal/events') data={events:[]};
       else if(path==='/api/personal/events/import') {
