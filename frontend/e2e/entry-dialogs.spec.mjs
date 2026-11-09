@@ -165,6 +165,104 @@ test('dialog close paths confirm dirty input, preserve rejected input and restor
   expect(await page.locator('#event-title').inputValue()).toBe('');
 });
 
+test('event, expense and group dialogs share a restrained depth entrance and exit', async ({ page }) => {
+  await boot(page, {
+    event:{ id:'depth-event', title:'Synthetic event', start:'14:00', end:'15:00', allDay:false, note:'Synthetic note', extra:{} },
+    expense:{ id:'depth-expense', amount:800, category:'食費', note:'Synthetic expense' },
+  });
+  const screenshots = 'test-results/release-screenshots';
+  mkdirSync(screenshots, { recursive:true });
+
+  async function assertDepth(dialogSelector, panelSelector, screenshotName) {
+    const dialog = page.locator(dialogSelector);
+    const panel = page.locator(`${dialogSelector} ${panelSelector}`);
+    await expect(dialog).toBeVisible();
+    const opened = await panel.evaluate(element => {
+      const style = getComputedStyle(element);
+      const backdrop = getComputedStyle(element.closest('dialog'), '::backdrop');
+      return {
+        opacity:style.opacity,
+        transform:style.transform,
+        origin:style.transformOrigin,
+        properties:style.transitionProperty,
+        durations:style.transitionDuration.split(',').map(value => value.trim()),
+        easing:style.transitionTimingFunction,
+        backdropDuration:backdrop.transitionDuration,
+        backdropColor:backdrop.backgroundColor,
+        transitions:element.getAnimations().map(animation => ({
+          property:animation.transitionProperty,
+          frames:animation.effect.getKeyframes(),
+        })),
+      };
+    });
+    expect(Number(opened.opacity)).toBeGreaterThan(0);
+    expect(Number(opened.opacity)).toBeLessThanOrEqual(1);
+    expect(opened.transform).not.toBe('none');
+    expect(opened.origin).toContain('px');
+    expect(opened.properties).toContain('opacity');
+    expect(opened.properties).toContain('transform');
+    expect(opened.durations.length).toBeGreaterThanOrEqual(2);
+    expect(opened.durations.every(value => Math.abs(parseFloat(value) - 0.26) < 0.001)).toBe(true);
+    expect(opened.easing).toContain('cubic-bezier');
+    expect(opened.backdropDuration).toContain('0.26s');
+    expect(opened.backdropColor).not.toBe('rgba(0, 0, 0, 0)');
+    const transformTransition = opened.transitions.find(animation => animation.property === 'transform');
+    expect(transformTransition?.frames.length).toBeGreaterThanOrEqual(2);
+    expect(transformTransition.frames[0].transform).not.toBe(transformTransition.frames.at(-1).transform);
+    await page.screenshot({ path:`${screenshots}/${screenshotName.replace('after-', 'during-')}.png`, fullPage:true });
+    await page.waitForTimeout(280);
+    await page.screenshot({ path:`${screenshots}/${screenshotName}.png`, fullPage:true, animations:'disabled' });
+    return { dialog, panel };
+  }
+
+  await page.setViewportSize({ width:390, height:844 });
+  await page.locator('#open-event-dialog').click();
+  let active = await assertDepth('#event-dialog', '.entry-dialog-panel', 'modal-depth-after-event-390px');
+  await page.locator('#close-event-dialog').click();
+  await expect(active.dialog).toBeVisible();
+  await expect(active.dialog).not.toHaveClass(/is-visible/);
+  const exitOpacity = Number(await active.panel.evaluate(element => getComputedStyle(element).opacity));
+  expect(exitOpacity).toBeGreaterThanOrEqual(0);
+  expect(exitOpacity).toBeLessThan(1);
+  await expect(active.dialog).toBeHidden();
+
+  await page.locator('#agenda-events .agenda-personal button').first().click();
+  active = await assertDepth('#event-dialog', '.entry-dialog-panel', 'modal-depth-after-event-edit-390px');
+  await page.locator('#close-event-dialog').click();
+  await expect(active.dialog).toBeHidden();
+
+  await page.locator('.nav-button[data-page="money"]').click();
+  await page.locator('#open-expense-dialog').click();
+  active = await assertDepth('#expense-dialog', '.entry-dialog-panel', 'modal-depth-after-expense-390px');
+  await page.locator('#close-expense-dialog').click();
+  await expect(active.dialog).toBeHidden();
+  await page.locator('#expense-list .expense-item button').first().click();
+  active = await assertDepth('#expense-dialog', '.entry-dialog-panel', 'modal-depth-after-expense-edit-390px');
+  await page.locator('#close-expense-dialog').click();
+  await expect(active.dialog).toBeHidden();
+
+  await page.locator('.nav-button[data-page="group"]').click();
+  await page.locator('#open-group-add').click();
+  active = await assertDepth('#group-add-dialog', '.group-add-dialog-panel', 'modal-depth-after-group-create-390px');
+  await page.locator('#group-add-join-tab').click();
+  await expect(page.locator('#group-add-join-tab')).toHaveAttribute('aria-selected', 'true');
+  await page.setViewportSize({ width:1280, height:900 });
+  await page.waitForTimeout(280);
+  await page.screenshot({ path:`${screenshots}/modal-depth-after-group-join-1280px.png`, fullPage:true, animations:'disabled' });
+  await page.locator('#close-group-add-dialog').click();
+  await expect(active.dialog).toBeHidden();
+
+  await page.emulateMedia({ reducedMotion:'reduce' });
+  await page.locator('#open-group-add').click();
+  const reduced = await page.locator('#group-add-dialog .group-add-dialog-panel').evaluate(element => ({
+    duration:getComputedStyle(element).transitionDuration,
+    transform:getComputedStyle(element).transform,
+  }));
+  expect(reduced.duration.split(',').every(value => parseFloat(value) === 0)).toBe(true);
+  await page.locator('#close-group-add-dialog').click();
+  await expect(page.locator('#group-add-dialog')).toBeHidden();
+});
+
 test('storage failures keep modal input and show an accessible error for both forms', async ({ page }) => {
   const api = await boot(page, { failStorage:true });
   await page.locator('#open-event-dialog').click();
