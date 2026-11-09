@@ -89,7 +89,7 @@ test('three main tabs keep their navigation behavior and the highlight slides in
     await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('data-page', name);
     await expect(page.locator(panel)).toBeVisible();
     await expect(page.locator('.page-panel:not([hidden])')).toHaveCount(1);
-    expect((await selectedAlignment(page)).selectedY).toBeCloseTo(-4, 0);
+    await expect.poll(async () => Math.abs((await selectedAlignment(page)).selectedY + 4) < 0.1).toBe(true);
     const inactiveY = await nav.locator(`.nav-button:not([data-page="${name}"])`).evaluateAll(buttons =>
       buttons.map(button => new DOMMatrixReadOnly(getComputedStyle(button).transform).m42));
     for (const y of inactiveY) expect(y).toBeCloseTo(0, 0);
