@@ -1,4 +1,5 @@
 import { EXPENSE_CATEGORIES, expenseBreakdown, expenseTrend, incomeForecast, shiftIncomeForMonth } from "./budget-charts.mjs";
+import { initFormDialog } from "./form-dialog.mjs";
 
 export function initBudget(app) {
   const { $, state, view, formatMoney, changeMonth, status, postJson, renderMonthCalendar, makeId } = app;
@@ -8,6 +9,7 @@ export function initBudget(app) {
   const categoryBreakdownPreferenceKey = "daysync-expense-category-list";
   const expenseTrendPreferenceKey = "daysync-expense-trend";
   let selectedCategory = null;
+  let expenseDialog = null;
 
   function setDisclosureExpanded(toggleId, contentId, preferenceKey, label, expanded, persist = false) {
     const toggle = $(toggleId);
@@ -129,6 +131,7 @@ export function initBudget(app) {
   function renderDay() {
     const expenses = Array.isArray(state.expenses[view.expenseDate]) ? state.expenses[view.expenseDate] : [];
     $("expense-date").textContent = app.dateLabel.format(app.parseDate(view.expenseDate));
+    $("expense-form-date").textContent = `登録日：${app.dateLabel.format(app.parseDate(view.expenseDate))}`;
     $("expense-day-total").textContent = formatMoney(expenseTotal(expenses));
     const list = $("expense-list");
     list.replaceChildren();
@@ -159,7 +162,7 @@ export function initBudget(app) {
       edit.type = "button";
       edit.textContent = "編集";
       edit.setAttribute("aria-label", `${expense.note || expense.category}を編集`);
-      edit.addEventListener("click", () => editExpense(expense));
+      edit.addEventListener("click", () => editExpense(expense, edit));
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "delete-expense";
@@ -172,7 +175,7 @@ export function initBudget(app) {
       list.append(row);
     }
   }
-  function editExpense(expense) {
+  function editExpense(expense, trigger) {
     view.editingExpenseId = expense.id;
     $("expense-amount").value = expense.amount;
     $("expense-category").value = expense.category;
@@ -180,7 +183,8 @@ export function initBudget(app) {
     $("save-expense").textContent = "変更を保存";
     $("expense-form-title").textContent = "支出を編集";
     $("cancel-expense-edit").hidden = false;
-    $("expense-amount").focus();
+    $("expense-form-error").hidden = true;
+    expenseDialog.open({ trigger, focus:$('expense-amount') });
   }
   function resetExpenseForm() {
     view.editingExpenseId = null;
@@ -189,23 +193,46 @@ export function initBudget(app) {
     $("save-expense").textContent = "支出を追加";
     $("expense-form-title").textContent = "支出を追加";
     $("cancel-expense-edit").hidden = true;
+    $("expense-form-error").hidden = true;
+    $("expense-form-error").textContent = "";
+    $("expense-form-date").textContent = `登録日：${app.dateLabel.format(app.parseDate(view.expenseDate))}`;
   }
   function submitExpense(event) {
     event.preventDefault();
     const amount = Number($("expense-amount").value);
     const category = $("expense-category").value;
     const note = $("expense-note").value.trim();
-    if (!Number.isSafeInteger(amount) || amount < 1 || !app.CATEGORIES.includes(category)) return;
-    const expenses = Array.isArray(state.expenses[view.expenseDate]) ? state.expenses[view.expenseDate] : [];
+    const error = $("expense-form-error");
+    error.hidden = true;
+    if (!Number.isSafeInteger(amount) || amount < 1 || !app.CATEGORIES.includes(category)) {
+      error.textContent = "金額とカテゴリを確認してください。";
+      error.hidden = false;
+      return;
+    }
+    const previous = Array.isArray(state.expenses[view.expenseDate]) ? [...state.expenses[view.expenseDate]] : null;
+    const expenses = previous ? [...previous] : [];
     if (view.editingExpenseId) {
       const index = expenses.findIndex((expense) => expense.id === view.editingExpenseId);
-      if (index >= 0) expenses[index] = { ...expenses[index], amount, category, note };
+      if (index < 0) {
+        error.textContent = "編集する支出が見つかりません。一覧を更新してください。";
+        error.hidden = false;
+        return;
+      }
+      expenses[index] = { ...expenses[index], amount, category, note };
     } else {
       expenses.push({ id:makeId(), amount, category, note });
     }
     state.expenses[view.expenseDate] = expenses;
-    app.saveState();
-    resetExpenseForm(); renderCalendar(); renderDay(); renderCharts(); schedule();
+    try {
+      app.saveState();
+    } catch {
+      if (previous) state.expenses[view.expenseDate] = previous;
+      else delete state.expenses[view.expenseDate];
+      error.textContent = "支出を保存できませんでした。入力内容は保持されています。";
+      error.hidden = false;
+      return;
+    }
+    resetExpenseForm(); renderCalendar(); renderDay(); renderCharts(); schedule(); expenseDialog?.close({ force:true });
   }
   function deleteExpense(id) {
     const remaining = (state.expenses[view.expenseDate] || []).filter((expense) => expense.id !== id);
@@ -270,6 +297,17 @@ export function initBudget(app) {
   }
   function init() {
     initChartDisclosures();
+    expenseDialog = initFormDialog({
+      dialog:$('expense-dialog'),
+      form:$('expense-form'),
+      closeButton:$('close-expense-dialog'),
+      fallbackOpener:()=>$('open-expense-dialog'),
+      onClose:resetExpenseForm,
+    });
+    $('open-expense-dialog').addEventListener('click', (event) => {
+      resetExpenseForm();
+      expenseDialog.open({ trigger:event.currentTarget, focus:$('expense-amount') });
+    });
     window.addEventListener('daysync:logout', () => {
       selectedCategory=null;
       clearTimeout(view.budgetTimer);
@@ -292,7 +330,7 @@ export function initBudget(app) {
       resetExpenseForm(); renderCalendar(); renderDay(); schedule();
     });
     $("expense-form").addEventListener("submit", submitExpense);
-    $("cancel-expense-edit").addEventListener("click", resetExpenseForm);
+    $("cancel-expense-edit").addEventListener("click", () => expenseDialog.close());
     $("budget-form").addEventListener("submit", (event) => event.preventDefault());
     $("fixed").value = state.budget.fixed;
     $("saving").value = state.budget.saving;
