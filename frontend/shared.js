@@ -8,6 +8,7 @@ import { createInviteUrl } from './config.mjs';
 import { initReminderControls } from './reminder-controls.mjs';
 import { currentTimeZone } from './reminders.mjs';
 import { createGroupDeletion } from './group-deletion.mjs';
+import { dialogExitDelayMs } from './dialog-motion.mjs';
 
 const GROUP_ICONS = [
   { id:"friends", label:"\u53cb\u9054", paths:["M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM16 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM2.5 20a5.5 5.5 0 0 1 11 0M10.5 20a5.5 5.5 0 0 1 11 0"] },
@@ -126,8 +127,7 @@ export function initShared(app) {
     if (!dialog.open) return;
     dialog.classList.remove("is-visible");
     if (groupAddCloseTimer) clearTimeout(groupAddCloseTimer);
-    const reducedMotion = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
-    const delay = reducedMotion ? 0 : 200;
+    const delay = dialogExitDelayMs(dialog);
     if (!delay) {
       dialog.close();
       return;

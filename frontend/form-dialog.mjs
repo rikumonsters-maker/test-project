@@ -1,3 +1,5 @@
+import { dialogExitDelayMs } from "./dialog-motion.mjs";
+
 export function initFormDialog({ dialog, form, closeButton, fallbackOpener, onClose }) {
   let opener = null;
   let initialSnapshot = "";
@@ -36,8 +38,7 @@ export function initFormDialog({ dialog, form, closeButton, fallbackOpener, onCl
     if (!force && isDirty() && !window.confirm("入力内容を破棄して閉じますか？")) return false;
     closing = true;
     dialog.classList.remove("is-visible");
-    const reducedMotion = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
-    const delay = reducedMotion ? 0 : 200;
+    const delay = dialogExitDelayMs(dialog);
     if (!delay) {
       dialog.close();
       return true;
