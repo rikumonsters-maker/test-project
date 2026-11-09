@@ -2,7 +2,7 @@ import { initShift } from "./shift.js";
 import { initBudget } from "./budget.js";
 import { initCalendar } from "./calendar.js";
 import { createPersonalSync } from "./personal-sync.mjs";
-import { activateMainPage, activateMoneyView } from "./navigation.mjs";
+import { activateMainPage, activateMoneyView, observeNavIndicator, updateNavIndicator } from "./navigation.mjs";
 import { parsePersonalBackup } from "./backup-import.mjs";
 import { initShared } from "./shared.js";
 import { initProfile } from "./profile.js";
@@ -293,6 +293,7 @@ function setActivePage(pageName) {
     onMoney:()=>setMoneyView(activeMoneyView),
     onProfile:()=>void profile?.refresh(),
   })) return;
+  updateNavIndicator(document);
   window.scrollTo({ top:0, behavior:"instant" });
 }
 
@@ -417,6 +418,7 @@ async function startApp(user) {
   $("auth-shell").hidden = true;
   $("app-root").hidden = false;
   document.querySelector(".page-nav").hidden = false;
+  observeNavIndicator(document);
   document.querySelectorAll(".nav-button").forEach((button) => {
     button.addEventListener("click", () => setActivePage(button.dataset.page));
   });
