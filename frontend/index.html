@@ -159,21 +159,35 @@
           <p>メンバーと共有予定</p>
         </div>
         <div id="group-home" class="group-home">
-          <h3 class="group-list-title">参加中のグループ</h3>
+          <div class="group-home-toolbar">
+            <h3 class="group-list-title">参加中のグループ</h3>
+            <button class="action-button primary group-add-trigger" id="open-group-add" type="button" aria-haspopup="dialog" aria-controls="group-add-dialog">＋ グループを追加</button>
+          </div>
           <div id="group-list" class="group-list" aria-label="参加中のグループ"></div>
-          <article class="card" id="group-card">
-            <h3>グループを追加</h3>
-            <p class="card-description">グループを作成するか、招待コードで参加できます。同じグループのメンバーには、表示名と予定が入っている時間帯が共有されます。個人予定の内容、勤務先・給与・家計簿は共有されません。個人予定の詳細は本人が同意した同期APIにのみ送信し、グループ同期APIには含めません。旧予定は自動移行されません。</p>
-            <div class="card-stack">
+          <p class="status" id="group-status" aria-live="polite" hidden></p>
+          <p class="status error" id="group-error" hidden role="alert" aria-live="polite"></p>
+          <dialog class="qr-dialog group-add-dialog" id="group-add-dialog" aria-labelledby="group-add-title" aria-describedby="group-add-privacy">
+            <div class="group-add-dialog-panel">
+              <div class="group-add-dialog-heading">
+                <h3 id="group-add-title">グループを追加</h3>
+                <button class="action-button group-add-close" id="close-group-add-dialog" type="button" aria-label="グループ追加を閉じる">閉じる</button>
+              </div>
+              <p class="group-add-privacy" id="group-add-privacy">同じグループのメンバーには、表示名と予定が入っている時間帯が共有されます。予定のタイトル・内容・メモ、勤務先・給与・家計簿は共有されません。個人予定の詳細は本人の同期同意がある場合のみ専用APIへ送られ、グループ同期には含まれません。旧予定は自動移行されません。</p>
+              <div class="group-add-tabs" id="group-add-tabs" role="tablist" aria-label="グループの追加方法">
+                <button class="group-add-tab" id="group-add-create-tab" type="button" role="tab" aria-selected="true" aria-controls="group-add-create-panel" tabindex="0">新しく作成</button>
+                <button class="group-add-tab" id="group-add-join-tab" type="button" role="tab" aria-selected="false" aria-controls="group-add-join-panel" tabindex="-1">招待で参加</button>
+              </div>
+              <section class="group-add-panel" id="group-add-create-panel" role="tabpanel" aria-labelledby="group-add-create-tab">
               <form id="create-group-form" class="form-stack">
                 <label>グループ名<input id="group-name" type="text" maxlength="60" placeholder="例：家族" required /></label>
                 <label>あなたの表示名<input id="group-member-name" type="text" maxlength="40" placeholder="予定　太郎" required /></label>
                 <button class="action-button primary" type="submit">グループを作成</button>
               </form>
+              </section>
+              <section class="group-add-panel" id="group-add-join-panel" role="tabpanel" aria-labelledby="group-add-join-tab" hidden>
               <form id="join-group-form" class="form-stack group-join-form">
                 <label>招待コード<input id="group-invite-code" type="text" autocomplete="off" maxlength="40" placeholder="MP-..." required /></label>
                 <label>あなたの表示名<input id="join-member-name" type="text" maxlength="40" placeholder="予定　太郎" required /></label>
-                <p class="card-description">同じグループのメンバーには、表示名と予定が入っている時間帯が共有されます。予定の内容は共有されません。</p>
                 <button class="action-button" type="submit">グループに参加</button>
                 <div class="qr-divider" aria-hidden="true"><span>または</span></div>
                 <button class="action-button qr-scan-button" id="open-invite-qr-scanner" type="button">QRコードを読み取る</button>
@@ -183,10 +197,10 @@
                   <button class="action-button" id="close-invite-qr-scanner" type="button">読み取りを閉じる</button>
                 </div>
               </form>
+              </section>
+              <p class="status error" id="group-add-error" hidden role="alert" aria-live="polite"></p>
             </div>
-            <p class="status error" id="group-error" hidden aria-live="polite"></p>
-            <p class="status" id="group-status" aria-live="polite">参加中のグループは上に表示されます。</p>
-          </article>
+          </dialog>
         </div>
 
         <div id="group-calendar-view" hidden>

@@ -7,20 +7,20 @@ const members=[{memberId:'member-a',userId:user.id,memberName:user.displayName},
 const privateMarkers=['私的タイトルSECRET','私的メモSECRET','勤務先SECRET','給与SECRET','家計簿SECRET'];
 const date=tokyoToday();
 
-export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,personalSyncActive=false,groups=[group]}={}) {
-  const state={legacyEnabled,acknowledged,personalSyncActive,requests:[],outside:[],groups};
+export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,personalSyncActive=false,groupErrorPath='',frontendOrigin='http://127.0.0.1:5517',groups=[group]}={}) {
+  const state={legacyEnabled,acknowledged,personalSyncActive,groupErrorPath,requests:[],outside:[],groups};
   const event=()=>({id:'anonymous-busy',sourceType:'busy',eventDate:date,start:'13:00',end:'15:00',
     title:'予定あり',busyDisplayName:'田中'});
   async function attach(context) {
     await context.route('**/*',async route=>{
       const request=route.request(),url=new URL(request.url());
-      if(url.origin==='http://127.0.0.1:5517' && !url.pathname.startsWith('/api/')) return route.continue();
+      if(url.origin===frontendOrigin && !url.pathname.startsWith('/api/')) return route.continue();
       if(url.origin!=='http://127.0.0.1:8787'||!url.pathname.startsWith('/api/')) {
         state.outside.push(url.origin+url.pathname);return route.abort();
       }
       const path=url.pathname;
       if(request.method()==='OPTIONS') return route.fulfill({status:204,headers:{
-        'Access-Control-Allow-Origin':'http://127.0.0.1:5517',
+        'Access-Control-Allow-Origin':frontendOrigin,
         'Access-Control-Allow-Credentials':'true',
         'Access-Control-Allow-Headers':'content-type',
         'Access-Control-Allow-Methods':'GET,POST,OPTIONS',
@@ -29,6 +29,11 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
       state.requests.push({path,method:request.method(),body});
       let status=200,data={};
       if(path==='/api/auth/me') data={user};
+      else if(path===groupErrorPath) {status=422;data={error:'合成テストのグループエラーです。'};}
+      else if(path==='/api/groups/create') data={membership:{groupId:'synthetic-created-group',memberId:'created-member',memberName:body.memberName,
+        groupName:body.name,inviteCode:'MP-CREATED',memberCount:1}};
+      else if(path==='/api/groups/join') data={membership:{groupId:'synthetic-joined-group',memberId:'joined-member',memberName:body.memberName,
+        groupName:'招待参加グループ',inviteCode:body.inviteCode,memberCount:2}};
       else if(path==='/api/personal/events/status') data={active:personalSyncActive};
       else if(path==='/api/personal/events/sync') data={events:[],cursor:Number(url.searchParams.get('cursor')||0),hasMore:false};
       else if(path==='/api/personal/events') data={events:[]};
@@ -61,7 +66,7 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
       else if(path==='/api/shared/availability/search') data={days:[{date,unconfirmedUserIds:[],slots:[{start:'16:00',end:'18:00',registeredClearCount:2,hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,needsConfirmation:false}]}],
         recommendations:[{date,start:'16:00',end:'18:00',registeredClearCount:2,hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,reason:'登録済み予定との競合なし'}]};
       else {status=501;data={error:`Synthetic API has no fixture for ${path}`};}
-      await route.fulfill({status,contentType:'application/json',headers:{'Access-Control-Allow-Origin':'http://127.0.0.1:5517','Access-Control-Allow-Credentials':'true'},body:JSON.stringify(data)});
+      await route.fulfill({status,contentType:'application/json',headers:{'Access-Control-Allow-Origin':frontendOrigin,'Access-Control-Allow-Credentials':'true'},body:JSON.stringify(data)});
     });
   }
   return {state,attach,privateMarkers,group,date};

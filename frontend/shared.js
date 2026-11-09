@@ -76,6 +76,117 @@ export function initShared(app) {
   let sharedReminderEvent = null;
   let sharedReminderTimeZone = currentTimeZone();
   let groupDeletion = null;
+  let groupAddOpener = null;
+  let groupAddCloseTimer = null;
+
+  function setGroupAddMode(mode, focusPanel = false) {
+    const join = mode === "join";
+    const createTab = $("group-add-create-tab");
+    const joinTab = $("group-add-join-tab");
+    const createPanel = $("group-add-create-panel");
+    const joinPanel = $("group-add-join-panel");
+    createTab.setAttribute("aria-selected", String(!join));
+    createTab.tabIndex = join ? -1 : 0;
+    joinTab.setAttribute("aria-selected", String(join));
+    joinTab.tabIndex = join ? 0 : -1;
+    createPanel.hidden = join;
+    joinPanel.hidden = !join;
+    setError("", "group-add-error");
+    if (focusPanel) (join ? $("group-invite-code") : $("group-name")).focus({ preventScroll:true });
+  }
+
+  function openGroupAddDialog(mode = "create") {
+    const dialog = $("group-add-dialog");
+    if (groupAddCloseTimer) clearTimeout(groupAddCloseTimer);
+    groupAddCloseTimer = null;
+    setGroupAddMode(mode);
+    const displayName = String(app.getCurrentUserDisplayName?.() || "").trim().slice(0, 40);
+    if (displayName) {
+      for (const id of ["group-member-name", "join-member-name"]) {
+        const input = $(id);
+        if (!input.value.trim()) input.value = displayName;
+      }
+    }
+    if (!dialog.open) {
+      const activeElement = document.activeElement;
+      groupAddOpener = activeElement instanceof HTMLElement && activeElement !== document.body && activeElement.getClientRects().length ?
+        activeElement : $("open-group-add");
+      dialog.showModal();
+    }
+    requestAnimationFrame(() => {
+      if (!dialog.open) return;
+      dialog.classList.add("is-visible");
+      (mode === "join" ? $("group-invite-code") : $("group-name")).focus({ preventScroll:true });
+    });
+  }
+
+  function closeGroupAddDialog() {
+    const dialog = $("group-add-dialog");
+    stopInviteScanner();
+    if (!dialog.open) return;
+    dialog.classList.remove("is-visible");
+    if (groupAddCloseTimer) clearTimeout(groupAddCloseTimer);
+    const reducedMotion = Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+    const delay = reducedMotion ? 0 : 200;
+    if (!delay) {
+      dialog.close();
+      return;
+    }
+    groupAddCloseTimer = setTimeout(() => {
+      groupAddCloseTimer = null;
+      if (dialog.open) dialog.close();
+    }, delay);
+  }
+
+  function initGroupAddDialog() {
+    const dialog = $("group-add-dialog");
+    $("open-group-add").addEventListener("click", () => openGroupAddDialog("create"));
+    $("close-group-add-dialog").addEventListener("click", closeGroupAddDialog);
+    $("group-add-create-tab").addEventListener("click", () => setGroupAddMode("create"));
+    $("group-add-join-tab").addEventListener("click", () => setGroupAddMode("join"));
+    $("group-add-tabs").addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const activeIsCreate = document.activeElement === $("group-add-create-tab");
+      const mode = event.key === "Home" ? "create" : event.key === "End" ? "join" : activeIsCreate ? "join" : "create";
+      setGroupAddMode(mode);
+      (mode === "join" ? $("group-add-join-tab") : $("group-add-create-tab")).focus();
+    });
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      closeGroupAddDialog();
+    });
+    dialog.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab") return;
+      const focusable = [...dialog.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])')]
+        .filter((element) => !element.closest("[hidden]") && element.getClientRects().length);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const outside = !dialog.contains(document.activeElement);
+      if (event.shiftKey && (document.activeElement === first || outside)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || outside)) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) closeGroupAddDialog();
+    });
+    dialog.addEventListener("close", () => {
+      if (groupAddCloseTimer) clearTimeout(groupAddCloseTimer);
+      groupAddCloseTimer = null;
+      dialog.classList.remove("is-visible");
+      stopInviteScanner();
+      const opener = groupAddOpener;
+      groupAddOpener = null;
+      if (opener?.isConnected && opener.getClientRects().length && !opener.disabled) opener.focus({ preventScroll:true });
+      else $("open-group-add").focus({ preventScroll:true });
+    });
+    window.addEventListener("daysync:logout", closeGroupAddDialog);
+  }
 
   function buttonForSchedule(wish) {
     const control=document.createElement('button');control.type='button';control.className='action-button';
@@ -110,6 +221,7 @@ export function initShared(app) {
     const element = $("group-status");
     element.className = `status ${type}`.trim();
     element.textContent = message;
+    element.hidden = !message;
   }
   function resetCache() {
     loadGeneration += 1;
@@ -1168,10 +1280,10 @@ export function initShared(app) {
   }
   async function submitGroup(event, path, fields) {
     event.preventDefault();
-    setError();
+    setError("", "group-add-error");
     const payload = fields();
     if (path.endsWith("/join") && memberships().some((group) => group.inviteCode === payload.inviteCode)) {
-      setError("このグループにはすでに参加しています。");
+      setError("このグループにはすでに参加しています。", "group-add-error");
       return;
     }
     try {
@@ -1188,10 +1300,11 @@ export function initShared(app) {
       }
       saveState();
       renderGroups();
-      setStatus(`${data.membership.groupName}に参加しました。`, "safe");
+      setStatus(`${data.membership.groupName}を${path.endsWith("/create") ? "作成しました。" : "参加しました。"}`, "safe");
+      closeGroupAddDialog();
       void flushPending();
     } catch (error) {
-      setError(error.message || "グループを設定できませんでした。");
+      setError(error.message || "グループを設定できませんでした。", "group-add-error");
     }
   }
   async function leaveGroup(group) {
@@ -1252,6 +1365,7 @@ export function initShared(app) {
     window.addEventListener("pageshow", checkWishDay);
     groupDeletion=createGroupDeletion({$,requestJson,setError,onSuccess:completeGroupDeletion,
       onMemberChanged:()=>setError('メンバー数が変わりました。もう一度「グループから退出」を押してください。','group-icon-error')});
+    initGroupAddDialog();
     schedules=initSchedules({$,requestJson,activeGroup,getCurrentUserId:app.getCurrentUserId,
       onConfirmed:refreshCurrentMonth});
     commonAvailability = initCommonAvailability({ $, requestJson, activeGroup, getCurrentUserId:app.getCurrentUserId,
@@ -1417,5 +1531,5 @@ export function initShared(app) {
     showHome();
     void flushPending();
   }
-  return { init, showHome, openCalendar, markDirty, syncPending:() => void flushPending(), refreshPersonal:() => activeGroupId ? refreshCurrentMonth() : Promise.resolve() };
+  return { init, showHome, openCalendar, openGroupAddDialog, markDirty, syncPending:() => void flushPending(), refreshPersonal:() => activeGroupId ? refreshCurrentMonth() : Promise.resolve() };
 }

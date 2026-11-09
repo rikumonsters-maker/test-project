@@ -250,6 +250,7 @@ const app = {
   status,
   requestJson,
   getCurrentUserId:() => currentUser?.id,
+  getCurrentUserDisplayName:() => currentUser?.displayName,
   postJson,
   QrScanner,
   qrcode,
@@ -456,6 +457,7 @@ async function startApp(user) {
   if (inviteFromUrl?.trim()) {
     $("group-invite-code").value = inviteFromUrl.trim().slice(0, 40);
     setActivePage("group");
+    shared.openGroupAddDialog("join");
     const cleanUrl = new URL(window.location.href);
     cleanUrl.searchParams.delete("invite");
     window.history.replaceState(window.history.state, "", cleanUrl);
