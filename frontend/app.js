@@ -13,6 +13,7 @@ import { API_BASE } from "./config.mjs";
 import { initTheme, normalizeTheme, setTheme } from "./theme.mjs";
 import { initNotificationCenter } from "./notifications.mjs";
 import { initCardTilt } from "./card-tilt.mjs";
+import { renderPersonalSyncStatus } from "./personal-sync-status.mjs";
 
 const CATEGORIES = ["食費", "交通", "娯楽", "買い物", "交際費", "固定費", "その他"];
 const money = new Intl.NumberFormat("ja-JP", { maximumFractionDigits:0 });
@@ -24,6 +25,15 @@ const emptyBudget = { fixed:"", saving:"", spent:"" };
 
 let activeStorageKey = null;
 let currentUser = null;
+let syncStorageWarning = "";
+let syncStatusMessage = "";
+function updatePersonalSyncStatus(message) {
+  syncStatusMessage = message || "";
+  const important = syncStorageWarning && syncStatusMessage && syncStatusMessage !== "同期完了" && syncStatusMessage !== "同期中…"
+    ? `${syncStorageWarning} ${syncStatusMessage}`
+    : syncStorageWarning || syncStatusMessage;
+  renderPersonalSyncStatus($("personal-sync-card"), $("personal-sync-status"), important);
+}
 function emptyState() {
   return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", theme:"system", budget:{ ...emptyBudget }, groups:[], pendingGroupMonths:{}, pendingGroupShiftMonths:{} };
 }
@@ -348,6 +358,8 @@ async function importLegacy() {
 
 async function startApp(user) {
   currentUser = user;
+  syncStorageWarning = "";
+  syncStatusMessage = "";
   activeStorageKey = userStorageKey(user.id);
   const alreadySaved = localStorage.getItem(activeStorageKey) !== null;
   Object.assign(state, loadState(activeStorageKey));
@@ -356,11 +368,17 @@ async function startApp(user) {
     isCurrent:() => currentUser?.id === syncUserId,
     onDataChange:() => window.dispatchEvent(new Event("daysync:availability-changed")),
     onChange:() => {
-      try {saveState();} catch {$("personal-sync-status").textContent="端末の保存領域が不足しています。バックアップを保存してください。";}
+      try {
+        saveState();
+        if (syncStorageWarning) { syncStorageWarning = ""; updatePersonalSyncStatus(personalSync?.status() || syncStatusMessage); }
+      } catch {
+        syncStorageWarning = "端末の保存領域が不足しています。バックアップを保存し、空き容量を確認してください。";
+        updatePersonalSyncStatus(syncStatusMessage);
+      }
       calendar.render();
     },
     onStatus:(message, conflicts) => {
-      $("personal-sync-status").textContent = message;
+      updatePersonalSyncStatus(message);
       if(message.startsWith("同期完了")) void shared.refreshPersonal();
       const list = $("personal-sync-conflicts"); list.replaceChildren();
       for (const conflict of conflicts) {
@@ -383,7 +401,7 @@ async function startApp(user) {
   let syncState = {active:false};
   try { syncState = await personalSync.initialize(); app.personalSync = personalSync; }
   catch(error) {
-    $("personal-sync-status").textContent = `同期状態を確認できません。端末内の予定は変更していません。${error.message}`;
+    updatePersonalSyncStatus(`同期状態を確認できません。端末内の予定は変更していません。${error.message}`);
     app.personalSync = personalSync;
   }
   updatePersonalSyncChoice(user.id, syncState.active);
@@ -521,7 +539,7 @@ async function beginPersonalSync(button) {
     await personalSync.startFresh();
     if (currentUser) localStorage.removeItem("daysync-personal-sync-deferred-" + currentUser.id);
     updatePersonalSyncChoice(currentUser?.id, true);
-    $("personal-sync-status").textContent = personalSync.status() || "同期完了";
+    updatePersonalSyncStatus(personalSync.status() || "同期完了");
     void shared.refreshPersonal();
   } catch(error) {
     $("personal-sync-choice-status").textContent = `同期を開始できませんでした。端末内の予定は保管されています。${error.message}`;
@@ -560,7 +578,7 @@ $("personal-backup-import-file").addEventListener("change", async (event) => {
     app.personalSync.restore(events);
     result.textContent = `${count}件の復元を受け付けました。端末のバックアップも保持しています。同期します…`;
     await app.personalSync.sync();
-    result.textContent = `${count}件のバックアップを統合しました。同期状態は上の表示を確認してください。`;
+    result.textContent = `${count}件のバックアップを同期カレンダーに統合しました。元のバックアップは端末に保持されています。`;
   } catch (error) {
     result.className = "status error";
     result.textContent = `取り込めませんでした。${error.message}`;
