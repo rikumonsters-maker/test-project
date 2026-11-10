@@ -25,19 +25,44 @@ async function assertSameRect(before, after, label) {
 async function assertDetailsMotion(page, panel) {
   const motion = await page.evaluate(() => window.__calendarDetailAnimations?.at(-1));
   expect(motion).toBeTruthy();
-  expect(motion.options.duration).toBe(200);
-  expect(motion.keyframes[0].transform).toBe('translateY(5px)');
-  expect(motion.keyframes[1].transform).toMatch(/^translateY\(0(?:px)?\)$/);
-  expect(motion.keyframes[0].boxShadow).not.toBe(motion.keyframes[1].boxShadow);
+  expect(motion.options.duration).toBe(220);
+  expect(motion.options.easing).toBe('cubic-bezier(.16, 1, .3, 1)');
+  expect(motion.options.fill).toBe('none');
+  expect(motion.keyframes[0].opacity).toBe(.87);
+  expect(motion.keyframes[0].transform).toContain('perspective(900px)');
+  expect(motion.keyframes[0].transform).toContain('translate3d(0, 10px, -16px)');
+  expect(motion.keyframes[0].transform).toContain('scale(.99)');
+  expect(motion.keyframes[1]).toMatchObject({ opacity:1, transform:'perspective(900px) translate3d(0, 0, 0) scale(1)' });
+  return motion;
+}
+
+async function waitForDetailsMotion(page, index = -1) {
+  await expect.poll(() => page.evaluate(i => window.__calendarDetailAnimations?.at(i)?.finished, index)).toBe(true);
+}
+
+async function calendarRects(calendar) {
+  return calendar.evaluate(el => [...el.querySelectorAll('.calendar-day')].map(node => {
+    const r = node.getBoundingClientRect();
+    return { x:r.x, y:r.y, width:r.width, height:r.height };
+  }));
 }
 
 async function trackDetailsAnimations(page) {
   await page.addInitScript(() => {
     window.__calendarDetailAnimations = [];
+    window.__calendarDetailNativeAnimations = [];
+    window.__pauseCalendarDetailAnimations = false;
     const nativeAnimate = Element.prototype.animate;
     Element.prototype.animate = function (keyframes, options) {
       if (this.matches?.('.calendar-details-panel')) {
-        window.__calendarDetailAnimations.push({ keyframes, options });
+        const record = { keyframes, options, finished:false, canceled:false };
+        const animation = nativeAnimate.call(this, keyframes, options);
+        animation.addEventListener('finish', () => { record.finished = true; }, { once:true });
+        animation.addEventListener('cancel', () => { record.canceled = true; }, { once:true });
+        window.__calendarDetailAnimations.push(record);
+        window.__calendarDetailNativeAnimations.push(animation);
+        if (window.__pauseCalendarDetailAnimations) animation.pause();
+        return animation;
       }
       return nativeAnimate.call(this, keyframes, options);
     };
@@ -51,7 +76,7 @@ async function hoverLabel(page, label) {
   expect(box).not.toBeNull();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await expect.poll(() => label.evaluate(el => getComputedStyle(el).transform)).not.toBe('none');
-  await page.waitForTimeout(220);
+  await label.evaluate(el => Promise.all(el.getAnimations().map(animation => animation.finished.catch(() => {}))));
   const after = await rect(label);
   const style = await label.evaluate(el => ({
     transform:getComputedStyle(el).transform,
@@ -66,7 +91,7 @@ async function hoverLabel(page, label) {
 }
 
 test('shared calendar cells stay aligned while only appointment labels lift', async ({ page }) => {
-  const api = syntheticApi({ legacyEnabled:true });
+  const api = syntheticApi({ legacyEnabled:true, extraBusyMember:true });
   await api.attach(page.context());
   await trackDetailsAnimations(page);
   await page.setViewportSize({ width:1280, height:900 });
@@ -122,7 +147,7 @@ test('shared calendar cells stay aligned while only appointment labels lift', as
   expect(await page.locator('#group-calendar .calendar-day[aria-pressed="true"]').count()).toBe(1);
   const sharedDetails = page.locator('.calendar-details-panel').filter({ has:page.locator('#group-date') });
   await assertDetailsMotion(page, sharedDetails);
-  await page.waitForTimeout(220);
+  await waitForDetailsMotion(page);
   await screenshot(page, 'shared-calendar-details-selected.png');
   await cell.locator('.calendar-busy').first().click();
   await expect(cell).toHaveAttribute('aria-pressed', 'true');
@@ -141,10 +166,11 @@ test('personal event labels lift without moving cells; selection details, edit a
     }] } }));
   }, { key:localStorageKey, date:api.date });
   await page.setViewportSize({ width:1280, height:900 });
-  await page.goto('/');
+  await page.goto('/?reminder=personal&date=' + api.date + '&eventId=synthetic-personal-event');
   const cell = page.locator('#agenda-calendar .calendar-day.today');
   const label = cell.locator('.calendar-event').first();
   await expect(label).toBeVisible();
+  expect(await page.evaluate(() => window.__calendarDetailAnimations.length)).toBe(0);
   await cell.scrollIntoViewIfNeeded();
   const cellBefore = await rect(cell);
   await screenshot(page, 'personal-calendar-grid-before.png');
@@ -161,7 +187,7 @@ test('personal event labels lift without moving cells; selection details, edit a
   await otherDay.click();
   await expect(otherDay).toHaveAttribute('aria-pressed', 'true');
   await assertDetailsMotion(page, detailPanel);
-  await page.waitForTimeout(220);
+  await waitForDetailsMotion(page);
   await screenshot(page, 'calendar-details-selected.png');
 
   const today = page.locator('#agenda-calendar .calendar-day.today');
@@ -181,16 +207,126 @@ test('personal event labels lift without moving cells; selection details, edit a
   await expect.poll(() => page.locator('#agenda-calendar').getAttribute('data-rendered-month-key')).toBe(nextMonthBefore);
   await page.locator('#agenda-calendar .calendar-day.today .calendar-event').click();
   await expect(page.locator('#agenda-calendar .calendar-day.today')).toHaveAttribute('aria-pressed', 'true');
+  await assertDetailsMotion(page, detailPanel);
+  await waitForDetailsMotion(page);
   await expect(page.locator('#event-dialog')).toBeHidden();
   await expect(page.locator('#open-event-dialog')).toBeVisible();
+  const animationsBeforeCrud = await page.evaluate(() => window.__calendarDetailAnimations.length);
   await page.locator('#agenda-events .agenda-personal .agenda-actions button').first().click();
   await expect(page.locator('#event-dialog')).toBeVisible();
   await page.locator('#event-title').fill('Edited synthetic event');
   await page.locator('#save-event').click();
   await expect(page.locator('#event-dialog')).toBeHidden();
   await expect(page.locator('#agenda-events .agenda-personal')).toContainText('Edited synthetic event');
+  expect(await page.evaluate(() => window.__calendarDetailAnimations.length)).toBe(animationsBeforeCrud);
   await page.locator('#agenda-events .agenda-personal .agenda-actions button').nth(1).click();
   await expect(page.locator('#agenda-events .agenda-personal')).toHaveCount(0);
+  expect(await page.evaluate(() => window.__calendarDetailAnimations.length)).toBe(animationsBeforeCrud);
+
+  await page.setViewportSize({ width:1280, height:900 });
+  await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await screenshot(page, 'detail-depth-personal-1280-dark-before.png');
+  const outsideDay = page.locator('#agenda-calendar .calendar-day.outside').first();
+  const previousMonthKey = await page.locator('#agenda-calendar').getAttribute('data-rendered-month-key');
+  const previousDateLabel = await detailPanel.locator('#agenda-date').textContent();
+  await page.evaluate(() => { window.__pauseCalendarDetailAnimations = true; });
+  await outsideDay.click();
+  await expect.poll(() => page.locator('#agenda-calendar').getAttribute('data-rendered-month-key')).not.toBe(previousMonthKey);
+  await expect.poll(() => detailPanel.locator('#agenda-date').textContent()).not.toBe(previousDateLabel);
+  await assertDetailsMotion(page, detailPanel);
+  await screenshot(page, 'detail-depth-personal-1280-dark-start.png');
+  await page.evaluate(() => { window.__pauseCalendarDetailAnimations = false; window.__calendarDetailNativeAnimations.at(-1).play(); });
+  await waitForDetailsMotion(page);
+  await screenshot(page, 'detail-depth-personal-1280-dark-complete.png');
+  expect(api.state.outside).toEqual([]);
+});
+
+test('calendar detail depth runs only for changed dates, updates immediately, and cancels stale animation', async ({ page }) => {
+  const api = syntheticApi({ legacyEnabled:true });
+  await api.attach(page.context());
+  await trackDetailsAnimations(page);
+  await page.setViewportSize({ width:390, height:844 });
+  await page.goto('/?group=' + api.group.groupId + '&date=' + api.date);
+  await expect(page.locator('#group-calendar-view')).toBeVisible();
+
+  const panel = page.locator('.calendar-details-panel').filter({ has:page.locator('#group-date') });
+  const calendar = page.locator('#group-calendar');
+  await expect(panel).toBeVisible();
+  expect(await page.evaluate(() => window.__calendarDetailAnimations.length)).toBe(0);
+  await screenshot(page, 'detail-depth-shared-390-light-before.png');
+
+  const selected = calendar.locator('.calendar-day[aria-pressed="true"]');
+  await selected.click();
+  expect(await page.evaluate(() => window.__calendarDetailAnimations.length)).toBe(0);
+
+  const days = calendar.locator('.calendar-day:not(.outside)');
+  const firstTarget = days.nth(1);
+  const secondTarget = days.nth(2);
+  const gridBefore = await calendarRects(calendar);
+  const initialDateLabel = await panel.locator('#group-date').textContent();
+  await page.evaluate(() => { window.__pauseCalendarDetailAnimations = true; });
+  await firstTarget.click();
+  await expect(firstTarget).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => panel.locator('#group-date').textContent()).not.toBe(initialDateLabel);
+  const firstMotion = await assertDetailsMotion(page, panel);
+  expect(firstMotion.finished).toBe(false);
+  await screenshot(page, 'detail-depth-shared-390-light-start.png');
+
+  await page.evaluate(() => { window.__pauseCalendarDetailAnimations = false; });
+  await page.evaluate(() => window.__calendarDetailNativeAnimations.at(-1).play());
+  await waitForDetailsMotion(page);
+  expect(await calendarRects(calendar)).toEqual(gridBefore);
+  const emptyDetailsRect = await rect(panel);
+  await screenshot(page, 'detail-depth-shared-390-light-complete.png');
+
+  const beforeRepeat = await page.evaluate(() => window.__calendarDetailAnimations.length);
+  await firstTarget.click();
+  expect(await page.evaluate(() => window.__calendarDetailAnimations.length)).toBe(beforeRepeat);
+
+  await page.evaluate(() => { window.__pauseCalendarDetailAnimations = true; });
+  const beforeRapid = await page.evaluate(() => window.__calendarDetailAnimations.length);
+  const previousDateLabel = await panel.locator('#group-date').textContent();
+  await secondTarget.click();
+  await expect(secondTarget).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => page.locator('#group-date').textContent()).not.toBe(previousDateLabel);
+  const secondDateLabel = await panel.locator('#group-date').textContent();
+  const latestTarget = days.nth(3);
+  await latestTarget.click();
+  await expect(latestTarget).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(() => page.locator('#group-date').textContent()).not.toBe(secondDateLabel);
+  await expect.poll(() => page.evaluate(i => window.__calendarDetailAnimations[i]?.canceled, beforeRapid)).toBe(true);
+  const rapidLatest = await assertDetailsMotion(page, panel);
+  expect(rapidLatest.canceled).toBe(false);
+  expect(await page.evaluate(() => window.__calendarDetailAnimations.length)).toBe(beforeRepeat + 2);
+  await page.screenshot({ path:'test-results/screenshots/detail-depth-shared-rapid-latest.png', fullPage:false });
+  await page.evaluate(() => { window.__pauseCalendarDetailAnimations = false; window.__calendarDetailNativeAnimations.at(-1).play(); });
+  await waitForDetailsMotion(page);
+  expect(await calendarRects(calendar)).toEqual(gridBefore);
+  await assertSameRect(emptyDetailsRect, await rect(panel), 'empty shared details stay in the same layout box');
+
+  const beforeRefresh = await page.evaluate(() => window.__calendarDetailAnimations.length);
+  const refreshed = page.waitForResponse(response => response.url().includes('/api/shared/events/list') && response.request().method() === 'POST');
+  await page.locator('#refresh-group-events').click();
+  await refreshed;
+  expect(await page.evaluate(() => window.__calendarDetailAnimations.length)).toBe(beforeRefresh);
+
+  await page.setViewportSize({ width:1280, height:900 });
+  await page.evaluate(() => { document.documentElement.dataset.theme = 'dark'; });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await screenshot(page, 'detail-depth-shared-1280-dark-before.png');
+  const outsideDay = calendar.locator('.calendar-day.outside').first();
+  const previousMonthKey = await calendar.getAttribute('data-rendered-month-key');
+  const beforeOutsideLabel = await panel.locator('#group-date').textContent();
+  await page.evaluate(() => { window.__pauseCalendarDetailAnimations = true; });
+  await outsideDay.click();
+  await expect.poll(() => calendar.getAttribute('data-rendered-month-key')).not.toBe(previousMonthKey);
+  await expect.poll(() => panel.locator('#group-date').textContent()).not.toBe(beforeOutsideLabel);
+  await assertDetailsMotion(page, panel);
+  await screenshot(page, 'detail-depth-shared-1280-dark-start.png');
+  await page.evaluate(() => { window.__pauseCalendarDetailAnimations = false; window.__calendarDetailNativeAnimations.at(-1).play(); });
+  await waitForDetailsMotion(page);
+  await screenshot(page, 'detail-depth-shared-1280-dark-complete.png');
   expect(api.state.outside).toEqual([]);
 });
 
