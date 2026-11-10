@@ -1,24 +1,67 @@
-# DaySync 開発プロジェクト
+# DaySync 開発ガイド
 
-現在のPR作成、Frontend自動マージ、本番反映後の確認手順は [docs/pr-release-workflow.md](docs/pr-release-workflow.md) を参照してください。以下は初期統合時の記録であり、現行の本番設定を表すものではありません。
+## 正式な構成
 
-このフォルダは Frontend と Cloudflare Worker Backend を一緒に開発するための作業ツリーです。Git の基点は 2026-10-20 に確認した GitHub `main` の `945a7617a4ebca3bfd90170956ec26b11537ca74` です。統合作業は未コミットです。
+- `frontend/` は唯一の現行Frontendです。画面、スタイル、PWA、Service Worker、ブラウザー用モジュールはこのディレクトリを編集してください。
+- `backend/` はCloudflare WorkerとD1のコードです。
+- `scripts/`、`.github/`、`docs/` は安全検査、CI、リリース手順を管理します。
+- Vercel ProductionのRoot Directoryは `frontend` です。`frontend/vercel.json` が `/api/*` を本番Workerへrewriteします。
 
-## 構成
+リポジトリ直下にあった旧Frontend本体と重複アセットは、現行コード・CI・本番配信から参照されないことを確認して削除しました。Root Directoryを独立に返さないVercel API応答があったため、直下の `vercel.json` はAPI rewriteの保守用コピーとして残しています。
 
-- `frontend/`: DaySync-Frontend-Release の未公開通知リマインド変更を含む静的 Frontend。`vercel.json` に既存 API rewrite を保持。
-- `backend/`: DaySync-Notification-Work-20261013 の通知対応 Worker。`migrations/0013_push_reminders.sql` を保持。
-- `backend/wrangler.production.jsonc`: 旧 RC から保全した本番用 Worker 設定。現行 Cloudflare 側との一致は、このローカル統合では検証していません。
-- `backend/wrangler.rc-test.jsonc` と `wrangler.rc-baseline.jsonc`、`wrangler.rc-0012.jsonc`: ローカル開発・テスト用。
+## 開発サーバー
 
-Temp の Backend は Git リポジトリではありません。元フォルダやその未コミット変更は編集していません。Secret、Cookie、トークンやローカル環境変数ファイルはコピーしていません。
+Frontend依存を一度インストールします。
 
-## ローカル確認
+```powershell
+npm.cmd --prefix frontend ci
+```
 
-Frontend: `cd frontend`, `npm ci`, `node --test`。開発サーバーは `npm run dev`。
+どちらのディレクトリから起動しても同じ `frontend/` がポート5500で提供されます。
 
-Backend: `cd backend`, `npm ci`, `npm test`, `npm run typecheck`。Worker のビルド確認は `node_modules/.bin/wrangler.cmd deploy --dry-run --config wrangler.production.jsonc --outdir .wrangler/dry-run`。
+```powershell
+# リポジトリ直下から
+npm.cmd run dev
 
-## 将来の公開時に確認する設定
+# または frontend/ から
+Set-Location frontend
+npm.cmd run dev
+```
 
-このリポジトリを GitHub に公開する場合、Vercel の Root Directory は `frontend` に合わせる必要があります。現在の本番設定は変更していません。Cloudflare Worker は `backend/wrangler.production.jsonc` を基準に現行の binding、互換設定、Secret 名、cron を本番と照合してください。migration 0013 はローカルに保全しただけで、本番 D1 には適用していません。
+開発時は `http://localhost:5500` または `http://127.0.0.1:5500` を使用します。`PORT` 環境変数でポートを変更できます。認証・APIを確認する場合は別ターミナルでローカル専用WorkerとD1を起動してください。
+
+```powershell
+Set-Location backend
+npm.cmd run dev
+```
+
+ローカルAPIはFrontendと同じホスト名の8787番を使います。localhostと127.0.0.1を混在させないでください。本番Workerや本番D1へ接続する開発設定は使わないでください。
+
+## テスト・確認
+
+```powershell
+# Frontend単体テスト
+Set-Location frontend
+node --test
+
+# Browser E2E（合成ユーザーと隔離したローカルWorker/D1）
+npm.cmd ci
+npm.cmd run test:e2e
+
+# Backendテスト・型チェック
+Set-Location ../backend
+npm.cmd ci
+npm.cmd test
+npm.cmd run typecheck
+npx.cmd wrangler deploy --dry-run --config wrangler.production.jsonc --outdir "$env:TEMP/daysync-worker-dry-run"
+
+# PR安全性テスト（リポジトリ直下）
+Set-Location ..
+node --test scripts/*.test.mjs
+```
+
+Browser E2Eは専用のローカルD1を使用し、migration 0011を適用しません。実行前に `docs/isolated-browser-e2e.md` を確認してください。
+
+## 旧起動方法との互換性
+
+リポジトリ直下の `npm run dev` と `node dev-server.mjs` は、互換用ランチャーとして `frontend/dev-server.mjs` に委譲します。直下には旧画面を戻さず、今後のFrontend変更は `frontend/` のみで行ってください。
