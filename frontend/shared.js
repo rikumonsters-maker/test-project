@@ -56,8 +56,6 @@ export function initShared(app) {
   let loadedMonths = new Set();
   let loadingMonths = new Set();
   let monthPromises = new Map();
-  let lastRenderedGroupDate = null;
-  let lastRenderedGroupId = null;
   let loadGeneration = 0;
   let syncing = false;
   let convertedWishId = null;
@@ -994,7 +992,7 @@ export function initShared(app) {
       appendEmptyState(list, error.message || "空き時間を読み込めませんでした。");
     }
   }
-  function renderCalendar() {
+  function renderCalendar({ animateDetails = false } = {}) {
     if (!activeGroup() || $("group-calendar-view").hidden) return;
     void loadMonth(view.groupMonth);
     renderMonthCalendar({
@@ -1015,16 +1013,17 @@ export function initShared(app) {
       ],
       maxEntries:3,
       onSelect:(key, date) => {
+        const dateChanged = view.groupDate !== key;
         view.groupDate = key;
         if (date.getMonth() !== view.groupMonth.getMonth() || date.getFullYear() !== view.groupMonth.getFullYear()) {
           view.groupMonth = new Date(date.getFullYear(), date.getMonth(), 1);
         }
-        renderCalendar();
+        renderCalendar({ animateDetails:dateChanged });
       },
     });
-    renderSelectedDate();
+    renderSelectedDate({ animateDetails });
   }
-  function renderSelectedDate() {
+  function renderSelectedDate({ animateDetails = false } = {}) {
     if(activeGroup()&&!$("group-calendar-view").hidden)void memberTimeline.show(view.groupDate);
     const container = $("group-shared-events");
     container.replaceChildren();
@@ -1115,11 +1114,9 @@ export function initShared(app) {
         view.reminderEventId = null;
       }
     }
-    if (lastRenderedGroupDate !== null && lastRenderedGroupId === activeGroupId && lastRenderedGroupDate !== view.groupDate) {
+    if (animateDetails) {
       animateCalendarDetails($("group-shared-events").closest(".calendar-details-panel"));
     }
-    lastRenderedGroupDate = view.groupDate;
-    lastRenderedGroupId = activeGroupId;
   }
   async function refreshCurrentMonth() {
     if (!activeGroup()) return;
@@ -1402,8 +1399,8 @@ export function initShared(app) {
     $("create-group-form").addEventListener("submit", (event) => void submitGroup(event, "/api/groups/create", () => ({ name:$("group-name").value.trim(), memberName:$("group-member-name").value.trim() })));
     $("join-group-form").addEventListener("submit", (event) => void submitGroup(event, "/api/groups/join", () => ({ inviteCode:$("group-invite-code").value.trim().toUpperCase(), memberName:$("join-member-name").value.trim() })));
     $("back-to-groups").addEventListener("click", showHome);
-    $("group-previous").addEventListener("click", () => { view.groupMonth = changeMonth(view.groupMonth, -1); view.groupDate = app.dateKey(view.groupMonth); renderCalendar(); });
-    $("group-next").addEventListener("click", () => { view.groupMonth = changeMonth(view.groupMonth, 1); view.groupDate = app.dateKey(view.groupMonth); renderCalendar(); });
+    $("group-previous").addEventListener("click", () => { const previousDate = view.groupDate; view.groupMonth = changeMonth(view.groupMonth, -1); view.groupDate = app.dateKey(view.groupMonth); renderCalendar({ animateDetails:previousDate !== view.groupDate }); });
+    $("group-next").addEventListener("click", () => { const previousDate = view.groupDate; view.groupMonth = changeMonth(view.groupMonth, 1); view.groupDate = app.dateKey(view.groupMonth); renderCalendar({ animateDetails:previousDate !== view.groupDate }); });
     $("refresh-group-events").addEventListener("click", () => {
       void refreshCurrentMonth();
       if (activeGroup()) { void loadGroupMembers(activeGroup()); void loadWishes(); }

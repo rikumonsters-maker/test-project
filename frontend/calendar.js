@@ -4,7 +4,6 @@ import { initFormDialog } from "./form-dialog.mjs";
 
 export function initCalendar(app) {
   const { $, state, view, renderMonthCalendar, animateCalendarDetails, changeMonth, parseDate, makeId, saveState, dateLabel, bindTimeInput } = app;
-  let lastRenderedAgendaDate = null;
   let eventDialog = null;
 
   function agendaEntries(key) {
@@ -27,18 +26,19 @@ export function initCalendar(app) {
     empty.textContent = text;
     container.append(empty);
   }
-  function render() {
+  function render({ animateDetails = false } = {}) {
     renderMonthCalendar({
       calendarId:"agenda-calendar",
       month:view.agendaMonth,
       selectedDate:view.agendaDate,
       getEntries:agendaEntries,
       onSelect:(key, date) => {
+        const dateChanged = view.agendaDate !== key;
         view.agendaDate = key;
         if (date.getMonth() !== view.agendaMonth.getMonth() || date.getFullYear() !== view.agendaMonth.getFullYear()) {
           view.agendaMonth = new Date(date.getFullYear(), date.getMonth(), 1);
         }
-        resetForm(); render();
+        resetForm(); render({ animateDetails:dateChanged });
       },
     });
     const selectedDate = view.agendaDate;
@@ -103,10 +103,9 @@ export function initCalendar(app) {
         view.reminderEventId = null;
       }
     }
-    if (lastRenderedAgendaDate !== null && lastRenderedAgendaDate !== selectedDate) {
+    if (animateDetails) {
       animateCalendarDetails($("agenda-events").closest(".calendar-details-panel"));
     }
-    lastRenderedAgendaDate = selectedDate;
   }
   function syncTimeFields() {
     const allDay = $("event-all-day").checked;
@@ -251,14 +250,16 @@ export function initCalendar(app) {
     $("cancel-event-edit").addEventListener("click", () => eventDialog.close());
     $("event-all-day").addEventListener("change", syncTimeFields);
     $("agenda-previous").addEventListener("click", () => {
+      const previousDate = view.agendaDate;
       view.agendaMonth = changeMonth(view.agendaMonth, -1);
       view.agendaDate = app.dateKey(view.agendaMonth);
-      resetForm(); render();
+      resetForm(); render({ animateDetails:previousDate !== view.agendaDate });
     });
     $("agenda-next").addEventListener("click", () => {
+      const previousDate = view.agendaDate;
       view.agendaMonth = changeMonth(view.agendaMonth, 1);
       view.agendaDate = app.dateKey(view.agendaMonth);
-      resetForm(); render();
+      resetForm(); render({ animateDetails:previousDate !== view.agendaDate });
     });
     resetForm();
     render();

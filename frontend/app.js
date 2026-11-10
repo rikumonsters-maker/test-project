@@ -168,12 +168,26 @@ function animateCalendarMonth(calendar) {
     { opacity:1, transform:"translateX(0)" },
   ]);
 }
+const calendarDetailAnimations = new WeakMap();
 function animateCalendarDetails(panel) {
-  if (!panel) return;
-  animateCalendarElement(panel, [
-    { opacity:.78, transform:"translateY(5px)", boxShadow:"var(--small-shadow)" },
-    { opacity:1, transform:"translateY(0)", boxShadow:getComputedStyle(panel).boxShadow },
-  ]);
+  if (!panel) return false;
+  calendarDetailAnimations.get(panel)?.cancel();
+  calendarDetailAnimations.delete(panel);
+  if (typeof panel.animate !== "function" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  const animation = panel.animate([
+    { opacity:.87, transform:"perspective(900px) translate3d(0, 10px, -16px) scale(.99)" },
+    { opacity:1, transform:"perspective(900px) translate3d(0, 0, 0) scale(1)" },
+  ], { duration:220, easing:"cubic-bezier(.16, 1, .3, 1)", fill:"none" });
+  calendarDetailAnimations.set(panel, animation);
+  animation.addEventListener("finish", () => {
+    if (calendarDetailAnimations.get(panel) !== animation) return;
+    calendarDetailAnimations.delete(panel);
+    animation.cancel();
+  }, { once:true });
+  animation.addEventListener("cancel", () => {
+    if (calendarDetailAnimations.get(panel) === animation) calendarDetailAnimations.delete(panel);
+  }, { once:true });
+  return animation;
 }
 function renderMonthCalendar({ calendarId, month, selectedDate, mode, onSelect, getEntries, maxEntries = Infinity }) {
   const calendar = $(calendarId);
