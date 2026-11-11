@@ -1,6 +1,7 @@
 import { initReminderControls } from "./reminder-controls.mjs";
 import { currentTimeZone, readReminderSettings, writeReminderSettings } from "./reminders.mjs";
 import { initFormDialog } from "./form-dialog.mjs";
+import { isImportEventReady } from "./screenshot-calendar-ocr.mjs";
 
 export function initCalendar(app) {
   const { $, state, view, renderMonthCalendar, animateCalendarDetails, changeMonth, parseDate, makeId, saveState, dateLabel, bindTimeInput } = app;
@@ -231,6 +232,34 @@ export function initCalendar(app) {
     if (view.editingEventId === id) resetForm();
     saveState(); app.shared?.markDirty(date.slice(0, 7)); render();
   }
+  function addImportedEvents(importedEvents) {
+    if (!app.personalSyncReady) throw new Error("個人予定の同期状態を確認できません。データを変更せず、同期状態が表示されてから再度お試しください。");
+    if (!Array.isArray(importedEvents) || !importedEvents.length || importedEvents.some((event) => !isImportEventReady(event))) {
+      throw new Error("日付・予定名・時刻が確定していない予定は追加できません。");
+    }
+    const records = importedEvents.map((event) => ({
+      id:makeId(), title:event.title.trim(), start:event.allDay ? "" : event.start, end:event.allDay ? "" : event.end,
+      allDay:Boolean(event.allDay), note:"", extra:{},
+    }));
+    const dates = importedEvents.map((event) => event.date);
+    if (app.personalSync?.isActive?.()) {
+      app.personalSync.queueMany(records.map((record, index) => ({ ...record, date:dates[index] })));
+    } else {
+      const previous = state.events || {};
+      const next = Object.fromEntries(Object.entries(previous).map(([date, events]) => [date, Array.isArray(events) ? [...events] : events]));
+      records.forEach((record, index) => { (next[dates[index]] ||= []).push(record); });
+      state.events = next;
+      try { saveState(); }
+      catch (error) { state.events = previous; throw error; }
+      for (const month of new Set(dates.map((date) => date.slice(0, 7)))) app.shared?.markDirty(month);
+    }
+    const firstDate = dates[0];
+    view.agendaDate = firstDate;
+    const selectedDate = parseDate(firstDate);
+    view.agendaMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+    render();
+    return { count:records.length, queued:Boolean(app.personalSync?.isActive?.()) };
+  }
   function init() {
     reminderControls = initReminderControls($("personal-reminder-controls"));
     bindTimeInput("event-start", "event-start-picker");
@@ -272,5 +301,5 @@ export function initCalendar(app) {
       ? "個人予定の同期が有効です。予定と通知設定を同期先に保存し、通知を許可した端末へ送ります。"
       : "個人予定の同期が無効です。この端末だけに保存した通知設定からは、アプリ内通知もPush通知も送られません。通知を使うには個人予定の同期を開始してください。";
   }
-  return { init, render };
+  return { init, render, addImportedEvents };
 }
