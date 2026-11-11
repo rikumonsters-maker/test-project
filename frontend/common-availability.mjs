@@ -1,5 +1,6 @@
 import {createAvailabilityRunner} from './common-availability-runner.mjs';
 import {renderAvailabilityCards} from './availability-presentation.mjs';
+import {dialogExitDelayMs} from './dialog-motion.mjs';
 
 const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00Z`).toISOString().slice(0,10)===value;
 const addDays=(value,days)=>new Date(Date.parse(`${value}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
@@ -22,10 +23,13 @@ export function initCommonAvailability({$,requestJson,activeGroup,getCurrentUser
   const results=$('common-availability-results'),status=$('common-availability-status');
   const recommendations=$('common-availability-recommendations'),error=$('common-availability-error');
   const members=$('common-availability-members'),duration=$('common-availability-duration'),minimum=$('common-availability-minimum');
-  const names=new Map();let openedGroupId=null,memberGeneration=0,lastSelection=null,openedDate='',dayTimer=null,memberController=null;
+  const names=new Map();let openedGroupId=null,memberGeneration=0,lastSelection=null,openedDate='',dayTimer=null,memberController=null,dialogCloseTimer=null,dialogMotionGeneration=0;
   function setError(message=''){error.textContent=message;error.hidden=!message;}
   function clearView(){results.replaceChildren();recommendations.replaceChildren();lastSelection=null;setError();}
-  function close(){runner.close();memberController?.abort();memberController=null;memberGeneration++;openedGroupId=null;clearTimeout(dayTimer);dayTimer=null;if(dialog.open)dialog.close();}
+  function stopPendingWork(){runner.close();memberController?.abort();memberController=null;memberGeneration++;openedGroupId=null;clearTimeout(dayTimer);dayTimer=null;}
+  function finishClose(){clearTimeout(dialogCloseTimer);dialogCloseTimer=null;dialog.classList.remove('is-visible');if(dialog.open)dialog.close();}
+  function close({immediate=false}={}){stopPendingWork();dialogMotionGeneration++;if(!dialog.open)return;dialog.classList.remove('is-visible');clearTimeout(dialogCloseTimer);dialogCloseTimer=null;
+    const delay=immediate?0:dialogExitDelayMs(dialog);if(delay)dialogCloseTimer=setTimeout(finishClose,delay);else finishClose();}
   function scheduleNextDay(){clearTimeout(dayTimer);if(!dialog.open)return;
     dayTimer=setTimeout(()=>{if(dialog.open&&!document.hidden)calculate({immediate:true});scheduleNextDay();},
       Math.max(1000,Date.parse(`${tokyoToday()}T15:00:01Z`)-Date.now()));}
@@ -72,17 +76,17 @@ export function initCommonAvailability({$,requestJson,activeGroup,getCurrentUser
   }
   function renderCards(data,query){
     renderAvailabilityCards({data,query,recommendations,results,onSchedule:slot=>{
-      const selection=lastSelection;close();onSchedule?.({participantUserIds:selection?.userIds||[],
+      const selection=lastSelection;close({immediate:true});onSchedule?.({participantUserIds:selection?.userIds||[],
         minimumParticipants:selection?.minimumParticipants||2,
         options:[{date:slot.date,start:slot.start,end:slot.end}]});
     }});
     status.textContent=(data.days||[]).some(day=>day.slots?.length)?'登録済み予定の空き候補です。参加の承諾は本人に確認してください。':'条件に合う候補はありません。';
   }
-  async function open(){const group=activeGroup();if(!group)return;runner.close();memberController?.abort();memberController=new AbortController();openedGroupId=group.groupId;runner.open(getCurrentUserId());
+  async function open(){const group=activeGroup();if(!group||dialog.open)return;clearTimeout(dialogCloseTimer);dialogCloseTimer=null;runner.close();memberController?.abort();memberController=new AbortController();openedGroupId=group.groupId;runner.open(getCurrentUserId());
     const current=++memberGeneration;names.clear();members.replaceChildren();clearView();openedDate=tokyoToday();
     $('common-availability-start').value=openedDate;$('common-availability-end').value=addDays(openedDate,6);$('common-availability-end').max=addDays(openedDate,13);
     duration.value='120';$('common-availability-window-start').value='540';$('common-availability-window-end').value='1320';
-    status.textContent='読み込み中…';if(!dialog.open)dialog.showModal();scheduleNextDay();
+    status.textContent='読み込み中…';dialog.showModal();const motionGeneration=++dialogMotionGeneration;requestAnimationFrame(()=>{if(dialog.open&&motionGeneration===dialogMotionGeneration)dialog.classList.add('is-visible');});scheduleNextDay();
     try{const data=await requestJson('/api/groups/members/list',{payload:{groupId:group.groupId},signal:memberController.signal});
       if(current!==memberGeneration||!dialog.open||activeGroup()?.groupId!==group.groupId)return;
       const legend=document.createElement('legend');legend.textContent='メンバーを2人以上選択';members.append(legend);
@@ -92,8 +96,10 @@ export function initCommonAvailability({$,requestJson,activeGroup,getCurrentUser
       updateMinimum();calculate({immediate:true});
     }catch(cause){if(current===memberGeneration&&cause?.name!=='AbortError'){status.textContent='';setError(cause?.message||'メンバーを読み込めませんでした。');}}}
   for(let minutes=60;minutes<=360;minutes+=30){const option=document.createElement('option');option.value=String(minutes);option.textContent=`${Math.floor(minutes/60)}時間${minutes%60?'30分':''}`;duration.append(option);}
-  $('common-availability-open').addEventListener('click',()=>void open());$('common-availability-close').addEventListener('click',close);
-  $('common-availability-refresh').addEventListener('click',()=>calculate({immediate:true,force:true}));dialog.addEventListener('close',close);
+  $('common-availability-open').addEventListener('click',()=>void open());$('common-availability-close').addEventListener('click',()=>close());
+  $('common-availability-refresh').addEventListener('click',()=>calculate({immediate:true,force:true}));
+  dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
+  dialog.addEventListener('close',()=>{clearTimeout(dialogCloseTimer);dialogCloseTimer=null;dialog.classList.remove('is-visible');stopPendingWork();});
   members.addEventListener('change',()=>{updateMinimum();calculate();});
   for(const id of ['common-availability-start','common-availability-end','common-availability-duration','common-availability-minimum','common-availability-window-start','common-availability-window-end'])
     $(id).addEventListener('change',()=>{if(id==='common-availability-start'&&validDate($(id).value))$('common-availability-end').max=addDays($(id).value,13);calculate();});

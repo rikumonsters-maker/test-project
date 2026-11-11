@@ -142,7 +142,7 @@ test('古いタブのOFF要求は409で名前公開を取り消さない',async(
   await context.close();
 });
 
-for(const width of [375,390,430,768,1280]) for(const theme of ['light','dark']) {
+for(const width of [320,375,390,430,768,1280]) for(const theme of ['light','dark']) {
   test(`${width}px ${theme} で共有画面と空き時間の配置を確認`,async({page},testInfo)=>{
     const api=syntheticApi({legacyEnabled:true});
     await page.setViewportSize({width,height:850});
@@ -170,3 +170,172 @@ test('Service Workerはローカルで有効化され、古い画面のfetchキ�
   expect(result).toEqual({active:true,cacheKeys:[]});
   expect(api.state.outside).toEqual([]);
 });
+
+test('shared availability and wish depth stays scoped and interactive',async({page})=>{
+  const api=syntheticApi();await openShared(page,api);
+  const availabilityDialog=page.locator('#common-availability-dialog');
+  await availabilityDialog.evaluate(el=>{
+    el.__depthRuns=[];el.__depthEnds=[];
+    el.addEventListener('transitionrun',event=>el.__depthRuns.push(event.propertyName));
+    el.addEventListener('transitionend',event=>el.__depthEnds.push(event.propertyName));
+  });
+  await page.locator('#common-availability-open').click();
+  await expect(availabilityDialog).toHaveClass(/is-visible/);
+  await expect(availabilityDialog).toHaveCSS('opacity','1');
+  await expect.poll(()=>availabilityDialog.evaluate(el=>el.__depthRuns)).toContain('transform');
+  await expect.poll(()=>availabilityDialog.evaluate(el=>el.__depthEnds)).toContain('transform');
+  const availabilityCard=page.locator('#common-availability-recommendations .availability-card').first();
+  await expect(availabilityCard).toBeVisible();
+  const before=await availabilityCard.evaluate(el=>({width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height}));
+  await availabilityCard.hover();
+  await expect.poll(()=>availabilityCard.evaluate(el=>getComputedStyle(el).transform)).not.toBe('none');
+  const after=await availabilityCard.evaluate(el=>({width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height}));
+  expect(after).toEqual(before);
+  await page.mouse.move(2,2);
+  await expect.poll(()=>availabilityCard.evaluate(el=>getComputedStyle(el).transform)).toBe('none');
+  const conditions=page.locator('.common-availability-conditions');
+  const summary=conditions.locator('summary');
+  const conditionBounds=await conditions.boundingBox();
+  await summary.click();
+  await expect(conditions).toHaveAttribute('open','');
+  expect(await conditions.evaluate(el=>getComputedStyle(el).boxShadow)).not.toBe('none');
+  expect((await conditions.boundingBox()).width).toBe(conditionBounds.width);
+  await page.keyboard.press('Escape');
+  await expect(availabilityDialog).toBeHidden();
+  expect(api.state.outside).toEqual([]);
+});
+
+test('availability empty, failed, and cancelled searches remain isolated',async({page})=>{
+  const failed=syntheticApi({availabilityMode:'error'});await openShared(page,failed);
+  await page.locator('#common-availability-open').click();
+  await expect(page.locator('#common-availability-error')).toBeVisible();
+  await expect(page.locator('#common-availability-recommendations .availability-card')).toHaveCount(0);
+  expect(failed.state.outside).toEqual([]);
+
+  await page.goto('/');
+  const empty=syntheticApi({availabilityMode:'empty'});await openShared(page,empty);
+  await page.locator('#common-availability-open').click();
+  await expect(page.locator('#common-availability-dialog')).toHaveClass(/is-visible/);
+  await expect(page.locator('#common-availability-recommendations .availability-card')).toHaveCount(0);
+  await expect(page.locator('#common-availability-results .availability-day-card')).toHaveCount(0);
+  await page.locator('#common-availability-close').click();
+  await expect(page.locator('#common-availability-dialog')).toBeHidden();
+
+  await page.goto('/');
+  const pending=syntheticApi({holdAvailability:true});await openShared(page,pending);
+  await page.locator('#common-availability-open').click();
+  await expect.poll(()=>pending.state.availabilityPending).toBe(1);
+  await page.locator('#common-availability-close').click();
+  await expect(page.locator('#common-availability-dialog')).toBeHidden();
+  pending.state.releaseAvailability();
+  await expect.poll(()=>pending.state.availabilityPending).toBe(0);
+  await expect(page.locator('#common-availability-results .availability-day-card')).toHaveCount(0);
+  expect(pending.state.outside).toEqual([]);
+});
+
+test('wish add and edit dialogs animate and preserve existing requests',async({page})=>{
+  const api=syntheticApi();await openShared(page,api);
+  const add=page.locator('#add-group-wish');
+  const dialog=page.locator('#group-wish-dialog');
+  await add.click();
+  await expect(dialog).toHaveClass(/is-visible/);
+  await expect(dialog).toHaveCSS('opacity','1');
+  await expect(page.locator('#group-wish-date')).toBeFocused();
+  await page.locator('#group-wish-date').fill(api.date);
+  await page.locator('#group-wish-message').fill('synthetic wish message');
+  await page.locator('#group-wish-form [type=submit]').click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(()=>api.state.requests.some(request=>request.path==='/api/groups/wishes/create')).toBe(true);
+  expect(api.state.requests.find(request=>request.path==='/api/groups/wishes/create').body.message).toBe('synthetic wish message');
+
+  const card=page.locator('#group-wishes-list .group-wish-card').first();
+  const buttons=card.locator('.group-wish-actions button');
+  const edit=buttons.nth(await buttons.count()-2);
+  await edit.click();
+  await expect(dialog).toHaveClass(/is-visible/);
+  await expect(page.locator('#group-wish-date')).toHaveValue(api.date);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(edit).toBeFocused();
+  expect(api.state.requests.some(request=>request.path==='/api/groups/wishes/update')).toBe(false);
+  expect(api.state.outside).toEqual([]);
+});
+
+test('wish deletion and reaction requests remain available',async({page})=>{
+  const api=syntheticApi({wishReactable:true});await openShared(page,api);
+  const firstCard=page.locator('#group-wishes-list .group-wish-card').first();
+  await firstCard.locator('.group-wish-actions button').click();
+  await expect.poll(()=>api.state.requests.some(request=>request.path==='/api/groups/wishes/react')).toBe(true);
+  const ownCard=page.locator('#group-wishes-list .group-wish-card').nth(1);
+  const buttons=ownCard.locator('.group-wish-actions button');
+  page.once('dialog',dialog=>dialog.accept());
+  await buttons.last().click();
+  await expect.poll(()=>api.state.requests.some(request=>request.path==='/api/groups/wishes/delete')).toBe(true);
+  expect(api.state.outside).toEqual([]);
+});
+
+test('wish card, add press, touch, and reduced motion keep working',async({browser,page})=>{
+  const api=syntheticApi();await openShared(page,api);
+  const wishCard=page.locator('#group-wishes-list .group-wish-card').first();
+  const wishBounds=await wishCard.evaluate(el=>({width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height}));
+  await wishCard.hover();
+  await expect.poll(()=>wishCard.evaluate(el=>getComputedStyle(el).transform)).not.toBe('none');
+  const hoveredBounds=await wishCard.evaluate(el=>({width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height}));
+  expect(Math.abs(hoveredBounds.width-wishBounds.width)).toBeLessThan(0.1);
+  expect(Math.abs(hoveredBounds.height-wishBounds.height)).toBeLessThan(0.1);
+  await page.mouse.move(2,2);
+  await expect.poll(()=>wishCard.evaluate(el=>getComputedStyle(el).transform)).toBe('none');
+
+  const add=page.locator('#add-group-wish');
+  const resting=await add.evaluate(el=>getComputedStyle(el).transform);
+  await add.hover();await page.mouse.down();
+  await expect.poll(()=>add.evaluate(el=>getComputedStyle(el).transform)).not.toBe(resting);
+  await page.mouse.up();
+  const addDialog=page.locator('#group-wish-dialog');
+  await expect(addDialog).toHaveClass(/is-visible/);
+  await page.keyboard.press('Escape');await expect(addDialog).toBeHidden();
+  await expect(add).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(addDialog).toHaveClass(/is-visible/);
+  await page.keyboard.press('Escape');await expect(addDialog).toBeHidden();
+
+  const touchContext=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true});
+  const touchPage=await touchContext.newPage();const touchApi=syntheticApi();await touchApi.attach(touchContext);
+  await touchPage.goto('/?group='+touchApi.group.groupId+'&date='+touchApi.date);
+  await expect(touchPage.locator('#group-calendar-view')).toBeVisible();
+  const touchModes=await touchPage.evaluate(()=>({hover:matchMedia('(hover:hover) and (pointer:fine)').matches}));
+  expect(touchModes.hover).toBe(false);
+  const touchCard=touchPage.locator('#group-wishes-list .group-wish-card').first();
+  await touchCard.tap();
+  expect(await touchCard.evaluate(el=>getComputedStyle(el).transform)).toBe('none');
+  const touchOverflow=await touchPage.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
+  expect(touchOverflow).toBe(false);
+  await touchContext.close();
+
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await add.click();
+  const wishDialog=page.locator('#group-wish-dialog');
+  await expect(wishDialog).toHaveClass(/is-visible/);
+  expect(await wishDialog.evaluate(el=>getComputedStyle(el).transform)).toBe('none');
+  expect(await wishDialog.evaluate(el=>getComputedStyle(el).transitionDuration)).toBe('0s');
+  await page.keyboard.press('Escape');await expect(wishDialog).toBeHidden();
+  expect(api.state.outside).toEqual([]);
+});
+
+for(const width of [320,390,768,1280]) for(const theme of ['light','dark']) {
+  test('shared wish depth at '+width+'px in '+theme,async({page})=>{
+    const api=syntheticApi();await page.setViewportSize({width,height:850});await page.emulateMedia({colorScheme:theme});await openShared(page,api);
+    const card=page.locator('#group-wishes-list .group-wish-card').first();await expect(card).toBeVisible();
+    const before=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,viewport:innerWidth}));
+    expect(before.scroll).toBeLessThanOrEqual(before.viewport);
+    await page.locator('#add-group-wish').click();
+    const wishDialog=page.locator('#group-wish-dialog');await expect(wishDialog).toHaveClass(/is-visible/);
+    const wishRect=await wishDialog.boundingBox();expect(wishRect.width).toBeLessThanOrEqual(width);
+    await page.keyboard.press('Escape');await expect(wishDialog).toBeHidden();
+    await page.locator('#common-availability-open').click();
+    const availabilityDialog=page.locator('#common-availability-dialog');await expect(availabilityDialog).toHaveClass(/is-visible/);
+    const availabilityRect=await availabilityDialog.boundingBox();expect(availabilityRect.width).toBeLessThanOrEqual(width);
+    const after=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,viewport:innerWidth}));
+    expect(after.scroll).toBeLessThanOrEqual(after.viewport);expect(api.state.outside).toEqual([]);
+  });
+}

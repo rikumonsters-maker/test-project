@@ -7,8 +7,10 @@ const members=[{memberId:'member-a',userId:user.id,memberName:user.displayName},
 const privateMarkers=['私的タイトルSECRET','私的メモSECRET','勤務先SECRET','給与SECRET','家計簿SECRET'];
 const date=tokyoToday();
 
-export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,personalSyncActive=false,syncFailures=0,groupErrorPath='',frontendOrigin='http://127.0.0.1:5517',groups=[group]}={}) {
-  const state={legacyEnabled,acknowledged,personalSyncActive,syncFailuresRemaining:syncFailures,groupErrorPath,requests:[],outside:[],groups};
+export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,personalSyncActive=false,syncFailures=0,groupErrorPath='',frontendOrigin='http://127.0.0.1:5517',groups=[group],availabilityMode='success',holdAvailability=false,wishReactable=false}={}) {
+  let releaseAvailability;
+  const availabilityGate=holdAvailability?new Promise(resolve=>{releaseAvailability=resolve;}):Promise.resolve();
+  const state={legacyEnabled,acknowledged,personalSyncActive,syncFailuresRemaining:syncFailures,groupErrorPath,requests:[],outside:[],groups,availabilityPending:0,releaseAvailability:()=>releaseAvailability?.()};
   const event=()=>({id:'anonymous-busy',sourceType:'busy',eventDate:date,start:'13:00',end:'15:00',
     title:'予定あり',busyDisplayName:'田中'});
   async function attach(context) {
@@ -60,16 +62,23 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
         busy:m.userId==='00000000-0000-4000-8000-000000000002'&&body.date===date?[{start:'13:00',end:'15:00'}]:[],tentative:[]}))};
       else if(path==='/api/groups/members/list') data={members};
       else if(path==='/api/groups/wishes/list') data={wishes:Array.from({length:4},(_,i)=>({id:`synthetic-wish-${i}`,wishDate:includeExpired&&i===0?'2020-01-01':date,
-        message:`合成の遊びたい日 ${i+1}`,ownerName:'テスト利用者',userId:user.id,isOwn:true,
+        message:`合成の遊びたい日 ${i+1}`,ownerName:'テスト利用者',userId:wishReactable&&i===0?'00000000-0000-4000-8000-000000000003':user.id,isOwn:!wishReactable||i!==0,
         managementState:'open',isAllDay:false,start:'18:00',end:'20:00',interestedUsers:[]}))};
+      else if(['/api/groups/wishes/create','/api/groups/wishes/update','/api/groups/wishes/delete','/api/groups/wishes/react','/api/groups/wishes/unreact'].includes(path)) data={};
       else if(path==='/api/shared/events/list') data={events:[event(),...(extraBusyMember?[{
         id:'second-busy',sourceType:'busy',eventDate:date,start:'13:00',end:'15:00',title:'予定あり',
         busyDisplayName:'佐藤',
       }]:[]),...(anonymousBusy?[{id:'other-group-busy',sourceType:'busy',eventDate:date,start:'18:00',end:'20:00',title:'予定あり'}]:[])]};
-      else if(path==='/api/shared/availability/search') data={days:[{date,unconfirmedUserIds:[],slots:[{start:'16:00',end:'18:00',registeredClearCount:2,hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,needsConfirmation:false}]}],
+      else if(path==='/api/shared/availability/search') {
+        if(holdAvailability){state.availabilityPending+=1;await availabilityGate;state.availabilityPending-=1;}
+        if(availabilityMode==='error'){status=503;data={error:'Synthetic availability failure'};}
+        else if(availabilityMode==='empty') data={days:[],recommendations:[]};
+        else data={days:[{date,unconfirmedUserIds:[],slots:[{start:'16:00',end:'18:00',registeredClearCount:2,hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,needsConfirmation:false}]}],
         recommendations:[{date,start:'16:00',end:'18:00',registeredClearCount:2,hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,reason:'登録済み予定との競合なし'}]};
+      }
       else {status=501;data={error:`Synthetic API has no fixture for ${path}`};}
-      await route.fulfill({status,contentType:'application/json',headers:{'Access-Control-Allow-Origin':frontendOrigin,'Access-Control-Allow-Credentials':'true'},body:JSON.stringify(data)});
+      try { await route.fulfill({status,contentType:'application/json',headers:{'Access-Control-Allow-Origin':frontendOrigin,'Access-Control-Allow-Credentials':'true'},body:JSON.stringify(data)}); }
+      catch (error) { if (!request.failure()) throw error; }
     });
   }
   return {state,attach,privateMarkers,group,date};
