@@ -22,7 +22,8 @@ export function transitionEndDelayMs(duration, delay = "0s") {
 
 export function dialogExitDelayMs(dialog) {
   if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return 0;
-  const panel = dialog.querySelector(".entry-dialog-panel, .group-add-dialog-panel");
+  const panel = dialog.querySelector(".entry-dialog-panel, .group-add-dialog-panel")
+    || (dialog.matches(".common-availability-dialog, .group-wish-dialog") ? dialog : null);
   if (!panel) return 0;
   const style = window.getComputedStyle(panel);
   return transitionEndDelayMs(style.transitionDuration, style.transitionDelay);

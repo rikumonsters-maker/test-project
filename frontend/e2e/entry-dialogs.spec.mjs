@@ -177,6 +177,7 @@ test('event, expense and group dialogs share a restrained depth entrance and exi
     const dialog = page.locator(dialogSelector);
     const panel = page.locator(`${dialogSelector} ${panelSelector}`);
     await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveClass(/is-visible/);
     const opened = await panel.evaluate(element => {
       const style = getComputedStyle(element);
       const backdrop = getComputedStyle(element.closest('dialog'), '::backdrop');
@@ -195,7 +196,7 @@ test('event, expense and group dialogs share a restrained depth entrance and exi
         })),
       };
     });
-    expect(Number(opened.opacity)).toBeGreaterThan(0);
+    expect(Number(opened.opacity)).toBeGreaterThanOrEqual(0);
     expect(Number(opened.opacity)).toBeLessThanOrEqual(1);
     expect(opened.transform).not.toBe('none');
     expect(opened.origin).toContain('px');
@@ -206,11 +207,18 @@ test('event, expense and group dialogs share a restrained depth entrance and exi
     expect(opened.easing).toContain('cubic-bezier');
     expect(opened.backdropDuration).toContain('0.26s');
     expect(opened.backdropColor).not.toBe('rgba(0, 0, 0, 0)');
+    const opacityTransition = opened.transitions.find(animation => animation.property === 'opacity');
+    expect(opacityTransition?.frames.length).toBeGreaterThanOrEqual(2);
+    expect(opacityTransition.frames[0].opacity).not.toBe(opacityTransition.frames.at(-1).opacity);
     const transformTransition = opened.transitions.find(animation => animation.property === 'transform');
     expect(transformTransition?.frames.length).toBeGreaterThanOrEqual(2);
     expect(transformTransition.frames[0].transform).not.toBe(transformTransition.frames.at(-1).transform);
     await page.screenshot({ path:`${screenshots}/${screenshotName.replace('after-', 'during-')}.png`, fullPage:true });
-    await page.waitForTimeout(280);
+    await panel.evaluate(async element => {
+      const animations = element.getAnimations();
+      await Promise.all(animations.map(animation => animation.finished.catch(() => {})));
+    });
+    await expect(panel).toHaveCSS('opacity', '1');
     await page.screenshot({ path:`${screenshots}/${screenshotName}.png`, fullPage:true, animations:'disabled' });
     return { dialog, panel };
   }
@@ -247,7 +255,10 @@ test('event, expense and group dialogs share a restrained depth entrance and exi
   await page.locator('#group-add-join-tab').click();
   await expect(page.locator('#group-add-join-tab')).toHaveAttribute('aria-selected', 'true');
   await page.setViewportSize({ width:1280, height:900 });
-  await page.waitForTimeout(280);
+  await page.locator('#group-add-dialog .group-add-dialog-panel').evaluate(async element => {
+    const animations = element.getAnimations();
+    await Promise.all(animations.map(animation => animation.finished.catch(() => {})));
+  });
   await page.screenshot({ path:`${screenshots}/modal-depth-after-group-join-1280px.png`, fullPage:true, animations:'disabled' });
   await page.locator('#close-group-add-dialog').click();
   await expect(active.dialog).toBeHidden();

@@ -795,3 +795,60 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
   .summary-row dt { font-size:.9rem; }
   .summary-row dd { font-size:1rem; }
 }
+
+
+/* Shared availability and wish depth: motion is visual only; card geometry stays fixed. */
+.common-availability-dialog,.group-wish-dialog {
+  --dialog-depth-duration:240ms;
+  --dialog-depth-easing:cubic-bezier(.2,.72,.22,1);
+  opacity:.87;
+  transform:perspective(900px) translate3d(0,12px,-18px) scale(.985);
+  transform-origin:50% 55%;
+  transition:opacity var(--dialog-depth-duration) var(--dialog-depth-easing),transform var(--dialog-depth-duration) var(--dialog-depth-easing),box-shadow var(--dialog-depth-duration) var(--dialog-depth-easing);
+}
+.common-availability-dialog.is-visible,.group-wish-dialog.is-visible {
+  opacity:1;
+  transform:perspective(900px) translate3d(0,0,0) scale(1);
+  box-shadow:0 24px 58px rgba(15,23,42,.2),0 8px 20px rgba(16,185,129,.07);
+}
+.common-availability-dialog::backdrop,.group-wish-dialog::backdrop {
+  background:transparent;
+  transition:background-color var(--dialog-depth-duration) var(--dialog-depth-easing);
+}
+.common-availability-dialog.is-visible::backdrop,.group-wish-dialog.is-visible::backdrop { background:var(--backdrop); }
+.availability-card,.availability-day-card {
+  box-shadow:var(--small-shadow);
+  transition:transform 190ms ease-out,box-shadow 190ms ease-out;
+}
+.group-wishes-top .group-wish-card {
+  box-shadow:var(--small-shadow);
+  transition:transform 190ms ease-out,box-shadow 190ms ease-out;
+}
+.common-availability-conditions[open] { border-radius:8px; box-shadow:var(--small-shadow); }
+#add-group-wish {
+  --wish-add-shadow:0 3px 0 rgba(14,95,49,.38),0 7px 12px rgba(15,23,42,.13);
+  --wish-add-shadow-pressed:0 1px 0 rgba(14,95,49,.34),0 2px 4px rgba(15,23,42,.12);
+  box-shadow:var(--wish-add-shadow);
+  transform:translate3d(0,0,0) scale(1);
+  transform-origin:50% 50%;
+  transition:transform 110ms cubic-bezier(.2,.7,.25,1),box-shadow 110ms cubic-bezier(.2,.7,.25,1),filter 110ms ease-out;
+}
+#add-group-wish:active { transform:translate3d(0,1px,0) scale(.99); box-shadow:var(--wish-add-shadow-pressed); filter:brightness(.94); }
+@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
+  .availability-card:hover,.availability-day-card:hover,.group-wishes-top .group-wish-card:hover {
+    transform:translateY(-2px);
+    box-shadow:0 5px 14px rgba(25,45,28,.13);
+  }
+  #add-group-wish:not(:active):hover { box-shadow:0 4px 0 rgba(14,95,49,.4),0 9px 15px rgba(15,23,42,.16); filter:brightness(1.015); }
+}
+@media (prefers-reduced-motion:reduce) {
+  .common-availability-dialog,.group-wish-dialog,.common-availability-dialog::backdrop,.group-wish-dialog::backdrop,
+  .availability-card,.availability-day-card,.group-wishes-top .group-wish-card,#add-group-wish {
+    transition:none;
+  }
+  .common-availability-dialog,.group-wish-dialog,.availability-card,.availability-day-card,.group-wishes-top .group-wish-card,#add-group-wish:active {
+    transform:none;
+  }
+  .common-availability-dialog.is-visible,.group-wish-dialog.is-visible { opacity:1; transform:none; }
+  #add-group-wish:active { box-shadow:var(--wish-add-shadow-pressed); filter:brightness(.94); }
+}

@@ -67,6 +67,8 @@ export function initShared(app) {
   let editingWishId = null;
   let wishRequestId = 0;
   let wishClientRequestId = null;
+  let wishDialogExitTimer = null;
+  let wishDialogMotionGeneration = 0;
   let sharedEventEditor = null;
   let commonAvailability = null;
   const memberTimeline=initMemberTimeline({$,requestJson,activeGroup:()=>activeGroup()});
@@ -237,7 +239,7 @@ export function initShared(app) {
     schedules?.close();
     closeGroupManagement();
     closeStatusInvite();
-    closeWishEditor();
+    closeWishEditor({ immediate:true });
     $("group-home").hidden = false;
     $("group-calendar-view").hidden = true;
     activeGroupId = null;
@@ -612,12 +614,25 @@ export function initShared(app) {
   function wishTime(wish) {
     return wish.isAllDay ? "終日・時間未定" : `${wish.start}〜${wish.end || ""}`;
   }
-  function closeWishEditor() {
-    const dialog = $("group-wish-dialog");
+  function finishWishEditorClose(dialog) {
+    clearTimeout(wishDialogExitTimer);
+    wishDialogExitTimer = null;
+    dialog.classList.remove("is-visible");
     if (typeof dialog.close === "function" && dialog.open) dialog.close();
     else dialog.removeAttribute("open");
+  }
+  function closeWishEditor({ immediate = false } = {}) {
+    const dialog = $("group-wish-dialog");
     editingWishId = null;
     wishClientRequestId = null;
+    wishDialogMotionGeneration += 1;
+    if (!dialog.open) return;
+    dialog.classList.remove("is-visible");
+    clearTimeout(wishDialogExitTimer);
+    wishDialogExitTimer = null;
+    const delay = immediate ? 0 : dialogExitDelayMs(dialog);
+    if (delay) wishDialogExitTimer = setTimeout(() => finishWishEditorClose(dialog), delay);
+    else finishWishEditorClose(dialog);
   }
   function openWishEditor(wish = null) {
     editingWishId = wish?.id || null;
@@ -632,8 +647,17 @@ export function initShared(app) {
     updateWishTimeState();
     setError("", "group-wish-form-error");
     const dialog = $("group-wish-dialog");
-    if (typeof dialog.showModal === "function") dialog.showModal();
-    else dialog.setAttribute("open", "");
+    clearTimeout(wishDialogExitTimer);
+    wishDialogExitTimer = null;
+    if (!dialog.open) {
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+    }
+    dialog.classList.remove("is-visible");
+    const motionGeneration = ++wishDialogMotionGeneration;
+    requestAnimationFrame(() => {
+      if (dialog.open && motionGeneration === wishDialogMotionGeneration) dialog.classList.add("is-visible");
+    });
   }
   function updateWishTimeState() {
     const allDay = $("group-wish-all-day").checked;
@@ -1444,6 +1468,17 @@ export function initShared(app) {
     $("group-wish-cancel").addEventListener("click", closeWishEditor);
     $("group-wish-dialog").addEventListener("click", (event) => {
       if (event.target === $("group-wish-dialog")) closeWishEditor();
+    });
+    $("group-wish-dialog").addEventListener("cancel", (event) => {
+      event.preventDefault();
+      closeWishEditor();
+    });
+    $("group-wish-dialog").addEventListener("close", () => {
+      clearTimeout(wishDialogExitTimer);
+      wishDialogExitTimer = null;
+      $("group-wish-dialog").classList.remove("is-visible");
+      editingWishId = null;
+      wishClientRequestId = null;
     });
     $("group-wish-form").addEventListener("submit", async (event) => {
       event.preventDefault();
