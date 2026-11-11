@@ -937,3 +937,17 @@ input:focus,select:focus,textarea:focus { border-color:var(--green); outline:non
   .screenshot-import-time-fields { grid-column:1; }
   .screenshot-import-all-day { grid-column:1; }
 }
+
+.event-screenshot-import-entry {
+  min-width:0;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--surface-muted,var(--surface));
+}
+.event-screenshot-import-entry h4 { margin:0 0 4px; font-size:.94rem; }
+.event-screenshot-import-entry p { margin:0 0 8px; color:var(--muted); font-size:.84rem; line-height:1.45; }
+.event-screenshot-import-button { width:100%; min-height:44px; }
+.event-manual-entry-divider { display:flex; min-width:0; align-items:center; gap:9px; margin:0; color:var(--muted); font-size:.82rem; text-align:center; }
+.event-manual-entry-divider::before,.event-manual-entry-divider::after { content:""; flex:1 1 auto; min-width:12px; height:1px; background:var(--line); }
+.event-screenshot-import-entry :focus-visible { outline:3px solid var(--accent-border); outline-offset:2px; }

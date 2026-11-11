@@ -29,7 +29,7 @@ async function validateImage(file) {
   } finally { URL.revokeObjectURL(url); }
 }
 
-export function initScreenshotCalendarImport({ app, addEvents }) {
+export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportComplete = null }) {
   const $ = (id) => document.getElementById(id);
   const dialog = $("screenshot-import-dialog");
   if (!dialog) return null;
@@ -46,6 +46,8 @@ export function initScreenshotCalendarImport({ app, addEvents }) {
   let worker = null;
   let runId = 0;
   let processing = false;
+  let source = "profile";
+  let pendingCalendarCompletion = null;
 
   function setStatus(message, kind = "info") {
     status.textContent = message;
@@ -259,7 +261,7 @@ export function initScreenshotCalendarImport({ app, addEvents }) {
     dialog,
     form,
     closeButton:$("screenshot-import-close"),
-    fallbackOpener:() => $("screenshot-import-open"),
+    fallbackOpener:() => source === "calendar" ? $("open-event-dialog") : $("screenshot-import-open"),
     onClose:() => {
       void cancelCurrent(false);
       candidates = [];
@@ -271,9 +273,35 @@ export function initScreenshotCalendarImport({ app, addEvents }) {
     },
   });
 
-  $("screenshot-import-open").addEventListener("click", (event) => {
+  dialog.addEventListener("close", () => {
+    const completed = pendingCalendarCompletion;
+    pendingCalendarCompletion = null;
+    if (completed) onCalendarImportComplete?.(completed);
+  });
+
+  function formatImportResult(outcome) {
+    if (!outcome.queued) {
+      return { message:`${outcome.count}件をこの端末の個人予定に追加しました。画像そのものとOCRの生テキストは保存していません。`, kind:"success" };
+    }
+    if (outcome.pendingCount === 0) {
+      return { message:`${outcome.count}件の個人予定を同期先に保存しました。画像そのものとOCRの生テキストは保存していません。`, kind:"success" };
+    }
+    if (outcome.syncedCount > 0) {
+      return { message:`${outcome.syncedCount}件は同期先に保存済み、${outcome.pendingCount}件は同期キューに残っています。同期状態を確認してください。`, kind:"caution" };
+    }
+    return { message:`${outcome.count}件を同期キューに追加しました。同期状態を確認してください。`, kind:"caution" };
+  }
+
+  function open({ source: requestedSource = "profile", trigger = $("screenshot-import-open") } = {}) {
+    if (dialog.open) return false;
+    source = requestedSource === "calendar" ? "calendar" : "profile";
     setStatus("");
-    dialogController.open({ trigger:event.currentTarget, focus:input });
+    dialogController.open({ trigger, focus:input });
+    return true;
+  }
+
+  $("screenshot-import-open").addEventListener("click", (event) => {
+    open({ source:"profile", trigger:event.currentTarget });
   });
   $("screenshot-import-cancel").addEventListener("click", () => dialogController.close());
   $("screenshot-import-cancel-ocr").addEventListener("click", () => { void cancelCurrent(); });
@@ -321,12 +349,24 @@ export function initScreenshotCalendarImport({ app, addEvents }) {
         throw new Error("保存前の再確認で不完全な予定が見つかりました。内容を確認してください。");
       }
       const outcome = await addEvents(latestChosen);
-      if (app.personalSync?.isActive?.()) await app.personalSync.sync();
-      resultStatus.textContent = app.personalSync?.isActive?.()
-        ? `${outcome.count}件を同期キューに追加しました。同期状態を確認してください。`
-        : `${outcome.count}件をこの端末の個人予定に追加しました。画像そのものとOCRの生テキストは保存していません。`;
-      resultStatus.hidden = false;
-      resultStatus.dataset.kind = "success";
+      const syncActive = Boolean(app.personalSync?.isActive?.());
+      if (syncActive) await app.personalSync.sync();
+      const pendingCount = syncActive
+        ? app.personalSync.pendingEventCount?.(outcome.eventIds) ?? outcome.count
+        : 0;
+      const result = formatImportResult({
+        ...outcome,
+        queued:syncActive,
+        pendingCount,
+        syncedCount:Math.max(0, outcome.count - pendingCount),
+      });
+      if (source === "calendar") pendingCalendarCompletion = result;
+      else {
+        resultStatus.textContent = result.message;
+        resultStatus.className = result.kind === "caution" ? "status caution" : "status";
+        resultStatus.hidden = false;
+        resultStatus.dataset.kind = result.kind;
+      }
       dialogController.close({ force:true });
     } catch (error) {
       setStatus(error?.message || "保存できませんでした。入力内容は画面に残っています。", "error");
@@ -334,5 +374,5 @@ export function initScreenshotCalendarImport({ app, addEvents }) {
     }
   });
 
-  return { open:() => dialogController.open(), cancel:cancelCurrent };
+  return { open, cancel:cancelCurrent };
 }

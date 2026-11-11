@@ -89,6 +89,8 @@ test('editing a personal event reuses the modal and preserves existing values un
   await row.locator('button').first().click();
   await expect(page.locator('#event-dialog')).toBeVisible();
   await expect(page.locator('#event-form-title')).toHaveText('個人予定を編集');
+  await expect(page.locator('#event-screenshot-import-entry')).toBeHidden();
+  await expect(page.locator('#event-screenshot-import-divider')).toBeHidden();
   await expect(page.locator('#event-title')).toHaveValue('Seed appointment');
   await expect(page.locator('#event-date')).toHaveValue(api.date);
   await expect(page.locator('#event-start')).toHaveValue('10:00');

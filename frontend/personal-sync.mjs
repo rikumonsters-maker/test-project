@@ -115,6 +115,12 @@ export function createPersonalSync({storage,key,state,requestJson,onChange=()=>{
     return operations.length;
   }
 
+  function pendingEventCount(ids) {
+    if(!meta || !Array.isArray(ids) || ids.length===0) return 0;
+    const wanted=new Set(ids.map(id=>String(id)));
+    return new Set(meta.queue.filter(op=>wanted.has(op.id)).map(op=>op.id)).size;
+  }
+
   async function pull() {
     let more=true;
     while(more && isCurrent()) {
@@ -271,5 +277,5 @@ export function createPersonalSync({storage,key,state,requestJson,onChange=()=>{
     return JSON.stringify({savedAt:new Date().toISOString(),originalState:JSON.stringify({events:archiveEvents}),archiveEvents:clone(archiveEvents),events:active?clone(state.events||{}):{}});
   }
 
-  return {initialize,startFresh,queue,queueMany,sync,resolve,restore,archiveLegacy,backup,status:()=>lastStatus,isActive:()=>active,isReady:()=>ready};
+  return {initialize,startFresh,queue,queueMany,pendingEventCount,sync,resolve,restore,archiveLegacy,backup,status:()=>lastStatus,isActive:()=>active,isReady:()=>ready};
 }

@@ -290,7 +290,12 @@ const budget = initBudget(app);
 const shared = initShared(app);
 app.shared = shared;
 const calendar = initCalendar(app);
-initScreenshotCalendarImport({ app, addEvents:calendar.addImportedEvents });
+const screenshotImport = initScreenshotCalendarImport({
+  app,
+  addEvents:calendar.addImportedEvents,
+  onCalendarImportComplete:(result) => calendar.showScreenshotImportResult(result),
+});
+calendar.setScreenshotImporter(screenshotImport);
 app.personalSyncReady = false;
 let personalSync = null;
 app.scheduleBudget = budget.schedule;

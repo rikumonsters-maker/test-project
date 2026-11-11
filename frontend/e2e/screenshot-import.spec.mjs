@@ -140,6 +140,7 @@ test("Japanese calendar screenshot OCR stays local and imports only explicitly c
   await expect(dialog.locator("#screenshot-import-status")).toContainText("OCRをキャンセルしました");
   await expect(cards).toHaveCount(0);
   await expect(dialog.locator("#screenshot-import-register")).toBeDisabled();
+  await expect(dialog.locator("#screenshot-import-file")).toHaveValue("");
   await dialog.locator("#screenshot-import-cancel").click();
   await expect(dialog).toBeHidden();
 
@@ -149,7 +150,94 @@ test("Japanese calendar screenshot OCR stays local and imports only explicitly c
   await expect(page.locator("#agenda-events")).not.toContainText("OCR");
 });
 
-test("confirmed screenshot events enter the already-active personal sync queue only", async ({ page }) => {
+test("calendar event add dialog hands off to the existing OCR dialog after discard confirmation", async ({ page }) => {
+  test.setTimeout(180_000);
+  const api = syntheticApi({ groups:[], personalSyncActive:false });
+  await api.attach(page.context());
+  await page.goto("/");
+  await expect(page.locator("#app-root")).toBeVisible();
+  await page.setViewportSize({ width:390, height:844 });
+  const eventDialog = page.locator("#event-dialog");
+  const importDialog = page.locator("#screenshot-import-dialog");
+  const importButton = page.locator("#event-screenshot-import-open");
+  await page.locator("#open-event-dialog").click();
+  await expect(page.locator("#event-screenshot-import-entry")).toBeVisible();
+  await expect(page.locator("#event-screenshot-import-divider")).toBeVisible();
+  await expect(importButton).toHaveAttribute("aria-controls", "screenshot-import-dialog");
+  mkdirSync("test-results/ocr-event-entry", { recursive:true });
+  await page.screenshot({ path:"test-results/ocr-event-entry/390-event-dialog-light.png", animations:"disabled" });
+  await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; });
+  await page.screenshot({ path:"test-results/ocr-event-entry/390-event-dialog-dark.png", animations:"disabled" });
+  await page.evaluate(() => { document.documentElement.dataset.theme = "light"; });
+  await page.setViewportSize({ width:1280, height:900 });
+  await page.screenshot({ path:"test-results/ocr-event-entry/1280-event-dialog-light.png", animations:"disabled" });
+  await page.setViewportSize({ width:390, height:844 });
+
+  await page.locator("#event-title").fill("Unfinished manual draft");
+  await page.once("dialog", (browserDialog) => browserDialog.dismiss());
+  await importButton.click();
+  await expect(eventDialog).toBeVisible();
+  await expect(importDialog).toBeHidden();
+  await expect(page.locator("#event-title")).toHaveValue("Unfinished manual draft");
+
+  await page.once("dialog", (browserDialog) => browserDialog.accept());
+  await importButton.evaluate((button) => { button.click(); button.click(); });
+  await expect(eventDialog).toBeHidden();
+  await expect(importDialog).toBeVisible();
+  await expect(page.locator("#screenshot-import-file")).toBeFocused();
+  await expect(page.locator("dialog[open]")).toHaveCount(1);
+  await page.screenshot({ path:"test-results/ocr-event-entry/390-ocr-dialog-light.png", animations:"disabled" });
+
+  await importDialog.locator("#screenshot-import-file").setInputFiles({
+    name:"synthetic-japanese-calendar.png", mimeType:"image/png", buffer:fixture,
+  });
+  const cards = importDialog.locator(".screenshot-import-candidate");
+  await expect(cards).toHaveCount(3, { timeout:90_000 });
+  await cards.first().locator('[data-field="selected"]').check();
+  await page.screenshot({ path:"test-results/ocr-event-entry/390-ocr-review.png", animations:"disabled" });
+  await page.once("dialog", (browserDialog) => browserDialog.accept());
+  await importDialog.locator("#screenshot-import-register").click();
+  await expect(importDialog).toBeHidden();
+  await expect(eventDialog).toBeHidden();
+  await expect(page.locator("#agenda-events")).toContainText("研究室ミーティング");
+  await expect(page.locator("#agenda-events")).not.toContainText("夕食 友人と");
+  await expect(page.locator("#agenda-date")).toContainText("12日");
+  await expect(page.locator("#event-screenshot-import-result")).toContainText("1件をこの端末の個人予定に追加しました");
+  await expect(page.locator("#open-event-dialog")).toBeFocused();
+  expect(await page.locator("#agenda-events .agenda-personal").count()).toBe(1);
+  expect(api.state.outside).toEqual([]);
+});
+
+test("calendar-origin import reports queued events when the existing sync retry is pending", async ({ page }) => {
+  test.setTimeout(180_000);
+  const api = syntheticApi({ groups:[], personalSyncActive:true, personalCreateFailures:1 });
+  await api.attach(page.context());
+  await page.goto("/");
+  await expect(page.locator("#app-root")).toBeVisible();
+  await page.locator("#open-event-dialog").click();
+  await page.locator("#event-screenshot-import-open").click();
+  const dialog = page.locator("#screenshot-import-dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.locator("#screenshot-import-file").setInputFiles({
+    name:"synthetic-japanese-calendar.png", mimeType:"image/png", buffer:fixture,
+  });
+  const cards = dialog.locator(".screenshot-import-candidate");
+  await expect(cards).toHaveCount(3, { timeout:90_000 });
+  await cards.first().locator('[data-field="selected"]').check();
+  await page.once("dialog", (browserDialog) => browserDialog.accept());
+  await dialog.locator("#screenshot-import-register").click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator("#event-screenshot-import-result")).toContainText("1件を同期キューに追加しました");
+  expect(api.state.personalCreateFailuresRemaining).toBe(0);
+  const pending = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((item) => item.endsWith("-personal-sync-v2"));
+    return key ? JSON.parse(localStorage.getItem(key)).queue.length : 0;
+  });
+  expect(pending).toBe(1);
+  expect(api.state.outside).toEqual([]);
+});
+
+test("confirmed screenshot events use the already-active personal sync and report server confirmation", async ({ page }) => {
   test.setTimeout(120_000);
   const api = syntheticApi({ groups:[], personalSyncActive:true });
   await api.attach(page.context());
@@ -174,7 +262,7 @@ test("confirmed screenshot events enter the already-active personal sync queue o
   await page.once("dialog", (browserDialog) => browserDialog.accept());
   await dialog.locator("#screenshot-import-register").click();
   await expect(dialog).toBeHidden();
-  await expect(page.locator("#screenshot-import-result")).toContainText("同期キュー");
+  await expect(page.locator("#screenshot-import-result")).toContainText("同期先に保存しました");
 
   const creates = api.state.requests.filter(({ path, method }) => path === "/api/personal/events/create" && method === "POST");
   expect(creates).toHaveLength(1);

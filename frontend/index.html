@@ -113,6 +113,7 @@
               <div class="expense-list" id="agenda-shifts"></div>
               <h4 class="agenda-list-title">個人予定</h4>
               <div class="expense-list" id="agenda-events"></div>
+              <p class="status" id="event-screenshot-import-result" role="status" aria-live="polite" hidden></p>
             </article>
 
           </div>
@@ -124,6 +125,12 @@
               <button class="action-button entry-dialog-close" id="close-event-dialog" type="button" aria-label="予定フォームを閉じる">閉じる</button>
             </div>
             <form id="event-form" class="form-stack">
+                <section class="event-screenshot-import-entry" id="event-screenshot-import-entry" aria-labelledby="event-screenshot-import-title" hidden>
+                  <h4 id="event-screenshot-import-title">スクショから予定を追加</h4>
+                  <p>他のカレンダーアプリの画像を読み取り、確認してからまとめて登録できます。</p>
+                  <button class="action-button primary event-screenshot-import-button" id="event-screenshot-import-open" type="button" aria-haspopup="dialog" aria-controls="screenshot-import-dialog">画像から予定を読み取る</button>
+                </section>
+                <p class="event-manual-entry-divider" id="event-screenshot-import-divider" hidden>または、手入力で予定を追加</p>
                 <label>タイトル<input id="event-title" type="text" maxlength="80" placeholder="例：飲み会" required /></label>
                 <label>日付<input id="event-date" type="date" required /></label>
                 <label class="checkbox-label"><span>終日予定</span><input id="event-all-day" type="checkbox" /></label>
