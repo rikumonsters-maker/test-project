@@ -396,3 +396,54 @@ for(const width of [320,390,768,1280]) for(const theme of ['light','dark']) {
     expect(after.scroll).toBeLessThanOrEqual(after.viewport);expect(api.state.outside).toEqual([]);
   });
 }
+
+for(const width of [320,375,390,430,768,1280]) for(const theme of ["light","dark"]) {
+  test("availability palette matches all five states and legend in "+theme+" at "+width+"px",async({page})=>{
+    const api=syntheticApi();await page.setViewportSize({width,height:844});
+    await page.emulateMedia({colorScheme:theme});await openShared(page,api);
+    await page.locator("#common-availability-open").click();
+    const dialog=page.locator("#common-availability-dialog");
+    const expected=theme==="dark"?
+      {candidate:["rgb(21, 79, 58)","rgb(116, 208, 162)"],unconfirmed:["rgb(89, 64, 8)","rgb(255, 215, 122)"],conflict:["rgb(90, 38, 50)","rgb(255, 159, 168)"],insufficient:["rgb(57, 43, 89)","rgb(196, 174, 255)"],unavailable:["rgb(48, 57, 68)","rgb(145, 160, 174)"]}:
+      {candidate:["rgb(197, 235, 208)","rgb(35, 122, 73)"],unconfirmed:["rgb(255, 228, 154)","rgb(168, 106, 0)"],conflict:["rgb(245, 189, 193)","rgb(162, 45, 56)"],insufficient:["rgb(222, 209, 247)","rgb(107, 66, 168)"],unavailable:["rgb(231, 235, 240)","rgb(120, 132, 146)"]};
+    const actual=await dialog.evaluate(el=>Object.fromEntries(["candidate","unconfirmed","conflict","insufficient","unavailable"].map(state=>{
+      const block=getComputedStyle(el.querySelector(".availability-block.is-"+state));
+      const swatch=getComputedStyle(el.querySelector(".availability-block-swatch.is-"+state));
+      return [state,[block.backgroundColor,block.borderTopColor,swatch.backgroundColor,swatch.borderTopColor,block.borderTopStyle,block.borderBottomWidth]];
+    })));
+    for(const [state,[background,border]] of Object.entries(expected)){
+      expect(actual[state].slice(0,4),state+" block and legend colors").toEqual([background,border,background,border]);
+    }
+    expect(actual.candidate[5]).toBe("3px");expect(actual.insufficient[5]).toBe("3px");
+    expect(actual.unconfirmed[4]).toBe("dashed");expect(actual.unavailable[4]).toBe("dashed");
+    await expect(dialog.locator("#common-availability-status")).toContainText("参加の承諾は本人に確認してください");
+    const labelContrast=await dialog.locator(".availability-day-recommendation").evaluate(el=>{
+      const components=value=>value.slice(value.indexOf("(")+1,value.indexOf(")")).split(",").map(Number);
+      const luminance=value=>{const channels=components(value).map(channel=>{channel/=255;return channel<=0.04045?channel/12.92:((channel+0.055)/1.055)**2.4;});return 0.2126*channels[0]+0.7152*channels[1]+0.0722*channels[2];};
+      const foreground=luminance(getComputedStyle(el.querySelector(".availability-day-recommendation-label")).color);
+      const background=luminance(getComputedStyle(el).backgroundColor);
+      return (Math.max(foreground,background)+0.05)/(Math.min(foreground,background)+0.05);
+    });
+    expect(labelContrast).toBeGreaterThanOrEqual(4.5);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(await dialog.locator(".availability-block-grid").evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
+    expect(api.state.outside).toEqual([]);
+  });
+}
+
+for(const theme of ["light","dark"]) {
+  test("no-candidate recommendation uses readable neutral contrast in "+theme,async({page})=>{
+    const api=syntheticApi({availabilityMode:"no-candidate"});
+    await page.emulateMedia({colorScheme:theme});await openShared(page,api);
+    await page.locator("#common-availability-open").click();
+    const day=page.locator(".availability-day-card");
+    await expect(day.locator(".availability-day-recommendation-none")).toHaveText("条件に合う候補なし");
+    const styles=await day.locator(".availability-day-recommendation").evaluate(el=>({
+      background:getComputedStyle(el).backgroundColor,
+      foreground:getComputedStyle(el.querySelector(".availability-day-recommendation-none")).color,
+    }));
+    expect(styles.background).toBe(theme==="dark"?"rgb(48, 57, 68)":"rgb(231, 235, 240)");
+    expect(styles.foreground).toBe(theme==="dark"?"rgb(242, 245, 243)":"rgb(23, 32, 24)");
+    expect(api.state.outside).toEqual([]);
+  });
+}
