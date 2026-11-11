@@ -7,10 +7,10 @@ const members=[{memberId:'member-a',userId:user.id,memberName:user.displayName},
 const privateMarkers=['私的タイトルSECRET','私的メモSECRET','勤務先SECRET','給与SECRET','家計簿SECRET'];
 const date=tokyoToday();
 
-export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,personalSyncActive=false,syncFailures=0,groupErrorPath='',frontendOrigin='http://127.0.0.1:5517',groups=[group],availabilityMode='success',holdAvailability=false,wishReactable=false}={}) {
+export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,personalSyncActive=false,syncFailures=0,personalCreateFailures=0,groupErrorPath='',frontendOrigin='http://127.0.0.1:5517',groups=[group],availabilityMode='success',holdAvailability=false,wishReactable=false}={}) {
   let releaseAvailability;
   const availabilityGate=holdAvailability?new Promise(resolve=>{releaseAvailability=resolve;}):Promise.resolve();
-  const state={legacyEnabled,acknowledged,personalSyncActive,syncFailuresRemaining:syncFailures,groupErrorPath,requests:[],outside:[],groups,availabilityPending:0,releaseAvailability:()=>releaseAvailability?.()};
+  const state={legacyEnabled,acknowledged,personalSyncActive,syncFailuresRemaining:syncFailures,personalCreateFailuresRemaining:personalCreateFailures,groupErrorPath,requests:[],outside:[],groups,availabilityPending:0,releaseAvailability:()=>releaseAvailability?.()};
   const event=()=>({id:'anonymous-busy',sourceType:'busy',eventDate:date,start:'13:00',end:'15:00',
     title:'予定あり',busyDisplayName:'田中'});
   async function attach(context) {
@@ -42,6 +42,9 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
       }
       else if(path==='/api/personal/events/sync') data={events:[],cursor:Number(url.searchParams.get('cursor')||0),hasMore:false};
       else if(path==='/api/personal/events') data={events:[]};
+      else if(path==='/api/personal/events/create'&&state.personalCreateFailuresRemaining>0) {
+        state.personalCreateFailuresRemaining-=1;status=503;data={error:'Synthetic personal event save failure'};
+      }
       else if(path==='/api/personal/events/create') data={event:{...body.event,id:body.id,version:1,deleted:false}};
       else if(path==='/api/personal/events/import') {
         const input=body.event||{};

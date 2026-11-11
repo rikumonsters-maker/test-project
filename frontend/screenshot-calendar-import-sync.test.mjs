@@ -12,8 +12,9 @@ function memoryStorage() {
   };
 }
 
-async function activeSync(storage, state = { events:{} }) {
+async function activeSync(storage, state = { events:{} }, { failCreates = 0 } = {}) {
   const requests = [];
+  let createFailuresRemaining = failCreates;
   const sync = createPersonalSync({
     storage, key:"synthetic-account", state,
     makeId:(() => { let id=0; return () => `synthetic-${++id}`; })(),
@@ -21,7 +22,10 @@ async function activeSync(storage, state = { events:{} }) {
       requests.push({ path, payload:options.payload });
       if (path === "/api/personal/events/status") return { active:true };
       if (path === "/api/personal/events/sync?cursor=0") return { events:[], cursor:0, hasMore:false };
-      if (path === "/api/personal/events/create") return { event:{ ...options.payload.event, id:options.payload.id, version:1, deleted:false } };
+      if (path === "/api/personal/events/create") {
+        if (createFailuresRemaining > 0) { createFailuresRemaining -= 1; throw new Error("synthetic network failure"); }
+        return { event:{ ...options.payload.event, id:options.payload.id, version:1, deleted:false } };
+      }
       throw new Error(`Unexpected request ${path}`);
     },
   });
@@ -44,7 +48,9 @@ test("queueMany writes a confirmed import atomically to the existing V2 sync que
   assert.equal(saved.queue[0].event.title, "研究室ミーティング");
   assert.equal(JSON.stringify(saved).includes("sourceText"), false);
   assert.equal(JSON.stringify(saved).includes("image"), false);
+  assert.equal(sync.pendingEventCount(["import-1", "import-2"]), 2);
   await sync.sync();
+  assert.equal(sync.pendingEventCount(["import-1", "import-2"]), 0);
   const createRequests = requests.filter(({ path }) => path === "/api/personal/events/create");
   assert.equal(createRequests.length, 2);
   assert.equal(createRequests[0].payload.syncProtocol, 2);
@@ -52,6 +58,17 @@ test("queueMany writes a confirmed import atomically to the existing V2 sync que
   assert.equal(createRequests[0].payload.event.date, "2026-11-12");
   assert.equal(JSON.stringify(createRequests).includes("sourceText"), false);
   assert.equal(JSON.stringify(createRequests).includes("image"), false);
+});
+
+test("pending imported event count distinguishes accepted sync writes from queued retries", async () => {
+  const { sync } = await activeSync(memoryStorage(), { events:{} }, { failCreates:1 });
+  sync.queueMany([{ id:"import-pending", date:"2026-11-12", title:"Synthetic appointment", start:"14:00", end:"15:00" }]);
+  await sync.sync();
+  assert.equal(sync.pendingEventCount(["import-pending"]), 1);
+  assert.match(sync.status(), /^同期失敗・オフライン/);
+  await sync.sync();
+  assert.equal(sync.pendingEventCount(["import-pending"]), 0);
+  assert.equal(sync.status(), "同期完了");
 });
 
 test("queueMany refuses local-only mode and restores the previous queue after storage quota failure", async () => {
