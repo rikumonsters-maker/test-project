@@ -73,8 +73,25 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
         if(holdAvailability){state.availabilityPending+=1;await availabilityGate;state.availabilityPending-=1;}
         if(availabilityMode==='error'){status=503;data={error:'Synthetic availability failure'};}
         else if(availabilityMode==='empty') data={days:[],recommendations:[]};
-        else data={days:[{date,unconfirmedUserIds:[],slots:[{start:'16:00',end:'18:00',registeredClearCount:2,hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,needsConfirmation:false}]}],
-        recommendations:[{date,start:'16:00',end:'18:00',registeredClearCount:2,hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,reason:'登録済み予定との競合なし'}]};
+        else {
+          const duration=Number(body.durationMinutes)||120,windowStart=Number(body.windowStart)||540,windowEnd=Number(body.windowEnd)||1320;
+          const minimum=Number(body.minimumParticipants)||2,timelineSlots=[];
+          for(let start=windowStart;start+duration<=windowEnd;start+=30){
+            const time=`${String(Math.floor(start/60)).padStart(2,'0')}:${String(start%60).padStart(2,'0')}`;
+            const hard=time==='09:00'?1:0,tentative=time==='09:30'?1:0,unknown=time==='10:00'?1:0;
+            const clear=time==='16:00'?2:(hard||tentative||unknown||time==='10:30'?1:0);
+            const meetsMinimum=availabilityMode!=='no-candidate'&&clear>=minimum;
+            timelineSlots.push({date,start:time,end:`${String(Math.floor((start+duration)/60)).padStart(2,'0')}:${String((start+duration)%60).padStart(2,'0')}`,
+              hardConflictCount:hard,tentativeConflictCount:tentative,unconfirmedCount:unknown,registeredClearCount:clear,
+              meetsMinimum,allRegisteredClear:clear===2&&hard===0&&tentative===0&&unknown===0,needsConfirmation:unknown>0,
+              reason:'Synthetic availability slot'});
+          }
+          const candidates=timelineSlots.filter(slot=>slot.meetsMinimum).sort((a,b)=>
+            Number(b.allRegisteredClear)-Number(a.allRegisteredClear)||a.start.localeCompare(b.start));
+          const chosen=candidates.find(slot=>slot.start==='16:00')||candidates[0];
+          data={days:[{date,unconfirmedUserIds:[],slots:timelineSlots.filter(slot=>slot.meetsMinimum),timelineSlots}],
+            recommendations:chosen?[{...chosen}]:[]};
+        }
       }
       else {status=501;data={error:`Synthetic API has no fixture for ${path}`};}
       try { await route.fulfill({status,contentType:'application/json',headers:{'Access-Control-Allow-Origin':frontendOrigin,'Access-Control-Allow-Credentials':'true'},body:JSON.stringify(data)}); }

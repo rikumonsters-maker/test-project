@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {groupCandidateSlots,dayLabel} from './availability-presentation.mjs';
+import {groupCandidateSlots,dayLabel,availabilitySlotState,bestDailyCandidate} from './availability-presentation.mjs';
 import {timelineSegments} from './member-timeline.mjs';
 
 test('adjacent 30 minute starts appear as one range but keep every valid start',()=>{
@@ -20,4 +20,18 @@ test('busy intervals merge overlaps and clip to the visible clock',()=>{
     {start:'09:30',end:'12:30'},
     {start:'18:00',end:'23:00'},
   ]).map(({a,b})=>[a,b]),[[540,750],[1080,1320]]);
+});
+test('time block state distinguishes conflicts, missing confirmation, candidates and insufficient minimums',()=>{
+  assert.equal(availabilitySlotState({hardConflictCount:1,unconfirmedCount:0,meetsMinimum:false}),'conflict');
+  assert.equal(availabilitySlotState({hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:1,meetsMinimum:false}),'unconfirmed');
+  assert.equal(availabilitySlotState({hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,meetsMinimum:false}),'insufficient');
+  assert.equal(availabilitySlotState({hardConflictCount:0,tentativeConflictCount:0,unconfirmedCount:0,meetsMinimum:true}),'candidate');
+  assert.equal(availabilitySlotState(undefined),'unavailable');
+});
+test('daily display summary chooses only an existing backend candidate and follows backend ranking',()=>{
+  const insufficient={start:'09:00',meetsMinimum:false,registeredClearCount:0};
+  const partial={start:'10:00',meetsMinimum:true,allRegisteredClear:false,hardConflictCount:1,registeredClearCount:2};
+  const clear={start:'11:00',meetsMinimum:true,allRegisteredClear:true,hardConflictCount:0,registeredClearCount:3};
+  assert.equal(bestDailyCandidate([insufficient,partial,clear]),clear);
+  assert.equal(bestDailyCandidate([insufficient]),null);
 });

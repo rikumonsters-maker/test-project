@@ -126,6 +126,63 @@ test('おすすめ日時から日程調整へ日時と参加者を引き継ぐ',
   expect(api.state.requests.some(r=>r.path==='/api/groups/schedules/create')).toBe(false);
 });
 
+test('availability is shown as status blocks with daily recommendation, participant counts and legend',async({page})=>{
+  const api=syntheticApi({legacyEnabled:true});await openShared(page,api);
+  await page.locator('#common-availability-open').click();
+  const dialog=page.locator('#common-availability-dialog');
+  await expect(dialog.locator('.availability-day-card')).toHaveCount(1);
+  const day=dialog.locator('.availability-day-card').first();
+  const blocks=day.locator('.availability-block');
+  await expect(blocks).toHaveCount(26);
+  await expect(day.locator('.availability-block.is-conflict').first()).toHaveAttribute('aria-label',/09:00開始/);
+  await expect(day.locator('.availability-block.is-unconfirmed').first()).toHaveAttribute('aria-label',/10:00開始/);
+  await expect(day.locator('.availability-block.is-insufficient').first()).toHaveAttribute('aria-label',/10:30開始/);
+  await expect(day.locator('.availability-block.is-candidate').first()).toHaveAttribute('aria-label',/16:00開始/);
+  await expect(day.locator('.availability-day-recommendation')).toContainText('おすすめ時間帯');
+  await expect(day.locator('.availability-day-recommendation')).toContainText('16:00〜18:00');
+  await expect(day.locator('.availability-day-recommendation')).toContainText(/空き候補 2\/2人/);
+  await expect(day.locator('.availability-day-recommendation')).toContainText('競合 0人');
+  await expect(day.locator('.availability-day-recommendation')).toContainText('未確認 0人');
+  await expect(day.locator('.availability-legend-item')).toHaveCount(5);
+  for(const [index,label] of ['空き候補','未確認','競合あり','必要人数に未達','対象外・情報なし'].entries())
+    await expect(day.locator('.availability-legend-item').nth(index)).toContainText(label);
+
+  const before=api.state.requests.filter(request=>request.path==='/api/shared/availability/search').length;
+  await dialog.locator('.common-availability-conditions > summary').click();
+  await dialog.locator('#common-availability-window-start').selectOption('600');
+  await expect.poll(()=>api.state.requests.filter(request=>request.path==='/api/shared/availability/search').length).toBeGreaterThan(before);
+  await expect(day.locator('.availability-block').first()).toHaveAttribute('aria-label',/10:00開始/);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+  expect(api.state.outside).toEqual([]);
+});
+
+test('a day with no qualifying start is labeled without fabricating a recommendation',async({page})=>{
+  const api=syntheticApi({availabilityMode:'no-candidate'});await openShared(page,api);
+  await page.locator('#common-availability-open').click();
+  const day=page.locator('#common-availability-results .availability-day-card');
+  await expect(day).toHaveCount(1);
+  await expect(day.locator('.availability-day-recommendation-none')).toHaveText('条件に合う候補なし');
+  await expect(day.locator('.availability-block.is-insufficient').first()).toBeVisible();
+  expect(api.state.outside).toEqual([]);
+});
+
+test('status blocks remain readable in dark reduced-motion mobile and preserve scheduling',async({page})=>{
+  const api=syntheticApi();await page.setViewportSize({width:390,height:844});
+  await page.emulateMedia({colorScheme:'dark',reducedMotion:'reduce'});await openShared(page,api);
+  await page.locator('#common-availability-open').click();
+  const day=page.locator('.availability-day-card').first();
+  await expect(day.locator('.availability-block.is-candidate')).toBeVisible();
+  await expect(day.locator('.availability-legend')).toBeVisible();
+  const result=await day.evaluate(el=>({scroll:el.scrollWidth,client:el.clientWidth,
+    colors:[...el.querySelectorAll('.availability-block')].slice(0,4).map(block=>getComputedStyle(block).backgroundColor)}));
+  expect(result.scroll).toBeLessThanOrEqual(result.client);
+  expect(new Set(result.colors).size).toBeGreaterThan(1);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)).toBe(false);
+  await day.locator('.availability-range button').first().click();
+  await expect(page.locator('#schedules-dialog')).toBeVisible();
+  expect(api.state.outside).toEqual([]);
+});
+
 test('古いタブのOFF要求は409で名前公開を取り消さない',async({browser})=>{
   const context=await browser.newContext();const api=syntheticApi({legacyEnabled:false});await api.attach(context);
   const oldTab=await context.newPage(),newTab=await context.newPage();
