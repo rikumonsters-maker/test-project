@@ -92,6 +92,29 @@ export function createPersonalSync({storage,key,state,requestJson,onChange=()=>{
     persist();publish();status('未同期の変更があります');
   }
 
+  // Atomically enqueue a user-confirmed batch. A quota/storage failure must not
+  // leave only part of an imported calendar in the local sync queue.
+  function queueMany(events) {
+    if(!ready || !active) throw new Error('個人予定の同期状態を確認できないため、取り込みを停止しました。');
+    if(!Array.isArray(events) || events.length === 0) return 0;
+    const ids=new Set();
+    const operations=events.map(({id,date,...event})=>{
+      const eventId=String(id || '');
+      if(!eventId || ids.has(eventId) || meta.records[eventId] || meta.queue.some(item=>item.id===eventId)) {
+        throw new Error('取り込む予定のIDが重複しています。内容を変更せず、もう一度読み取りしてください。');
+      }
+      ids.add(eventId);
+      return {operationId:makeId(),action:'create',id:eventId,event:eventInput({id:eventId,...event},date),version:0,dependsOn:null};
+    });
+    const previous=meta;
+    meta={...meta,queue:[...meta.queue,...operations]};
+    try { persist(); }
+    catch(error) { meta=previous; throw error; }
+    publish();
+    status('未同期の変更があります');
+    return operations.length;
+  }
+
   async function pull() {
     let more=true;
     while(more && isCurrent()) {
@@ -248,5 +271,5 @@ export function createPersonalSync({storage,key,state,requestJson,onChange=()=>{
     return JSON.stringify({savedAt:new Date().toISOString(),originalState:JSON.stringify({events:archiveEvents}),archiveEvents:clone(archiveEvents),events:active?clone(state.events||{}):{}});
   }
 
-  return {initialize,startFresh,queue,sync,resolve,restore,archiveLegacy,backup,status:()=>lastStatus,isActive:()=>active};
+  return {initialize,startFresh,queue,queueMany,sync,resolve,restore,archiveLegacy,backup,status:()=>lastStatus,isActive:()=>active,isReady:()=>ready};
 }

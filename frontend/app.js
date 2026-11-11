@@ -1,6 +1,7 @@
 import { initShift } from "./shift.js";
 import { initBudget } from "./budget.js";
 import { initCalendar } from "./calendar.js";
+import { initScreenshotCalendarImport } from "./screenshot-calendar-import.mjs";
 import { createPersonalSync } from "./personal-sync.mjs";
 import { activateMainPage, activateMoneyView, observeNavIndicator, updateNavIndicator } from "./navigation.mjs";
 import { parsePersonalBackup } from "./backup-import.mjs";
@@ -289,6 +290,8 @@ const budget = initBudget(app);
 const shared = initShared(app);
 app.shared = shared;
 const calendar = initCalendar(app);
+initScreenshotCalendarImport({ app, addEvents:calendar.addImportedEvents });
+app.personalSyncReady = false;
 let personalSync = null;
 app.scheduleBudget = budget.schedule;
 let profile = null;
@@ -414,10 +417,12 @@ async function startApp(user) {
     },
   });
   let syncState = {active:false};
-  try { syncState = await personalSync.initialize(); app.personalSync = personalSync; }
+  app.personalSyncReady = false;
+  try { syncState = await personalSync.initialize(); app.personalSync = personalSync; app.personalSyncReady = true; }
   catch(error) {
     updatePersonalSyncStatus(`同期状態を確認できません。端末内の予定は変更していません。${error.message}`);
     app.personalSync = personalSync;
+    app.personalSyncReady = false;
   }
   updatePersonalSyncChoice(user.id, syncState.active);
   setTheme(state.theme);

@@ -42,6 +42,7 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
       }
       else if(path==='/api/personal/events/sync') data={events:[],cursor:Number(url.searchParams.get('cursor')||0),hasMore:false};
       else if(path==='/api/personal/events') data={events:[]};
+      else if(path==='/api/personal/events/create') data={event:{...body.event,id:body.id,version:1,deleted:false}};
       else if(path==='/api/personal/events/import') {
         const input=body.event||{};
         data={event:{...input,id:`restored-${body.sourceId}`,version:1,deleted:false},migrationConflict:false};
