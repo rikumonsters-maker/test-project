@@ -140,6 +140,7 @@ test("Japanese calendar screenshot OCR stays local and imports only explicitly c
   await expect(dialog.locator("#screenshot-import-status")).toContainText("OCRをキャンセルしました");
   await expect(cards).toHaveCount(0);
   await expect(dialog.locator("#screenshot-import-register")).toBeDisabled();
+  await expect(dialog.locator("#screenshot-import-file")).toHaveValue("");
   await dialog.locator("#screenshot-import-cancel").click();
   await expect(dialog).toBeHidden();
 
