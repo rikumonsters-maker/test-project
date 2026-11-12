@@ -197,6 +197,9 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
 
   async function cancelCurrent(announce = true) {
     runId += 1;
+    // Cancellation must release the picker even while createWorker is pending.
+    // The late worker is terminated by the runId check in runOcr.
+    input.value = "";
     const pendingWorker = worker;
     worker = null;
     if (pendingWorker) {
@@ -213,6 +216,7 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
     list.replaceChildren();
     setStatus("");
     setBusy(true);
+    let localWorker = null;
     try {
       await validateImage(file);
       if (currentRun !== runId) return;
@@ -221,7 +225,7 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
       if (currentRun !== runId) return;
       const { createWorker, OEM, PSM } = tesseract.default;
       const base = new URL("./vendor/tesseract/", import.meta.url);
-      const localWorker = await createWorker("jpn", OEM.LSTM_ONLY, {
+      localWorker = await createWorker("jpn", OEM.LSTM_ONLY, {
         workerPath:new URL("worker.min.js", base).href,
         langPath:new URL("lang/", base).href,
         // The scalar LSTM build is deliberately selected for iOS/Safari parity
@@ -238,7 +242,7 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
           }
         },
       });
-      if (currentRun !== runId) { await localWorker.terminate(); return; }
+      if (currentRun !== runId) return;
       worker = localWorker;
       await localWorker.setParameters({ tessedit_pageseg_mode:PSM.SPARSE_TEXT, preserve_interword_spaces:"1" });
       const result = await localWorker.recognize(file, {}, { blocks:true });
@@ -247,12 +251,18 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
       const sanitized = parsed.candidates.map(({ sourceText, bbox, ...candidate }) => candidate);
       candidates = markImportDuplicates(sanitized, getEvents(app.state.events || {}));
       renderCandidates();
-      if (!candidates.length) setStatus("予定候補を安全に読み取れませんでした。予定と日付・時刻が同じ行に表示される、見やすい画像を選んでください。画像そのものとOCRの生テキストは保存されていません。", "warning");
-      else setStatus(`${candidates.length}件の候補を読み取りました。初期状態では未選択です。内容を編集・確認し、登録する予定にチェックしてください。${parsed.ignoredLineCount ? ` 判定できない行 ${parsed.ignoredLineCount}件は候補から除外しました。` : ""}`, "info");
+      const summary = ` 要確認 ${candidates.filter(candidate => candidate.needsReview).length}件・除外した行 ${parsed.ignoredLineCount}件。`;
+      if (!candidates.length) setStatus(`予定候補0件。${summary}このレイアウトは自動認識できません。予定名と明記された日時が見える予定部分だけを端末内で切り抜いた画像、または予定一覧を選んでください。時刻目盛りから予定時間は推測しません。画像そのものとOCRの生テキストは保存されていません。`, "warning");
+      else setStatus(`${candidates.length}件の候補を読み取りました。${summary}初期状態では未選択です。内容を編集・確認し、登録する予定にチェックしてください。`, "info");
     } catch (error) {
       if (currentRun === runId) setStatus(error?.message || "画像を読み取れませんでした。別の画像を選んでください。", "error");
     } finally {
-      await terminateWorker();
+      // A cancelled initialization may finish after the next run has begun.
+      // Clean up only this run's worker, never the next run's active worker.
+      if (worker === localWorker) worker = null;
+      if (localWorker) {
+        try { await localWorker.terminate(); } catch { /* Best-effort cleanup. */ }
+      }
       if (currentRun === runId) setBusy(false);
     }
   }
@@ -310,7 +320,11 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
     // Retain the picker reference until the browser has finished decoding it.
     // This avoids Safari/WebKit losing the backing file while its OCR worker
     // initializes; clear it afterward so the same image can be selected again.
-    if (file) void runOcr(file).finally(() => { input.value = ""; });
+    if (file) void runOcr(file).finally(() => {
+      // An earlier cancelled run must not clear a newly selected image while
+      // Safari is decoding that image.
+      if (input.files?.[0] === file) input.value = "";
+    });
   });
   list.addEventListener("input", (event) => {
     const card = event.target.closest("[data-candidate-index]");
