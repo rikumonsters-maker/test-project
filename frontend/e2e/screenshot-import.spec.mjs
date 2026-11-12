@@ -19,21 +19,9 @@ test("real Japanese OCR excludes time axes and keeps only explicit event rows", 
   await page.locator('#profile-data-management').evaluate(el => { el.open = true; });
   for (const withEvents of [false, true]) {
     await page.locator('#screenshot-import-open').click();
-    const image = await page.evaluate(events => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 1800; canvas.height = 1100;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#111'; ctx.font = '32px "Meiryo", sans-serif';
-      ctx.fillText('2026年11月12日', 200, 55);
-      for (let hour = 9; hour <= 22; hour++) ctx.fillText(`${String(hour).padStart(2, '0')}:00`, 20, 110 + (hour - 9) * 68);
-      if (events) {
-        ctx.fillText('2026年11月12日 10:00-12:00 大学の授業', 200, 190);
-        ctx.fillText('2026年11月12日 13:00-14:00 会議', 200, 400);
-      }
-      return canvas.toDataURL('image/png').split(',')[1];
-    }, withEvents);
-    await page.locator('#screenshot-import-file').setInputFiles({name:'synthetic-time-axis.png',mimeType:'image/png',buffer:Buffer.from(image,'base64')});
+    // Fixed synthetic PNGs keep OCR input identical across Windows and CI fonts.
+    const image = readFileSync(new URL(`./fixtures/japanese-axis-${withEvents ? 'events' : 'empty'}.png`, import.meta.url));
+    await page.locator('#screenshot-import-file').setInputFiles({name:'synthetic-time-axis.png',mimeType:'image/png',buffer:image});
     await expect(page.locator('#screenshot-import-cancel-ocr')).toBeHidden({timeout:90_000});
     await expect(page.locator('.screenshot-import-candidate')).toHaveCount(withEvents ? 2 : 0);
     if (withEvents) {
