@@ -221,6 +221,7 @@ export function extractCalendarCandidates(data, { confidenceThreshold = OCR_CONF
     // time-axis ticks, status-bar clocks or a detached pair of OCR clock tokens.
     // Likewise do not assign nearby axis times to title-only rows.
     if (!/[\p{L}]/u.test(title) || /(?:\d{1,2}:\d{2})/.test(title)
+      || /^(?:(?:AM|PM|JST|UTC|GMT|午前|午後)\s*)+$/i.test(title)
       || (time && !time.explicitEnd && line.bbox && axisColumns.some(x => Math.abs(x - line.bbox.x0) <= 12))
       || /^(?:[日月火水木金土](?:曜日)?|追加|予定を追加|新規作成|検索|今日|現在時刻|設定|戻る|カレンダー)$/u.test(title)) {
       ignoredLineCount += 1;

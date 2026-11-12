@@ -12,6 +12,7 @@ test("time axis 09 to 22, empty days, headings and status clocks never become ev
   const empty = extractCalendarCandidates({ lines:[line('2026年11月12日', 0), ...ticks] });
   assert.equal(empty.candidates.length, 0);
   assert.equal(empty.ignoredLineCount, 14);
+  assert.equal(extractCalendarCandidates({lines:[line('09:00 AM', 10), line('10:00 JST', 70), line('11:00 (木)',130)]}).candidates.length,0);
   const mixed = extractCalendarCandidates({ lines:[line('2026年11月12日', 0), ...ticks,
     line('10:00〜12:00 大学の授業', 130, 96, 200),
     line('13:00〜14:00 会議', 250, 96, 200),
