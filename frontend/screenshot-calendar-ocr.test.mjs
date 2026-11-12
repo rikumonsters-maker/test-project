@@ -20,13 +20,12 @@ test("time axis 09 to 22, empty days, headings and status clocks never become ev
   assert.deepEqual(mixed.candidates.map(c => c.title), ['大学の授業', '会議']);
 });
 
-test("separate title and range need a shared paragraph and aligned adjacent boxes", () => {
+test("separate title and range are unsupported even in an aligned OCR paragraph", () => {
   const range = line('10:00〜12:00', 80);
   const title = line('大学の授業', 120);
   const parsed = extractCalendarCandidates({ blocks:[{paragraphs:[{lines:[line('2026年11月12日', 0)]}, {lines:[range, title]}]}] });
-  assert.equal(parsed.candidates.length, 1);
-  assert.equal(parsed.candidates[0].title, '大学の授業');
-  assert.equal(parsed.candidates[0].end, '12:00');
+  assert.equal(parsed.candidates.length, 0);
+  assert.equal(parsed.unsupportedLayout, true);
   assert.equal(extractCalendarCandidates({lines:[range, title]}).candidates.length, 0);
   assert.equal(extractCalendarCandidates({blocks:[{paragraphs:[{lines:[range, {...title, bbox:{...title.bbox, x0:700}}]}]}]}).candidates.length, 0);
 });

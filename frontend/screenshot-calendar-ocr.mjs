@@ -117,7 +117,7 @@ function flattenOcrLines(data) {
   const lines = [];
   for (const block of data?.blocks || []) {
     for (const paragraph of block.paragraphs || []) {
-      for (const line of paragraph.lines || []) lines.push({ ...line, _paragraph:paragraph });
+      for (const line of paragraph.lines || []) lines.push(line);
     }
   }
   if (lines.length) return lines;
@@ -187,33 +187,14 @@ export function extractCalendarCandidates(data, { confidenceThreshold = OCR_CONF
   const ticks = lines.filter(line => line.bbox && new RegExp(`^${CLOCK}$`).test(normalizeLine(line.text)));
   const axisColumns = ticks.filter(tick => ticks.filter(other =>
     Math.abs(other.bbox.x0 - tick.bbox.x0) <= 12).length >= 3).map(tick => tick.bbox.x0);
-  // Separate-line titles are supported only within one OCR paragraph, tightly
-  // aligned with an explicit range. Single clocks must never claim a title.
-  const consumed = new Set();
-  for (const line of lines) {
-    const text = normalizeLine(line.text);
-    const range = RANGE_PATTERN.exec(text);
-    if (!range || text !== range[0] || !line._paragraph || !line.bbox) continue;
-    const height = line.bbox.y1 - line.bbox.y0;
-    const neighbours = lines.filter(other => other !== line && other._paragraph === line._paragraph
-      && other.bbox && !consumed.has(other)
-      && Math.abs(other.bbox.x0 - line.bbox.x0) <= 12
-      && other.bbox.y0 >= line.bbox.y1 && other.bbox.y0 - line.bbox.y1 <= height
-      && !findDate(normalizeLine(other.text)) && !timeFromLine(normalizeLine(other.text))
-      && /[\p{L}]/u.test(other.text));
-    if (neighbours.length === 1) {
-      line.text = `${text} ${normalizeLine(neighbours[0].text)}`;
-      line.confidence = Math.min(Number(line.confidence || 0), Number(neighbours[0].confidence || 0));
-      consumed.add(neighbours[0]);
-    }
-  }
+  // OCR paragraphs are text groups, not proven visual event-card regions.
+  // Do not join a detached time row to a title, even when their boxes align.
   const pageWidth = Math.max(0, ...lines.map((line) => Number(line.bbox?.x1 || 0)));
   let dateHeader = null;
   const candidates = [];
   let ignoredLineCount = 0;
 
   for (const line of lines) {
-    if (consumed.has(line)) continue;
     const text = normalizeLine(line.text);
     if (!text) continue;
     const lineDate = findDate(text);
