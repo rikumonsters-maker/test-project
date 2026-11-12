@@ -197,6 +197,9 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
 
   async function cancelCurrent(announce = true) {
     runId += 1;
+    // Cancellation must release the picker even while createWorker is pending.
+    // The late worker is terminated by the runId check in runOcr.
+    input.value = "";
     const pendingWorker = worker;
     worker = null;
     if (pendingWorker) {
@@ -311,7 +314,11 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
     // Retain the picker reference until the browser has finished decoding it.
     // This avoids Safari/WebKit losing the backing file while its OCR worker
     // initializes; clear it afterward so the same image can be selected again.
-    if (file) void runOcr(file).finally(() => { input.value = ""; });
+    if (file) void runOcr(file).finally(() => {
+      // An earlier cancelled run must not clear a newly selected image while
+      // Safari is decoding that image.
+      if (input.files?.[0] === file) input.value = "";
+    });
   });
   list.addEventListener("input", (event) => {
     const card = event.target.closest("[data-candidate-index]");

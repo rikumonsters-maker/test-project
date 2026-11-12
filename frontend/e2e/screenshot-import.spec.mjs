@@ -10,6 +10,32 @@ async function enterVerifiedTimes(card, start, end) {
   await card.locator('[data-field="end"]').fill(end);
 }
 
+test('cancelling pending OCR initialization clears the picker and preserves the next selection', async ({ page }) => {
+  test.setTimeout(180_000);
+  const api = syntheticApi({groups:[],personalSyncActive:false});
+  await api.attach(page.context());
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  await page.route('**/vendor/tesseract/worker.min.js', async route => { await gate; await route.continue(); });
+  try {
+    await page.goto('/');
+    await page.locator('#account-open').click();
+    await page.locator('#profile-data-management').evaluate(el => { el.open = true; });
+    await page.locator('#screenshot-import-open').click();
+    const input = page.locator('#screenshot-import-file');
+    await input.setInputFiles({name:'cancel-init.png',mimeType:'image/png',buffer:fixture});
+    await expect(page.locator('#screenshot-import-cancel-ocr')).toBeVisible();
+    await page.locator('#screenshot-import-cancel-ocr').click();
+    await expect(input).toHaveValue('');
+    await input.setInputFiles({name:'next-selection.png',mimeType:'image/png',buffer:fixture});
+    await expect(input).toHaveValue(/next-selection\.png$/);
+    release();
+    await expect(page.locator('.screenshot-import-candidate')).toHaveCount(3,{timeout:90_000});
+    await expect(input).toHaveValue('');
+    expect(api.state.outside).toEqual([]);
+  } finally { release(); }
+});
+
 test("real Japanese OCR excludes time axes and keeps only explicit event rows", async ({ page }) => {
   test.setTimeout(240_000);
   const api = syntheticApi({ groups:[], personalSyncActive:false });
