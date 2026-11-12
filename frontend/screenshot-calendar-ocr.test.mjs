@@ -7,9 +7,52 @@ import {
   markImportDuplicates,
 } from "./screenshot-calendar-ocr.mjs";
 
+test("time axis 09 to 22, empty days, headings and status clocks never become events", () => {
+  const ticks = Array.from({ length:14 }, (_, i) => line(`${String(i + 9).padStart(2, '0')}:00`, 80 + i * 40, 96, 10));
+  const empty = extractCalendarCandidates({ lines:[line('2026年11月12日', 0), ...ticks] });
+  assert.equal(empty.candidates.length, 0);
+  assert.equal(empty.ignoredLineCount, 14);
+  const mixed = extractCalendarCandidates({ lines:[line('2026年11月12日', 0), ...ticks,
+    line('10:00〜12:00 大学の授業', 130, 96, 200),
+    line('13:00〜14:00 会議', 250, 96, 200),
+    line('15:00 無関係な説明', 350, 96, 10),
+  ] });
+  assert.deepEqual(mixed.candidates.map(c => c.title), ['大学の授業', '会議']);
+});
+
+test("separate title and range need a shared paragraph and aligned adjacent boxes", () => {
+  const range = line('10:00〜12:00', 80);
+  const title = line('大学の授業', 120);
+  const parsed = extractCalendarCandidates({ blocks:[{paragraphs:[{lines:[line('2026年11月12日', 0)]}, {lines:[range, title]}]}] });
+  assert.equal(parsed.candidates.length, 1);
+  assert.equal(parsed.candidates[0].title, '大学の授業');
+  assert.equal(parsed.candidates[0].end, '12:00');
+  assert.equal(extractCalendarCandidates({lines:[range, title]}).candidates.length, 0);
+  assert.equal(extractCalendarCandidates({blocks:[{paragraphs:[{lines:[range, {...title, bbox:{...title.bbox, x0:700}}]}]}]}).candidates.length, 0);
+});
+
+test("OCR lines spanning unrelated columns are excluded rather than attached to a time axis", () => {
+  const row = line('09:00 会議', 80);
+  row.words = [{text:'09:00', bbox:{x0:10,x1:70}}, {text:'会議', bbox:{x0:300,x1:370}}];
+  assert.equal(extractCalendarCandidates({lines:[row]}).candidates.length, 0);
+});
+
 function line(text, y0, confidence = 96, x0 = 40) {
   return { text, confidence, bbox:{ x0, y0, x1:x0 + 640, y1:y0 + 36 } };
 }
+
+test('weekly columns require their own explicit dates; grid titles never inherit axis clocks', () => {
+  const result = extractCalendarCandidates({lines:[
+    line('2026年11月12日 10:00-12:00 授業', 80, 96, 200),
+    line('2026年11月13日 13:00-14:00 会議', 80, 96, 900),
+    line('09:00', 90, 96, 10), line('10:00', 150, 96, 10), line('11:00', 210, 96, 10),
+    line('別列の予定名だけ', 150, 96, 900), line('今日', 20),
+  ]});
+  assert.deepEqual(result.candidates.map(c => [c.title,c.date,c.start,c.end]), [
+    ['授業','2026-11-12','10:00','12:00'], ['会議','2026-11-13','13:00','14:00'],
+  ]);
+  assert.equal(extractCalendarCandidates({lines:[line('18:00', 80),line('会議',120)]}).candidates.length,0);
+});
 
 test("extracts explicit Japanese date headings and time-title rows with positions", () => {
   const { candidates, ignoredLineCount } = extractCalendarCandidates({
@@ -42,21 +85,17 @@ test("does not invent a year, a title, an end time, or an all-day setting", () =
     line("休診 終日", 370),
   ] });
 
-  assert.equal(candidates.length, 3);
+  assert.equal(candidates.length, 2);
   assert.equal(candidates[0].date, "");
   assert.equal(candidates[0].start, "18:00");
   assert.equal(candidates[0].end, "");
   assert.equal(candidates[0].allDay, false);
-  assert.equal(candidates[1].start, "20:00");
+  assert.equal(candidates[1].allDay, true);
+  assert.equal(candidates[1].start, "");
   assert.equal(candidates[1].end, "");
-  assert.equal(candidates[1].title, "");
-  assert.equal(candidates[2].allDay, true);
-  assert.equal(candidates[2].start, "");
-  assert.equal(candidates[2].end, "");
   assert(candidates[0].needsReview);
-  assert(candidates[1].needsReview);
-  assert.equal(candidates[2].needsReview, false, "explicit all-day date and title are complete, but still require a user checkbox confirmation");
-  assert.equal(isImportEventReady(candidates[2]), true);
+  assert.equal(candidates[1].needsReview, false, "explicit all-day date and title are complete, but still require a user checkbox confirmation");
+  assert.equal(isImportEventReady(candidates[1]), true);
 });
 
 test("reads full-width digits and Japanese meridiem while keeping invalid periods review-only", () => {
@@ -73,18 +112,14 @@ test("reads full-width digits and Japanese meridiem while keeping invalid period
   assert.equal(candidates[1].end, "14:00");
 });
 
-test("recovers two OCR time tokens only as a review-required start/end pair", () => {
+test("does not assign two detached OCR clocks as a time range", () => {
   const { candidates } = extractCalendarCandidates({ lines:[
     line("2026年11月12日", 20),
     line("14:00 15 30 研究室ミーティング", 80),
     line("18:0019:00 夕食", 150),
   ] });
-  assert.deepEqual(candidates.map(({ title, start, end }) => ({ title, start, end })), [
-    { title:"研究室ミーティング", start:"14:00", end:"15:30" },
-    { title:"夕食", start:"18:00", end:"19:00" },
-  ]);
-  assert(candidates.every((candidate) => candidate.needsReview));
-  assert(candidates.every((candidate) => candidate.reasons.some((reason) => reason.includes("区切り"))));
+  assert.equal(candidates.length, 2);
+  assert(candidates.every(candidate => candidate.start === '' && candidate.end === '' && candidate.needsReview));
 });
 
 test("date-heading inheritance requires a nearby aligned line and never assigns a time in a second column or distant row", () => {

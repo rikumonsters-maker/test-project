@@ -75,21 +75,21 @@ function timeFromLine(text) {
   const clockPair = CLOCK_PAIR_PATTERN.exec(text);
   if (clockPair) {
     return {
-      start:normalizeClock(clockPair[2], clockPair[1]),
-      end:normalizeClock(clockPair[4], clockPair[3]),
+      start:"",
+      end:"",
       text:clockPair[0],
       explicitEnd:false,
       inferredPair:true,
     };
   }
   // OCR models sometimes omit the colon in the second clock (for example,
-  // "14:00 15 30"). Keep that as a review-only range; it is never silently
-  // treated as confirmed by the UI.
+  // "14:00 15 30"). Retain a title for review, but leave both clocks empty:
+  // proximity is not evidence of a start/end relationship.
   const spacedEnd = SPACED_END_PATTERN.exec(text);
   if (spacedEnd) {
     return {
-      start:normalizeClock(spacedEnd[2], spacedEnd[1]),
-      end:normalizeClock(`${spacedEnd[4]}:${spacedEnd[5]}`, spacedEnd[3]),
+      start:"",
+      end:"",
       text:spacedEnd[0],
       explicitEnd:false,
       inferredPair:true,
@@ -106,6 +106,7 @@ function cleanTitle(text, date, time, allDay) {
   if (time?.text) title = title.replace(time.text, " ");
   if (allDay) title = title.replace(/終日/, " ");
   return title
+    .replace(/[（(]\s*[日月火水木金土](?:曜日)?\s*[）)]/gu, " ")
     .replace(/[\s:：,，、・|｜/\\~〜～–—-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -116,7 +117,7 @@ function flattenOcrLines(data) {
   const lines = [];
   for (const block of data?.blocks || []) {
     for (const paragraph of block.paragraphs || []) {
-      for (const line of paragraph.lines || []) lines.push(line);
+      for (const line of paragraph.lines || []) lines.push({ ...line, _paragraph:paragraph });
     }
   }
   if (lines.length) return lines;
@@ -183,12 +184,36 @@ export function markImportDuplicates(candidates, existingEvents = []) {
 
 export function extractCalendarCandidates(data, { confidenceThreshold = OCR_CONFIDENCE_REVIEW_THRESHOLD } = {}) {
   const lines = orderLines(flattenOcrLines(data));
+  const ticks = lines.filter(line => line.bbox && new RegExp(`^${CLOCK}$`).test(normalizeLine(line.text)));
+  const axisColumns = ticks.filter(tick => ticks.filter(other =>
+    Math.abs(other.bbox.x0 - tick.bbox.x0) <= 12).length >= 3).map(tick => tick.bbox.x0);
+  // Separate-line titles are supported only within one OCR paragraph, tightly
+  // aligned with an explicit range. Single clocks must never claim a title.
+  const consumed = new Set();
+  for (const line of lines) {
+    const text = normalizeLine(line.text);
+    const range = RANGE_PATTERN.exec(text);
+    if (!range || text !== range[0] || !line._paragraph || !line.bbox) continue;
+    const height = line.bbox.y1 - line.bbox.y0;
+    const neighbours = lines.filter(other => other !== line && other._paragraph === line._paragraph
+      && other.bbox && !consumed.has(other)
+      && Math.abs(other.bbox.x0 - line.bbox.x0) <= 12
+      && other.bbox.y0 >= line.bbox.y1 && other.bbox.y0 - line.bbox.y1 <= height
+      && !findDate(normalizeLine(other.text)) && !timeFromLine(normalizeLine(other.text))
+      && /[\p{L}]/u.test(other.text));
+    if (neighbours.length === 1) {
+      line.text = `${text} ${normalizeLine(neighbours[0].text)}`;
+      line.confidence = Math.min(Number(line.confidence || 0), Number(neighbours[0].confidence || 0));
+      consumed.add(neighbours[0]);
+    }
+  }
   const pageWidth = Math.max(0, ...lines.map((line) => Number(line.bbox?.x1 || 0)));
   let dateHeader = null;
   const candidates = [];
   let ignoredLineCount = 0;
 
   for (const line of lines) {
+    if (consumed.has(line)) continue;
     const text = normalizeLine(line.text);
     if (!text) continue;
     const lineDate = findDate(text);
@@ -201,7 +226,7 @@ export function extractCalendarCandidates(data, { confidenceThreshold = OCR_CONF
     }
 
     if (!time && !explicitAllDay) {
-      if (/[\p{L}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text)) ignoredLineCount += 1;
+      ignoredLineCount += 1;
       continue;
     }
 
@@ -211,6 +236,24 @@ export function extractCalendarCandidates(data, { confidenceThreshold = OCR_CONF
     if (inheritedDate) confidenceParts.push(inheritedDate.confidence);
     const confidence = Math.round(Math.min(...confidenceParts));
     const title = cleanTitle(text, lineDate, time, explicitAllDay);
+    // A clock is not an event. Never manufacture an empty review card from
+    // time-axis ticks, status-bar clocks or a detached pair of OCR clock tokens.
+    // Likewise do not assign nearby axis times to title-only rows.
+    if (!/[\p{L}]/u.test(title) || /(?:\d{1,2}:\d{2})/.test(title)
+      || (time && !time.explicitEnd && line.bbox && axisColumns.some(x => Math.abs(x - line.bbox.x0) <= 12))
+      || /^(?:[日月火水木金土](?:曜日)?|追加|予定を追加|新規作成|検索|今日|現在時刻|設定|戻る|カレンダー)$/u.test(title)) {
+      ignoredLineCount += 1;
+      continue;
+    }
+    // A very wide gap inside an OCR line can be two unrelated columns (for
+    // example a left time axis and a card title). Reject rather than infer.
+    const words = (line.words || []).filter(word => word.text?.trim() && word.bbox);
+    const height = Math.max(1, Number(line.bbox?.y1) - Number(line.bbox?.y0));
+    if (words.some((word, index) => index > 0
+      && Number(word.bbox.x0) - Number(words[index - 1].bbox.x1) > Math.max(48, height * 3))) {
+      ignoredLineCount += 1;
+      continue;
+    }
     const allDay = explicitAllDay && !time;
     const conflictingAllDayAndTime = explicitAllDay && Boolean(time);
     const event = {
@@ -239,7 +282,7 @@ export function extractCalendarCandidates(data, { confidenceThreshold = OCR_CONF
     candidates.push(event);
   }
 
-  return { candidates, ignoredLineCount };
+  return { candidates, ignoredLineCount, unsupportedLayout:candidates.length === 0 };
 }
 
 export { OCR_CONFIDENCE_REVIEW_THRESHOLD };

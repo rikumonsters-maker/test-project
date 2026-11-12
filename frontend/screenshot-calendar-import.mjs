@@ -247,8 +247,9 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
       const sanitized = parsed.candidates.map(({ sourceText, bbox, ...candidate }) => candidate);
       candidates = markImportDuplicates(sanitized, getEvents(app.state.events || {}));
       renderCandidates();
-      if (!candidates.length) setStatus("予定候補を安全に読み取れませんでした。予定と日付・時刻が同じ行に表示される、見やすい画像を選んでください。画像そのものとOCRの生テキストは保存されていません。", "warning");
-      else setStatus(`${candidates.length}件の候補を読み取りました。初期状態では未選択です。内容を編集・確認し、登録する予定にチェックしてください。${parsed.ignoredLineCount ? ` 判定できない行 ${parsed.ignoredLineCount}件は候補から除外しました。` : ""}`, "info");
+      const summary = ` 要確認 ${candidates.filter(candidate => candidate.needsReview).length}件・除外した行 ${parsed.ignoredLineCount}件。`;
+      if (!candidates.length) setStatus(`予定候補0件。${summary}このレイアウトは自動認識できません。予定名と明記された日時が見える予定部分だけを端末内で切り抜いた画像、または予定一覧を選んでください。時刻目盛りから予定時間は推測しません。画像そのものとOCRの生テキストは保存されていません。`, "warning");
+      else setStatus(`${candidates.length}件の候補を読み取りました。${summary}初期状態では未選択です。内容を編集・確認し、登録する予定にチェックしてください。`, "info");
     } catch (error) {
       if (currentRun === runId) setStatus(error?.message || "画像を読み取れませんでした。別の画像を選んでください。", "error");
     } finally {
