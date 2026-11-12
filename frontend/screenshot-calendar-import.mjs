@@ -216,6 +216,7 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
     list.replaceChildren();
     setStatus("");
     setBusy(true);
+    let localWorker = null;
     try {
       await validateImage(file);
       if (currentRun !== runId) return;
@@ -224,7 +225,7 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
       if (currentRun !== runId) return;
       const { createWorker, OEM, PSM } = tesseract.default;
       const base = new URL("./vendor/tesseract/", import.meta.url);
-      const localWorker = await createWorker("jpn", OEM.LSTM_ONLY, {
+      localWorker = await createWorker("jpn", OEM.LSTM_ONLY, {
         workerPath:new URL("worker.min.js", base).href,
         langPath:new URL("lang/", base).href,
         // The scalar LSTM build is deliberately selected for iOS/Safari parity
@@ -241,7 +242,7 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
           }
         },
       });
-      if (currentRun !== runId) { await localWorker.terminate(); return; }
+      if (currentRun !== runId) return;
       worker = localWorker;
       await localWorker.setParameters({ tessedit_pageseg_mode:PSM.SPARSE_TEXT, preserve_interword_spaces:"1" });
       const result = await localWorker.recognize(file, {}, { blocks:true });
@@ -256,7 +257,12 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
     } catch (error) {
       if (currentRun === runId) setStatus(error?.message || "画像を読み取れませんでした。別の画像を選んでください。", "error");
     } finally {
-      await terminateWorker();
+      // A cancelled initialization may finish after the next run has begun.
+      // Clean up only this run's worker, never the next run's active worker.
+      if (worker === localWorker) worker = null;
+      if (localWorker) {
+        try { await localWorker.terminate(); } catch { /* Best-effort cleanup. */ }
+      }
       if (currentRun === runId) setBusy(false);
     }
   }
