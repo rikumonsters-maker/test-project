@@ -1,13 +1,10 @@
 import { initReminderControls } from "./reminder-controls.mjs";
 import { currentTimeZone, readReminderSettings, writeReminderSettings } from "./reminders.mjs";
 import { initFormDialog } from "./form-dialog.mjs";
-import { isImportEventReady } from "./screenshot-calendar-ocr.mjs";
 
 export function initCalendar(app) {
   const { $, state, view, renderMonthCalendar, animateCalendarDetails, changeMonth, parseDate, makeId, saveState, dateLabel, bindTimeInput } = app;
   let eventDialog = null;
-  let screenshotImporter = null;
-  let screenshotTransitionPending = false;
 
   function agendaEntries(key) {
     const entries = [];
@@ -125,8 +122,6 @@ export function initCalendar(app) {
     $("event-form-title").textContent = "個人予定を追加";
     $("save-event").textContent = "予定を追加";
     $("cancel-event-edit").hidden = true;
-    $("event-screenshot-import-entry").hidden = !screenshotImporter;
-    $("event-screenshot-import-divider").hidden = !screenshotImporter;
     $("event-error").hidden = true;
     $("event-error").textContent = "";
     syncTimeFields();
@@ -146,8 +141,6 @@ export function initCalendar(app) {
     $("event-start-picker").value = event.start || "";
     $("event-end-picker").value = event.end || "";
     $("event-note").value = event.note || "";
-    $("event-screenshot-import-entry").hidden = true;
-    $("event-screenshot-import-divider").hidden = true;
     reminderControls.set(readReminderSettings(view.editingEventExtra).offsetMinutes);
     $("event-form-title").textContent = "個人予定を編集";
     $("save-event").textContent = "変更を保存";
@@ -238,45 +231,6 @@ export function initCalendar(app) {
     if (view.editingEventId === id) resetForm();
     saveState(); app.shared?.markDirty(date.slice(0, 7)); render();
   }
-  function addImportedEvents(importedEvents) {
-    if (!app.personalSyncReady) throw new Error("個人予定の同期状態を確認できません。データを変更せず、同期状態が表示されてから再度お試しください。");
-    if (!Array.isArray(importedEvents) || !importedEvents.length || importedEvents.some((event) => !isImportEventReady(event))) {
-      throw new Error("日付・予定名・時刻が確定していない予定は追加できません。");
-    }
-    const records = importedEvents.map((event) => ({
-      id:makeId(), title:event.title.trim(), start:event.allDay ? "" : event.start, end:event.allDay ? "" : event.end,
-      allDay:Boolean(event.allDay), note:"", extra:{},
-    }));
-    const dates = importedEvents.map((event) => event.date);
-    if (app.personalSync?.isActive?.()) {
-      app.personalSync.queueMany(records.map((record, index) => ({ ...record, date:dates[index] })));
-    } else {
-      const previous = state.events || {};
-      const next = Object.fromEntries(Object.entries(previous).map(([date, events]) => [date, Array.isArray(events) ? [...events] : events]));
-      records.forEach((record, index) => { (next[dates[index]] ||= []).push(record); });
-      state.events = next;
-      try { saveState(); }
-      catch (error) { state.events = previous; throw error; }
-      for (const month of new Set(dates.map((date) => date.slice(0, 7)))) app.shared?.markDirty(month);
-    }
-    const firstDate = dates[0];
-    view.agendaDate = firstDate;
-    const selectedDate = parseDate(firstDate);
-    view.agendaMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
-    render();
-    return { count:records.length, queued:Boolean(app.personalSync?.isActive?.()), eventIds:records.map((record) => record.id) };
-  }
-  function setScreenshotImporter(importer) {
-    screenshotImporter = importer || null;
-  }
-  function showScreenshotImportResult({ message, kind = "success" } = {}) {
-    const result = $("event-screenshot-import-result");
-    if (!result || !message) return;
-    result.textContent = message;
-    result.className = kind === "error" ? "status error" : kind === "caution" ? "status caution" : "status";
-    result.dataset.kind = kind;
-    result.hidden = false;
-  }
   function init() {
     reminderControls = initReminderControls($("personal-reminder-controls"));
     bindTimeInput("event-start", "event-start-picker");
@@ -288,19 +242,7 @@ export function initCalendar(app) {
       fallbackOpener:()=>$('open-event-dialog'),
       onClose:resetForm,
     });
-    $("event-dialog").addEventListener("close", () => {
-      if (!screenshotTransitionPending) return;
-      screenshotTransitionPending = false;
-      const opened = screenshotImporter?.open?.({ source:"calendar", trigger:$('open-event-dialog') });
-      if (!opened) showScreenshotImportResult({ message:"スクショ取り込み画面を開けませんでした。もう一度お試しください。", kind:"error" });
-    });
-    $("event-screenshot-import-open").addEventListener("click", () => {
-      if (!screenshotImporter || view.editingEventId || screenshotTransitionPending || !eventDialog.isOpen()) return;
-      screenshotTransitionPending = true;
-      if (!eventDialog.close()) screenshotTransitionPending = false;
-    });
     $('open-event-dialog').addEventListener('click', (event) => {
-      $("event-screenshot-import-result").hidden = true;
       resetForm();
       eventDialog.open({ trigger:event.currentTarget, focus:$('event-title') });
     });
@@ -330,5 +272,5 @@ export function initCalendar(app) {
       ? "個人予定の同期が有効です。予定と通知設定を同期先に保存し、通知を許可した端末へ送ります。"
       : "個人予定の同期が無効です。この端末だけに保存した通知設定からは、アプリ内通知もPush通知も送られません。通知を使うには個人予定の同期を開始してください。";
   }
-  return { init, render, addImportedEvents, setScreenshotImporter, showScreenshotImportResult };
+  return { init, render };
 }

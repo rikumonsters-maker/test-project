@@ -1,7 +1,6 @@
 import { initShift } from "./shift.js";
 import { initBudget } from "./budget.js";
 import { initCalendar } from "./calendar.js";
-import { initScreenshotCalendarImport } from "./screenshot-calendar-import.mjs";
 import { createPersonalSync } from "./personal-sync.mjs";
 import { activateMainPage, activateMoneyView, observeNavIndicator, updateNavIndicator } from "./navigation.mjs";
 import { parsePersonalBackup } from "./backup-import.mjs";
@@ -290,12 +289,7 @@ const budget = initBudget(app);
 const shared = initShared(app);
 app.shared = shared;
 const calendar = initCalendar(app);
-const screenshotImport = initScreenshotCalendarImport({
-  app,
-  addEvents:calendar.addImportedEvents,
-  onCalendarImportComplete:(result) => calendar.showScreenshotImportResult(result),
-});
-calendar.setScreenshotImporter(screenshotImport);
+
 app.personalSyncReady = false;
 let personalSync = null;
 app.scheduleBudget = budget.schedule;
