@@ -5,6 +5,21 @@ import { syntheticApi } from './synthetic-api.mjs';
 const accountKey = 'daysync-user-00000000-0000-4000-8000-000000000001';
 const screenshotDir = 'test-results/release-screenshots';
 
+test('OCR removal keeps manual entry and profile backup without loading OCR resources', async ({page})=>{
+  const api=syntheticApi({personalSyncActive:true});await api.attach(page.context());
+  const resources=[];page.on('request',request=>{if(/tesseract|screenshot-calendar|calendar-card-regions/.test(request.url()))resources.push(request.url());});
+  await page.goto('/');await page.locator('#open-event-dialog').click();
+  await expect(page.locator('#event-title')).toBeVisible();
+  await expect(page.locator('#event-screenshot-import-open')).toHaveCount(0);
+  await page.locator('#close-event-dialog').click();
+  await page.locator('#account-open').click();
+  await page.locator('#profile-data-management').evaluate(el=>{el.open=true;});
+  await expect(page.locator('#personal-backup-export')).toBeVisible();
+  await expect(page.locator('#screenshot-import-open')).toHaveCount(0);
+  await expect(page.locator('#screenshot-import-dialog')).toHaveCount(0);
+  expect(resources).toEqual([]);expect(api.state.outside).toEqual([]);
+});
+
 async function screenshot(page, name) {
   mkdirSync(screenshotDir, { recursive:true });
   await page.screenshot({ path:`${screenshotDir}/${name}.png`, fullPage:true, animations:'disabled' });
@@ -89,8 +104,8 @@ test('editing a personal event reuses the modal and preserves existing values un
   await row.locator('button').first().click();
   await expect(page.locator('#event-dialog')).toBeVisible();
   await expect(page.locator('#event-form-title')).toHaveText('個人予定を編集');
-  await expect(page.locator('#event-screenshot-import-entry')).toBeHidden();
-  await expect(page.locator('#event-screenshot-import-divider')).toBeHidden();
+  await expect(page.locator('#event-screenshot-import-entry')).toHaveCount(0);
+  await expect(page.locator('#event-screenshot-import-divider')).toHaveCount(0);
   await expect(page.locator('#event-title')).toHaveValue('Seed appointment');
   await expect(page.locator('#event-date')).toHaveValue(api.date);
   await expect(page.locator('#event-start')).toHaveValue('10:00');

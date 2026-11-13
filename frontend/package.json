@@ -7,8 +7,7 @@
   },
   "dependencies": {
     "qr-scanner": "1.4.2",
-    "qrcode-generator": "2.0.4",
-    "tesseract.js": "7.0.0"
+    "qrcode-generator": "2.0.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1"

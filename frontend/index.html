@@ -113,7 +113,6 @@
               <div class="expense-list" id="agenda-shifts"></div>
               <h4 class="agenda-list-title">個人予定</h4>
               <div class="expense-list" id="agenda-events"></div>
-              <p class="status" id="event-screenshot-import-result" role="status" aria-live="polite" hidden></p>
             </article>
 
           </div>
@@ -125,12 +124,6 @@
               <button class="action-button entry-dialog-close" id="close-event-dialog" type="button" aria-label="予定フォームを閉じる">閉じる</button>
             </div>
             <form id="event-form" class="form-stack">
-                <section class="event-screenshot-import-entry" id="event-screenshot-import-entry" aria-labelledby="event-screenshot-import-title" hidden>
-                  <h4 id="event-screenshot-import-title">スクショから予定を追加</h4>
-                  <p>他のカレンダーアプリの画像を読み取り、確認してからまとめて登録できます。</p>
-                  <button class="action-button primary event-screenshot-import-button" id="event-screenshot-import-open" type="button" aria-haspopup="dialog" aria-controls="screenshot-import-dialog">画像から予定を読み取る</button>
-                </section>
-                <p class="event-manual-entry-divider" id="event-screenshot-import-divider" hidden>または、手入力で予定を追加</p>
                 <label>タイトル<input id="event-title" type="text" maxlength="80" placeholder="例：飲み会" required /></label>
                 <label>日付<input id="event-date" type="date" required /></label>
                 <label class="checkbox-label"><span>終日予定</span><input id="event-all-day" type="checkbox" /></label>
@@ -666,12 +659,6 @@
               <p id="personal-backup-import-status" class="status" role="status" aria-live="polite" hidden></p>
               <div id="personal-sync-conflicts"></div>
             </article>
-            <section class="screenshot-import-entry" id="screenshot-import-entry" aria-labelledby="screenshot-import-title">
-              <h3 id="screenshot-import-title">スクリーンショットから個人予定を取り込む</h3>
-              <p class="card-description">画像はこの端末内だけで読み取ります。読み取り後に予定を確認・編集し、選んだ予定だけを個人カレンダーへ追加します。</p>
-              <button class="action-button primary" id="screenshot-import-open" type="button">画像から予定を読み取る</button>
-              <p class="status" id="screenshot-import-result" role="status" aria-live="polite" hidden></p>
-            </section>
           </details>
           <article class="card profile-card">
             <div class="profile-avatar" id="profile-icon" aria-hidden="true">🌿</div>
@@ -721,31 +708,6 @@
       </section>
     </main>
 
-    <dialog class="entry-dialog screenshot-import-dialog" id="screenshot-import-dialog" aria-labelledby="screenshot-import-dialog-title" aria-describedby="screenshot-import-privacy">
-      <div class="entry-dialog-panel screenshot-import-panel">
-        <div class="entry-dialog-heading">
-          <h3 id="screenshot-import-dialog-title">スクショから予定を読み取る</h3>
-          <button class="entry-dialog-close" id="screenshot-import-close" type="button" aria-label="閉じる">閉じる</button>
-        </div>
-        <p id="screenshot-import-privacy" class="screenshot-import-privacy">画像そのものとOCRの生テキストはサーバーへ送信・保存しません。確認して追加した予定項目は端末に保存されます。個人予定の同期がすでに有効な場合は、選択した予定だけを既存の個人予定同期へ送信します。同期を新たに開始することはありません。対応形式はJPEG、PNG、WebPです。</p>
-        <form class="form-stack" id="screenshot-import-form">
-          <label class="screenshot-import-file-label" for="screenshot-import-file">カレンダーのスクリーンショットを選択</label>
-          <input id="screenshot-import-file" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="screenshot-import-file-help" />
-          <p id="screenshot-import-file-help" class="card-description">予定名と日付・時刻が読みやすく、同じ行または明確な日付見出しの下にある画像が適しています。月表示など対応付けが曖昧な内容は自動で確定しません。</p>
-          <div class="screenshot-import-progress-row">
-            <progress id="screenshot-import-progress" max="1" value="0" aria-label="OCRの進捗" hidden></progress>
-            <button class="action-button" id="screenshot-import-cancel-ocr" type="button" hidden>OCRをキャンセル</button>
-          </div>
-          <p class="status" id="screenshot-import-status" role="status" aria-live="polite" hidden></p>
-          <p class="screenshot-import-selected-count" id="screenshot-import-selected-count" aria-live="polite">0件を登録対象に選択</p>
-          <div class="screenshot-import-review-list" id="screenshot-import-review-list"></div>
-          <div class="actions screenshot-import-actions">
-            <button class="action-button primary" id="screenshot-import-register" type="submit" disabled>選択した予定を追加</button>
-            <button class="action-button" id="screenshot-import-cancel" type="button">キャンセル</button>
-          </div>
-        </form>
-      </div>
-    </dialog>
     <nav class="page-nav" aria-label="メインナビゲーション" hidden>
       <span class="page-nav-indicator" aria-hidden="true"></span>
       <button class="nav-button" type="button" data-page="my" aria-current="page">
