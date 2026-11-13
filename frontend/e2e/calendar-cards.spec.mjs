@@ -38,5 +38,11 @@ for(const brand of ['apple','google']) test(`real OCR ${brand} separate-line car
     await expect(cards.locator('[data-field="date"]')).toHaveValue('2026-11-18');
   }
   await page.screenshot({path:`test-results/card-audit/${brand}-after.png`});
+  await cards.locator('[data-field="selected"]').check();
+  await expect(page.locator('#screenshot-import-register')).toBeEnabled();
+  page.once('dialog',dialog=>dialog.accept());
+  await page.locator('#screenshot-import-register').click();
+  await expect(page.locator('#screenshot-import-dialog')).toBeHidden();
+  await expect(page.locator('#screenshot-import-result')).toContainText('1件');
   expect(api.state.outside).toEqual([]);
 });
