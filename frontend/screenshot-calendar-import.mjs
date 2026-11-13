@@ -139,6 +139,19 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
       const fieldGrid = document.createElement("div");
       fieldGrid.className = "screenshot-import-fields";
       fieldGrid.append(makeLabel("予定名", title), makeLabel("日付", date), timeFields, allDayLabel);
+      if (!candidate.date && candidate.month && candidate.day) {
+        const year=document.createElement('input');year.type='number';year.min='1900';year.max='2200';year.placeholder='年を選択';
+        year.addEventListener('input',()=>{
+          const value=`${year.value}-${String(candidate.month).padStart(2,'0')}-${String(candidate.day).padStart(2,'0')}`;
+          const parsed=new Date(`${value}T00:00:00Z`);
+          const valid=Number.isFinite(parsed.valueOf())&&parsed.toISOString().slice(0,10)===value;
+          const matches=valid&&(!candidate.weekday||'日月火水木金土'[parsed.getUTCDay()]===candidate.weekday);
+          date.value=matches?value:'';
+          year.setCustomValidity(matches?'':'画像の曜日と日付に一致する年を選択してください');
+          refreshDuplicates();
+        });
+        fieldGrid.append(makeLabel(`画像から年を確認できませんでした。${candidate.month}月${candidate.day}日の年を選択してください`,year));
+      }
       const meta = document.createElement("p");
       meta.className = "screenshot-import-meta";
       meta.textContent = `OCR信頼度の目安：${Number.isFinite(candidate.confidence) ? candidate.confidence : 0}%`;
@@ -247,7 +260,20 @@ export function initScreenshotCalendarImport({ app, addEvents, onCalendarImportC
       await localWorker.setParameters({ tessedit_pageseg_mode:PSM.SPARSE_TEXT, preserve_interword_spaces:"1" });
       const result = await localWorker.recognize(file, {}, { blocks:true });
       if (currentRun !== runId) return;
-      const parsed = extractCalendarCandidates(result.data);
+      const {analyseCardImage,extractCardCandidates,recognizeCardRegions}=await import('./calendar-card-regions.mjs');
+      const regions=await analyseCardImage(file);
+      if(currentRun!==runId)return;
+      if(regions.length) {
+        const cardLines=await recognizeCardRegions(file,regions,async canvas=>{
+          if(currentRun!==runId)throw new Error('cancelled');
+          return localWorker.recognize(canvas,{}, {blocks:true});
+        });
+        if(currentRun!==runId)return;
+        const fullLines=(result.data.blocks||[]).flatMap(b=>(b.paragraphs||[]).flatMap(p=>p.lines||[]));
+        result.data.lines=[...fullLines.filter(l=>!regions.some(r=>l.bbox&&l.bbox.x0>=r.x0&&l.bbox.x1<=r.x1&&l.bbox.y0>=r.y0&&l.bbox.y1<=r.y1)),...cardLines];
+      }
+      const cardResult=extractCardCandidates(result.data,regions);
+      const parsed = cardResult.candidates.length ? cardResult : extractCalendarCandidates(result.data);
       const sanitized = parsed.candidates.map(({ sourceText, bbox, ...candidate }) => candidate);
       candidates = markImportDuplicates(sanitized, getEvents(app.state.events || {}));
       renderCandidates();
