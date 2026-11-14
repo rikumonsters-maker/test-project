@@ -7,7 +7,7 @@ const members=[{memberId:'member-a',userId:user.id,memberName:user.displayName},
 const privateMarkers=['私的タイトルSECRET','私的メモSECRET','勤務先SECRET','給与SECRET','家計簿SECRET'];
 const date=tokyoToday();
 
-export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,personalSyncActive=false,syncFailures=0,personalCreateFailures=0,groupErrorPath='',frontendOrigin='http://127.0.0.1:5517',groups=[group],availabilityMode='success',holdAvailability=false,wishReactable=false}={}) {
+export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpired=false,extraBusyMember=false,anonymousBusy=false,personalSyncActive=false,syncFailures=0,personalCreateFailures=0,groupErrorPath='',frontendOrigin='http://127.0.0.1:5517',apiOrigin='http://127.0.0.1:8787',groups=[group],availabilityMode='success',holdAvailability=false,wishReactable=false}={}) {
   let releaseAvailability;
   const availabilityGate=holdAvailability?new Promise(resolve=>{releaseAvailability=resolve;}):Promise.resolve();
   const state={legacyEnabled,acknowledged,personalSyncActive,syncFailuresRemaining:syncFailures,personalCreateFailuresRemaining:personalCreateFailures,groupErrorPath,requests:[],outside:[],groups,availabilityPending:0,releaseAvailability:()=>releaseAvailability?.()};
@@ -17,7 +17,7 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
     await context.route('**/*',async route=>{
       const request=route.request(),url=new URL(request.url());
       if(url.origin===frontendOrigin && !url.pathname.startsWith('/api/')) return route.continue();
-      if(url.origin!=='http://127.0.0.1:8787'||!url.pathname.startsWith('/api/')) {
+      if(url.origin!==apiOrigin||!url.pathname.startsWith('/api/')) {
         state.outside.push(url.origin+url.pathname);return route.abort();
       }
       const path=url.pathname;

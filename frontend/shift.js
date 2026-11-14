@@ -3,6 +3,31 @@ import { shiftIncomeForMonth } from "./budget-charts.mjs";
 export function initShift(app) {
   const { $, state, view, dateKey, parseDate, formatMoney, formatHours, changeMonth, status, postJson, renderMonthCalendar, bindTimeInput } = app;
 
+  let editingDate = null;
+  let baseline = '';
+  let formDate = null;
+  let formOwner = null;
+  const ownsDraft = () => formOwner === app.getCurrentUserId?.();
+  const draft = () => JSON.stringify(['shift-work-date','shift-start','shift-end','shift-break'].map(id=>$(id).value));
+  function error(message) { $('shift-error').textContent=message; $('shift-error').hidden=false; }
+  function validDate(key) { return /^\d{4}-\d{2}-\d{2}$/.test(key) && Number.isFinite(parseDate(key).valueOf()) && dateKey(parseDate(key))===key; }
+  function selectDate(key) {
+    if(ownsDraft() && key===view.shiftDate && $('shift-work-date').value===key && (editingDate===key || !state.shifts[key]))return;
+    if(ownsDraft() && baseline && draft()!==baseline && !confirm('入力中のシフトを破棄して日付を切り替えますか？'))return;
+    view.shiftDate=key; const date=parseDate(key);view.shiftMonth=new Date(date.getFullYear(),date.getMonth(),1);
+    renderCalendar();renderForm({force:true});renderSummary();scheduleWage();
+  }
+  function directDate() {
+    if(!ownsDraft()){renderForm({force:true});return;}
+    const key=$('shift-work-date').value;
+    if(!validDate(key)){error('有効な勤務日を入力してください。');return;}
+    view.shiftDate=key;formDate=key;const date=parseDate(key);view.shiftMonth=new Date(date.getFullYear(),date.getMonth(),1);
+    $('shift-date').textContent=app.dateLabel.format(date);
+    $('delete-shift').hidden=!editingDate || key!==editingDate;
+    $('shift-error').hidden=true;
+    if(state.shifts[key] && key!==editingDate)error('この勤務日は登録済みです。カレンダーから選択して編集してください。');
+    renderCalendar();renderSummary();scheduleWage();
+  }
   function shiftMinutes(shift) {
     const [startHour, startMinute] = shift.start.split(":").map(Number);
     const [endHour, endMinute] = shift.end.split(":").map(Number);
@@ -50,10 +75,7 @@ export function initShift(app) {
 
       item.append(main, amount);
       item.addEventListener("click", () => {
-        view.shiftDate = key;
-        renderCalendar();
-        renderForm();
-        renderSummary();
+        selectDate(key);
       });
       list.append(item);
     }
@@ -78,17 +100,16 @@ export function initShift(app) {
       selectedDate:view.shiftDate,
       mode:"shift",
       getEntries:shiftCalendarEntries,
-      onSelect:(key, date) => {
-        view.shiftDate = key;
-        if (date.getMonth() !== view.shiftMonth.getMonth() || date.getFullYear() !== view.shiftMonth.getFullYear()) {
-          view.shiftMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-          scheduleWage();
-        }
-        renderCalendar(); renderForm(); renderSummary();
+      onSelect:(key) => { selectDate(key);
       },
     });
   }
-  function renderForm() {
+  function renderForm({force=false}={}) {
+    if(!force && ownsDraft() && formDate===view.shiftDate && baseline && draft()!==baseline)return;
+    formOwner=app.getCurrentUserId?.();
+    formDate=view.shiftDate;
+    editingDate=state.shifts[view.shiftDate]?view.shiftDate:null;
+    $("shift-work-date").value=view.shiftDate;
     const shift = state.shifts[view.shiftDate];
     $("shift-date").textContent = app.dateLabel.format(parseDate(view.shiftDate));
     $("shift-start").value = shift?.start || "";
@@ -100,6 +121,7 @@ export function initShift(app) {
     $("delete-shift").hidden = !shift;
     $("shift-error").textContent = "";
     $("shift-error").hidden = true;
+    baseline=draft();
   }
   function renderSummary() {
     const monthShifts = shiftsForMonth(view.shiftMonth);
@@ -158,11 +180,16 @@ export function initShift(app) {
     }
   }
   function scheduleWage() {
+    view.wageRequest += 1;
     clearTimeout(view.wageTimer);
     view.wageTimer = setTimeout(calculateWage, 300);
   }
   function submitShift(event) {
     event.preventDefault();
+    if(!ownsDraft()){renderForm({force:true});error('利用者が変わりました。勤務日と入力内容を確認してください。');return;}
+    const key=$('shift-work-date').value;
+    if(!validDate(key)){error('有効な勤務日を入力してください。');return;}
+    if(state.shifts[key] && key!==editingDate){error('この勤務日は登録済みです。上書きせず、カレンダーから選択して編集してください。');return;}
     const start = $("shift-start").value;
     const end = $("shift-end").value;
     const breakMinutes = Number($("shift-break").value);
@@ -173,28 +200,36 @@ export function initShift(app) {
       $("shift-error").hidden = false;
       return;
     }
-    state.shifts[view.shiftDate] = shift;
-    app.saveState();
-    app.shared?.markDirty(view.shiftDate.slice(0, 7), { shifts:true });
-    renderCalendar(); renderForm(); renderSummary();
+    if(editingDate && editingDate!==key && !confirm('登録済みシフトの勤務日を変更しますか？'))return;
+    const previous=state.shifts;
+    state.shifts={...previous,[key]:{...(editingDate?previous[editingDate]:{}),...shift}};
+    if(editingDate && editingDate!==key)delete state.shifts[editingDate];
+    try{app.saveState();}catch{state.shifts=previous;error('保存できませんでした。入力内容を保持しています。');return;}
+    for(const month of new Set([key,editingDate].filter(Boolean).map(d=>d.slice(0,7))))app.shared?.markDirty(month,{shifts:true});
+    view.shiftDate=key;const date=parseDate(key);view.shiftMonth=new Date(date.getFullYear(),date.getMonth(),1);
+    renderCalendar(); renderForm({force:true}); renderSummary();
     app.refreshAgenda?.();
     scheduleWage();
   }
   function deleteShift() {
-    delete state.shifts[view.shiftDate];
-    app.saveState();
-    app.shared?.markDirty(view.shiftDate.slice(0, 7), { shifts:true });
-    renderCalendar(); renderForm(); renderSummary();
+    if(!ownsDraft()){renderForm({force:true});return;}
+    if(!editingDate || !state.shifts[editingDate])return;
+    if($('shift-work-date').value!==editingDate){error('勤務日を変更中です。元の勤務日に戻してから削除してください。');return;}
+    if(!confirm(`${editingDate} の登録済みシフトを削除しますか？`))return;
+    const previous=state.shifts;state.shifts={...previous};delete state.shifts[editingDate];
+    try{app.saveState();}catch{state.shifts=previous;error('削除を保存できませんでした。');return;}
+    app.shared?.markDirty(editingDate.slice(0,7),{shifts:true});
+    renderCalendar(); renderForm({force:true}); renderSummary();
     app.refreshAgenda?.();
     scheduleWage();
   }
   function stepShiftMonth(delta) {
-    view.shiftMonth = changeMonth(view.shiftMonth, delta);
-    const monthShifts = shiftsForMonth(view.shiftMonth);
-    view.shiftDate = monthShifts.length > 0 ? monthShifts[0][0] : dateKey(view.shiftMonth);
-    renderCalendar(); renderForm(); renderSummary(); scheduleWage();
+    const month=changeMonth(view.shiftMonth,delta);
+    const monthShifts=shiftsForMonth(month);
+    selectDate(monthShifts.length?monthShifts[0][0]:dateKey(month));
   }
   function init() {
+    $("shift-work-date").addEventListener("change",directDate);
     bindTimeInput("shift-start", "shift-start-picker");
     bindTimeInput("shift-end", "shift-end-picker");
     $("shift-form").addEventListener("submit", submitShift);

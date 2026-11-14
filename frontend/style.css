@@ -593,6 +593,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .summary-row dd { margin:0; font-size:1.08rem; font-weight:800; text-align:right; overflow-wrap:anywhere; }
 .summary-row.emphasis dd { color:var(--green); font-size:1.35rem; }
 label { display:grid; gap:7px; color:var(--text-soft); font-size:.9rem; font-weight:700; }
+.shift-work-date-label { min-width:0; margin-bottom:12px; }
+#shift-work-date { box-sizing:border-box; min-width:0; max-width:100%; }
 .form-stack { display:grid; gap:13px; }
 input,select { width:100%; min-width:0; min-height:46px; padding:10px 12px; border:1px solid var(--input-border); border-radius:9px; color:var(--ink); background:var(--input-surface); font-size:1rem; }
 textarea { width:100%; min-width:0; padding:10px 12px; border:1px solid var(--input-border); border-radius:9px; color:var(--ink); background:var(--input-surface); font:inherit; resize:vertical; }

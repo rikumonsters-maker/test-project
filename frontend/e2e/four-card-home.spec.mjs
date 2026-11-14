@@ -427,6 +427,7 @@ test("unconsented user has no sync banner on personal schedule screen, can start
 
   // Switch back to Shift tab and delete shift (-> calendar cleared, daily wage "—", Salary tab 0時間 / ¥0)
   await page.locator("#shift-mode-tab-shift").click();
+  page.once('dialog',dialog=>dialog.accept());
   await page.locator("#delete-shift").click();
   await expect(page.locator("#shift-day-wage")).toHaveText("—");
   await expect(page.locator("#shift-calendar .calendar-day.selected .calendar-shift-wage")).toHaveCount(0);
