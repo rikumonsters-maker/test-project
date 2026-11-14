@@ -16,6 +16,7 @@ test('normal sync has no status card or leftover space after load and reload', a
   await api.attach(page.context());
   await page.setViewportSize({ width:390, height:844 });
   await page.goto('/');
+  await page.locator('#home-card-personal').click();
 
   const card = page.locator('#personal-sync-card');
   await expect(page.locator('#agenda-calendar')).toBeVisible();
@@ -42,6 +43,7 @@ test('sync error is visible, then clears automatically after a successful retry'
   await api.attach(page.context());
   await page.setViewportSize({ width:390, height:844 });
   await page.goto('/');
+  await page.locator('#home-card-personal').click();
 
   const card = page.locator('#personal-sync-card');
   await expect(card).toBeVisible();
@@ -50,10 +52,12 @@ test('sync error is visible, then clears automatically after a successful retry'
   await screenshot(page, 'sync-error-mobile.png');
 
   api.state.syncFailuresRemaining = 0;
-  await page.locator('#account-open').click();
-  await page.locator('#profile-data-management-summary').click();
+  await page.locator('#settings-open').click();
+  await expect(page.locator('#page-settings')).toBeVisible();
+  await expect(page.locator('#settings-sync-state')).toContainText('同期失敗・オフライン');
   await page.locator('#personal-sync-retry').click();
   await expect(card).toBeHidden();
+  await expect(page.locator('#settings-sync-state')).toContainText('同期有効');
   expect(api.state.requests.filter(item => item.path === '/api/personal/events/sync').length).toBeGreaterThanOrEqual(2);
   expect(api.state.outside).toEqual([]);
 });
@@ -70,6 +74,7 @@ test('storage quota failure remains visible after a successful network sync', as
   }, accountKey);
   await page.setViewportSize({ width:375, height:812 });
   await page.goto('/');
+  await page.locator('#home-card-personal').click();
   await expect(page.locator('#personal-sync-card')).toBeVisible();
   await expect(page.locator('#personal-sync-status')).toContainText('保存領域が不足');
   await expect(page.locator('#personal-sync-status')).toHaveAttribute('role', 'alert');
@@ -84,6 +89,7 @@ test('important duplicate restore notice remains visible after sync completion',
       active:true, results:{}, migrationConflicts:true }));
   }, { syncKey });
   await page.goto('/');
+  await page.locator('#home-card-personal').click();
   await expect(page.locator('#personal-sync-card')).toBeVisible();
   await expect(page.locator('#personal-sync-status')).toContainText('復元予定は両方保管しました');
   expect(api.state.outside).toEqual([]);
@@ -101,6 +107,7 @@ test('unsynced conflict guidance remains visible', async ({ page }) => {
       restoreQueue:[], active:true, results:{}, migrationConflicts:false }));
   }, { accountKey, syncKey });
   await page.goto('/');
+  await page.locator('#home-card-personal').click();
   await expect(page.locator('#personal-sync-card')).toBeVisible();
   await expect(page.locator('#personal-sync-status')).toContainText('別端末との競合');
   await expect(page.locator('#personal-sync-conflicts .sync-conflict')).toHaveCount(1);

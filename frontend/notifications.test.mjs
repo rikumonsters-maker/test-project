@@ -14,9 +14,10 @@ test('notification links only navigate within the DaySync app', () => {
     'javascript:alert(1)', null]) assert.equal(safeNotificationTarget(value),null);
 });
 
-test('the bell precedes the profile button and the dialog has accessible controls', async () => {
+test('the bell precedes the profile button, which precedes settings, and the dialog has accessible controls', async () => {
   const html=await readFile(new URL('./index.html',import.meta.url),'utf8');
   assert.ok(html.indexOf('id="notification-open"') < html.indexOf('id="account-open"'));
+  assert.ok(html.indexOf('id="account-open"') < html.indexOf('id="settings-open"'));
   assert.match(html,/<dialog[^>]*id="notification-dialog"[^>]*aria-labelledby="notification-title"/);
   assert.match(html,/id="notification-open"[^>]*aria-haspopup="dialog"[^>]*aria-controls="notification-dialog"/);
   assert.match(html,/id="notification-read-all"/);

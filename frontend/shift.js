@@ -13,7 +13,63 @@ export function initShift(app) {
   }
   function shiftsForMonth(month) {
     const prefix = app.monthPrefix(month);
-    return Object.entries(state.shifts).filter(([key]) => key.startsWith(prefix));
+    return Object.entries(state.shifts)
+      .filter(([key]) => key.startsWith(prefix))
+      .sort(([a], [b]) => a.localeCompare(b));
+  }
+  function renderShiftList(monthShifts, hourlyNum) {
+    const list = $("salary-shift-list");
+    const empty = $("salary-shift-empty");
+    if (!list || !empty) return;
+    list.innerHTML = "";
+    empty.hidden = monthShifts.length > 0;
+    list.hidden = monthShifts.length === 0;
+    for (const [key, shift] of monthShifts) {
+      const mins = shiftMinutes(shift);
+      const item = document.createElement("li");
+      item.className = `expense-item salary-shift-item${key === view.shiftDate ? " is-selected" : ""}`;
+      item.dataset.shiftDate = key;
+
+      const main = document.createElement("div");
+      main.className = "expense-main salary-shift-main";
+
+      const dateTitle = document.createElement("span");
+      dateTitle.className = "expense-note salary-shift-date";
+      dateTitle.textContent = app.dateLabel.format(parseDate(key));
+
+      const detail = document.createElement("span");
+      detail.className = "expense-category salary-shift-time";
+      const breakLabel = Number(shift.breakMinutes || 0) > 0 ? `（休憩${shift.breakMinutes}分）` : "";
+      detail.textContent = `${shift.start}〜${shift.end}${breakLabel} · 実働${formatHours(mins)}`;
+
+      main.append(dateTitle, detail);
+
+      const amount = document.createElement("strong");
+      amount.className = "expense-amount salary-shift-amount";
+      amount.textContent = hourlyNum !== null ? formatMoney((mins / 60) * hourlyNum) : "時給未設定";
+
+      item.append(main, amount);
+      item.addEventListener("click", () => {
+        view.shiftDate = key;
+        renderCalendar();
+        renderForm();
+        renderSummary();
+      });
+      list.append(item);
+    }
+  }
+  function hasValidHourly() {
+    return state.hourly !== "" && state.hourly !== null && state.hourly !== undefined && Number.isFinite(Number(state.hourly)) && Number(state.hourly) >= 0;
+  }
+  function shiftCalendarEntries(key) {
+    const shift = state.shifts[key];
+    if (!shift) return [];
+    const entries = [{ type:"shift-time", label:`${shift.start}-${shift.end}` }];
+    if (hasValidHourly()) {
+      const wage = (shiftMinutes(shift) / 60) * Number(state.hourly);
+      entries.push({ type:"shift-wage", label:formatMoney(wage) });
+    }
+    return entries;
   }
   function renderCalendar() {
     renderMonthCalendar({
@@ -21,6 +77,7 @@ export function initShift(app) {
       month:view.shiftMonth,
       selectedDate:view.shiftDate,
       mode:"shift",
+      getEntries:shiftCalendarEntries,
       onSelect:(key, date) => {
         view.shiftDate = key;
         if (date.getMonth() !== view.shiftMonth.getMonth() || date.getFullYear() !== view.shiftMonth.getFullYear()) {
@@ -45,14 +102,33 @@ export function initShift(app) {
     $("shift-error").hidden = true;
   }
   function renderSummary() {
-    const totalMinutes = shiftsForMonth(view.shiftMonth).reduce((total, [, shift]) => total + shiftMinutes(shift), 0);
+    const monthShifts = shiftsForMonth(view.shiftMonth);
+    const totalMinutes = monthShifts.reduce((total, [, shift]) => total + shiftMinutes(shift), 0);
     const shift = state.shifts[view.shiftDate];
+    const hasHourly = state.hourly !== "" && state.hourly !== null && state.hourly !== undefined && Number.isFinite(Number(state.hourly)) && Number(state.hourly) >= 0;
+    const hourlyNum = hasHourly ? Number(state.hourly) : null;
+    view.wageEstimate = hasHourly ? (totalMinutes / 60) * hourlyNum : null;
+    if (hasHourly && state.incomeMode === "auto") {
+      $("income").value = String(Math.round(shiftIncomeForMonth(state.shifts, state.hourly, view.budgetMonth) || 0));
+    }
     $("shift-hours").textContent = formatHours(totalMinutes);
+    if ($("salary-month-label")) {
+      $("salary-month-label").textContent = `${view.shiftMonth.getFullYear()}年${view.shiftMonth.getMonth() + 1}月`;
+    }
+    if ($("salary-hourly-value")) {
+      $("salary-hourly-value").textContent = hasHourly ? `${formatMoney(hourlyNum)}/時` : "未設定";
+    }
+    if ($("salary-shift-count")) {
+      $("salary-shift-count").textContent = `${monthShifts.length}件`;
+    }
     $("shift-day-label").textContent = `${parseDate(view.shiftDate).getDate()}日の給料`;
-    $("shift-day-wage").textContent = shift && state.hourly !== ""
-      ? formatMoney(shiftMinutes(shift) / 60 * Number(state.hourly))
-      : "—";
+    $("shift-day-wage").textContent = shift && hasHourly
+      ? `${formatHours(shiftMinutes(shift))} / ${formatMoney((shiftMinutes(shift) / 60) * hourlyNum)}`
+      : shift
+        ? `${formatHours(shiftMinutes(shift))} / —`
+        : "—";
     $("shift-month-wage").textContent = view.wageEstimate === null ? "—" : formatMoney(view.wageEstimate);
+    renderShiftList(monthShifts, hourlyNum);
   }
   async function calculateWage() {
     const request = ++view.wageRequest;
@@ -112,29 +188,31 @@ export function initShift(app) {
     app.refreshAgenda?.();
     scheduleWage();
   }
+  function stepShiftMonth(delta) {
+    view.shiftMonth = changeMonth(view.shiftMonth, delta);
+    const monthShifts = shiftsForMonth(view.shiftMonth);
+    view.shiftDate = monthShifts.length > 0 ? monthShifts[0][0] : dateKey(view.shiftMonth);
+    renderCalendar(); renderForm(); renderSummary(); scheduleWage();
+  }
   function init() {
     bindTimeInput("shift-start", "shift-start-picker");
     bindTimeInput("shift-end", "shift-end-picker");
     $("shift-form").addEventListener("submit", submitShift);
     $("delete-shift").addEventListener("click", deleteShift);
-    $("shift-previous").addEventListener("click", () => {
-      view.shiftMonth = changeMonth(view.shiftMonth, -1);
-      view.shiftDate = dateKey(view.shiftMonth);
-      renderCalendar(); renderForm(); renderSummary(); scheduleWage();
-    });
-    $("shift-next").addEventListener("click", () => {
-      view.shiftMonth = changeMonth(view.shiftMonth, 1);
-      view.shiftDate = dateKey(view.shiftMonth);
-      renderCalendar(); renderForm(); renderSummary(); scheduleWage();
-    });
+    $("shift-previous").addEventListener("click", () => stepShiftMonth(-1));
+    $("shift-next").addEventListener("click", () => stepShiftMonth(1));
+    $("salary-previous")?.addEventListener("click", () => stepShiftMonth(-1));
+    $("salary-next")?.addEventListener("click", () => stepShiftMonth(1));
     $("hourly").value = state.hourly;
     $("hourly").addEventListener("input", (event) => {
       state.hourly = event.target.value;
       app.saveState();
+      renderCalendar();
       renderSummary();
       scheduleWage();
     });
     renderCalendar(); renderForm(); renderSummary();
+    if (state.hourly !== "") scheduleWage();
   }
   return { init, renderCalendar, renderForm, renderSummary, calculateWage, scheduleWage };
 }

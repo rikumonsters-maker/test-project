@@ -16,6 +16,7 @@ async function boot(page, { width = 390, height = 844, groupList = [] } = {}) {
   await page.setViewportSize({ width, height });
   await page.goto('/');
   await expect(page.locator('#app-root')).toBeVisible();
+  await page.locator('#home-card-personal').click();
   await expect(page.locator('.page-nav')).toBeVisible();
   return { api, pageErrors };
 }
@@ -107,6 +108,7 @@ test('three main tabs keep their navigation behavior and the highlight slides in
   await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('data-page', 'money');
 
   await page.reload();
+  await page.locator('#home-card-personal').click();
   await expect(nav.locator('[aria-current="page"]')).toHaveAttribute('data-page', 'my');
   await expect.poll(async () => (await selectedAlignment(page))?.leftDelta < 1).toBe(true);
   expect(pageErrors).toEqual([]);

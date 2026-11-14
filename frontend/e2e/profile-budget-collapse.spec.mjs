@@ -13,7 +13,7 @@ async function screenshot(page, name) {
   await page.screenshot({ path:`test-results/screenshots/${name}`, fullPage:false });
 }
 
-test('personal sync and backup tools stay in the collapsed profile data section and restore only after confirmation', async ({ page }) => {
+test('personal sync, backup and display tools live in the dedicated settings screen and restore only after confirmation', async ({ page }) => {
   const api = syntheticApi({ groups:[], personalSyncActive:true });
   await api.attach(page.context());
   const current = {
@@ -32,22 +32,28 @@ test('personal sync and backup tools stay in the collapsed profile data section 
   await expect(page.locator('#app-root')).toBeVisible();
 
   await expect(page.locator('#page-my #personal-sync-management')).toHaveCount(0);
-  const profileData = page.locator('#profile-data-management');
-  await expect(profileData).toHaveJSProperty('open', false);
+  await expect(page.locator('#page-profile #personal-sync-management')).toHaveCount(0);
+  await expect(page.locator('#page-profile #personal-backup-export')).toHaveCount(0);
+  await expect(page.locator('#page-profile .theme-choices')).toHaveCount(0);
+
   await page.locator('#account-open').click();
   await expect(page.locator('#page-profile')).toBeVisible();
-  await expect(profileData).toHaveJSProperty('open', false);
+  await expect(page.locator('#profile-name')).toBeVisible();
+  await expect(page.locator('#profile-status-form')).toBeVisible();
+  await expect(page.locator('#logout-button')).toBeVisible();
   await screenshot(page, 'profile-data-management-collapsed.png');
-  await page.locator('#profile-data-management-summary').focus();
-  await page.keyboard.press('Enter');
-  await expect(profileData).toHaveJSProperty('open', true);
-  await expect(profileData.locator('#personal-sync-management')).toHaveCount(1);
+
+  await page.locator('#settings-open').click();
+  await expect(page.locator('#page-settings')).toBeVisible();
+  await expect(page.locator('#settings-sync-card #personal-sync-management')).toHaveCount(1);
+  await expect(page.locator('#settings-sync-state')).toContainText('同期有効');
 
   await expect(page.locator('#personal-sync-retry')).toBeVisible();
   await expect(page.locator('#personal-backup-export')).toBeVisible();
   await expect(page.locator('#personal-backup-import-trigger')).toBeVisible();
   await expect(page.locator('#personal-backup-archive-option')).toBeVisible();
   await expect(page.locator('#personal-backup-help')).toBeVisible();
+  await expect(page.locator('#settings-display-card .theme-choices')).toBeVisible();
   const [download] = await Promise.all([
     page.waitForEvent('download'),
     page.locator('#personal-backup-export').click(),
@@ -91,9 +97,6 @@ test('personal sync and backup tools stay in the collapsed profile data section 
   expect(stored.records['restored-backup-legacy-event'].title).toBe('Backup legacy event');
   expect(stored.restoreQueue).toHaveLength(0);
   await screenshot(page, 'profile-data-management-expanded.png');
-  await page.locator('#profile-data-management-summary').focus();
-  await page.keyboard.press('Space');
-  await expect(profileData).toHaveJSProperty('open', false);
   expect(api.state.outside).toEqual([]);
 });
 
@@ -112,7 +115,8 @@ test('budget layout follows keyboard order and chart disclosures persist indepen
   }, { accountKey, date:api.date, category:EXPENSE_CATEGORIES[0], chartPreferenceKey, trendPreferenceKey });
   await page.setViewportSize({ width:1280, height:900 });
   await page.goto('/');
-  await page.locator('.nav-button[data-page="money"]').click();
+  await page.locator('#home-card-shift').click();
+  await page.locator('#money-tab-budget').click();
   const budgetOrder = await page.locator('#page-budget').evaluate(panel => {
     const children = [...panel.children];
     return {
@@ -177,7 +181,8 @@ test('budget layout follows keyboard order and chart disclosures persist indepen
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(trendToggle).toHaveAttribute('aria-expanded', 'true');
   await page.reload();
-  await page.locator('.nav-button[data-page="money"]').click();
+  await page.locator('#home-card-shift').click();
+  await page.locator('#money-tab-budget').click();
   await expect(page.locator('#expense-category-toggle')).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('#expense-trend-toggle')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('#expense-category-chart-list .chart-category')).toHaveCount(EXPENSE_CATEGORIES.length);
@@ -225,7 +230,8 @@ test('expense chart refreshes after adding, editing and deleting a record and ho
   })), { accountKey, date:api.date, category:EXPENSE_CATEGORIES[0] });
   await page.setViewportSize({ width:390, height:844 });
   await page.goto('/');
-  await page.locator('.nav-button[data-page="money"]').click();
+  await page.locator('#home-card-shift').click();
+  await page.locator('#money-tab-budget').click();
   await page.locator('#expense-category-toggle').click();
   await expect(page.locator('#expense-month-total')).toContainText('1,200');
 
@@ -260,7 +266,8 @@ test('expense chart refreshes after adding, editing and deleting a record and ho
     await reducedApi.attach(reducedContext);
     const reducedPage = await reducedContext.newPage();
     await reducedPage.goto('/');
-    await reducedPage.locator('.nav-button[data-page="money"]').click();
+    await reducedPage.locator('#home-card-shift').click();
+    await reducedPage.locator('#money-tab-budget').click();
     const reducedContent = reducedPage.locator('#expense-trend-content');
     const transitionDuration = await reducedContent.evaluate(el => getComputedStyle(el).transitionDuration);
     expect(transitionDuration.split(',').every(duration => duration.trim() === '0s')).toBe(true);

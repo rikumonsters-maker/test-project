@@ -14,6 +14,7 @@ async function boot(page) {
   await api.attach(page.context());
   await page.goto('/');
   await expect(page.locator('#app-root')).toBeVisible();
+  await page.locator('#home-card-personal').click();
   return api;
 }
 
@@ -178,6 +179,7 @@ test('add actions remain keyboard, touch, dark-theme and reduced-motion friendly
     await touchApi.attach(touch);
     const touchPage = await touch.newPage();
     await touchPage.goto('/');
+    await touchPage.locator('#home-card-personal').tap();
     for (const action of actions) {
       await touchPage.locator(`.nav-button[data-page="${action.screen}"]`).tap();
       const button = touchPage.locator(action.button);
