@@ -48,6 +48,12 @@
             <span class="notification-badge" id="notification-badge" hidden aria-hidden="true"></span>
           </button>
           <button class="account-link" id="account-open" type="button" aria-label="プロフィールを開く"><span class="account-icon" id="account-icon" aria-hidden="true">🌿</span><span class="account-name" id="account-name"></span></button>
+          <button class="settings-gear" id="settings-open" type="button" aria-label="設定を開く">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3.2" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+            </svg>
+          </button>
         </div>
       </header>
       <dialog class="notification-dialog" id="notification-dialog" aria-labelledby="notification-title">
@@ -68,27 +74,117 @@
       </div>
 
       <section class="page-panel" id="page-my" aria-labelledby="agenda-page-title" hidden>
-      <section class="my-panel" id="page-calendar" aria-labelledby="agenda-page-title">
-        <div class="card personal-sync-consent" id="personal-sync-consent" hidden>
-          <h2>新しいカレンダー同期を始めますか？</h2>
-          <p>同意すると、これから登録する個人予定がこのアカウントの新しいカレンダーに保存され、PC・スマホ間で同期されます。</p>
-          <p>この端末や以前のURLにある旧個人予定は自動では引き継がれません。旧予定は端末内に保管し、グループの既存ミラーも同意するまでは変更しません。復元したい予定は同期開始後に、バックアップから明示的に選べます。</p>
-          <p id="personal-sync-choice-status" class="status" role="status" aria-live="polite" hidden></p>
-          <div class="actions">
-            <button class="action-button" id="personal-sync-start" type="button">同意して新しい同期を始める</button>
-            <button class="action-button" id="personal-sync-later" type="button">今はしない</button>
+      <section class="home-four-card-section" id="home-four-card-section" aria-labelledby="home-stage-title">
+        <div class="home-stage-header">
+          <div class="home-stage-title-group">
+            <h2 id="home-stage-title" class="home-stage-title">ホーム</h2>
+            <p class="home-stage-subtitle">カードを選んで画面を開く</p>
           </div>
         </div>
-        <div class="card personal-sync-consent" id="personal-sync-deferred" hidden>
-          <p>個人予定の同期は開始していません。端末内の旧予定とグループ表示はそのままです。</p>
-          <button class="action-button" id="personal-sync-start-deferred" type="button">同意して新しい同期を始める</button>
+        <div class="home-card-stage-shell">
+          <div class="home-card-stage" id="home-card-stage" data-phase="stacked" data-stacked="true" data-expanded-locked="false">
+            <button class="home-glass-card home-card-mint" id="home-card-personal" type="button" data-home-card="personal" aria-label="個人予定を開く">
+              <span class="home-card-gloss" aria-hidden="true"></span>
+              <span class="home-card-icon-wrap" aria-hidden="true">
+                <svg class="home-card-svg" viewBox="0 0 64 64" fill="none" focusable="false">
+                  <g class="home-icon-part" data-icon-part="1">
+                    <rect class="icon-stroke-draw icon-glass-fill" pathLength="100" x="11" y="14" width="42" height="39" rx="10" />
+                    <line class="icon-stroke-draw" pathLength="100" x1="11" y1="25" x2="53" y2="25" />
+                  </g>
+                  <g class="home-icon-part" data-icon-part="2">
+                    <line class="icon-stroke-draw" pathLength="100" x1="22" y1="9" x2="22" y2="18" />
+                    <line class="icon-stroke-draw" pathLength="100" x1="42" y1="9" x2="42" y2="18" />
+                    <circle class="icon-dot" cx="21" cy="33" r="2.2" />
+                    <circle class="icon-dot" cx="32" cy="33" r="2.2" />
+                    <circle class="icon-dot" cx="21" cy="42" r="2.2" />
+                  </g>
+                  <g class="home-icon-part" data-icon-part="3">
+                    <path class="icon-stroke-draw icon-accent-stroke" pathLength="100" d="M26 39.5 L31.5 45 L43.5 32.5" />
+                  </g>
+                </svg>
+              </span>
+              <span class="home-card-label">個人予定</span>
+              <span class="home-card-caption">カレンダー・予定</span>
+            </button>
+
+            <button class="home-glass-card home-card-blue" id="home-card-shared" type="button" data-home-card="shared" aria-label="共有予定を開く">
+              <span class="home-card-gloss" aria-hidden="true"></span>
+              <span class="home-card-icon-wrap" aria-hidden="true">
+                <svg class="home-card-svg" viewBox="0 0 64 64" fill="none" focusable="false">
+                  <g class="home-icon-part" data-icon-part="1">
+                    <circle class="icon-stroke-draw icon-glass-fill" pathLength="100" cx="32" cy="22" r="7.5" />
+                    <path class="icon-stroke-draw icon-glass-fill" pathLength="100" d="M18 47c0-7.2 6.3-12.5 14-12.5s14 5.3 14 12.5" />
+                  </g>
+                  <g class="home-icon-part" data-icon-part="2">
+                    <circle class="icon-stroke-draw" pathLength="100" cx="17.5" cy="26" r="5.5" />
+                    <path class="icon-stroke-draw" pathLength="100" d="M8.5 45.5c0-5.4 4.2-9.5 9.8-9.5" />
+                  </g>
+                  <g class="home-icon-part" data-icon-part="3">
+                    <circle class="icon-stroke-draw" pathLength="100" cx="46.5" cy="26" r="5.5" />
+                    <path class="icon-stroke-draw" pathLength="100" d="M55.5 45.5c0-5.4-4.2-9.5-9.8-9.5" />
+                  </g>
+                </svg>
+              </span>
+              <span class="home-card-label">共有予定</span>
+              <span class="home-card-caption">グループ・空き時間</span>
+            </button>
+
+            <button class="home-glass-card home-card-orange" id="home-card-shift" type="button" data-home-card="shift" aria-label="シフトを開く">
+              <span class="home-card-gloss" aria-hidden="true"></span>
+              <span class="home-card-icon-wrap" aria-hidden="true">
+                <svg class="home-card-svg" viewBox="0 0 64 64" fill="none" focusable="false">
+                  <g class="home-icon-part" data-icon-part="1">
+                    <circle class="icon-stroke-draw icon-glass-fill" pathLength="100" cx="32" cy="32" r="21" />
+                  </g>
+                  <g class="home-icon-part" data-icon-part="2">
+                    <path class="icon-stroke-draw" pathLength="100" d="M32 14.5v3.5M32 46v3.5M14.5 32h3.5M46 32h3.5" />
+                  </g>
+                  <g class="home-icon-part" data-icon-part="3">
+                    <path class="icon-stroke-draw icon-accent-stroke" pathLength="100" d="M32 21v11l8.5 5" />
+                    <circle class="icon-dot" cx="32" cy="32" r="2.6" />
+                  </g>
+                </svg>
+              </span>
+              <span class="home-card-label">シフト</span>
+              <span class="home-card-caption">勤務予定・シフト管理</span>
+            </button>
+
+            <button class="home-glass-card home-card-purple" id="home-card-salary" type="button" data-home-card="salary" aria-label="給与を開く">
+              <span class="home-card-gloss" aria-hidden="true"></span>
+              <span class="home-card-icon-wrap" aria-hidden="true">
+                <svg class="home-card-svg" viewBox="0 0 64 64" fill="none" focusable="false">
+                  <g class="home-icon-part" data-icon-part="1">
+                    <rect class="icon-stroke-draw icon-glass-fill" pathLength="100" x="10" y="17" width="42" height="32" rx="9" />
+                    <path class="icon-stroke-draw" pathLength="100" d="M16 17v-2.5a4.5 4.5 0 0 1 4.5-4.5h21a4.5 4.5 0 0 1 4.5 4.5V17" />
+                  </g>
+                  <g class="home-icon-part" data-icon-part="2">
+                    <path class="icon-stroke-draw icon-glass-fill" pathLength="100" d="M40 27.5h14a3 3 0 0 1 3 3v5a3 3 0 0 1-3 3H40a5.5 5.5 0 0 1 0-11Z" />
+                    <circle class="icon-dot" cx="43.5" cy="33" r="1.9" />
+                  </g>
+                  <g class="home-icon-part" data-icon-part="3">
+                    <path class="icon-stroke-draw icon-accent-stroke" pathLength="100" d="M21.5 24.5 L26.5 31.5 L31.5 24.5 M26.5 31.5 V41.5 M22 33.5 H31 M22 37.5 H31" />
+                  </g>
+                </svg>
+              </span>
+              <span class="home-card-label">給与</span>
+              <span class="home-card-caption">予想給料・時給設定</span>
+            </button>
+          </div>
+          <div class="home-stack-expand-bar">
+            <button class="action-button home-stack-expand" id="home-stack-expand" type="button" aria-label="重なっているカードを即座に展開">タップで即座に展開</button>
+          </div>
         </div>
+      </section>
+      <section class="my-panel" id="page-calendar" aria-labelledby="agenda-page-title" hidden>
         <div class="card personal-sync-card" id="personal-sync-card" hidden>
           <p id="personal-sync-status" role="status" aria-live="polite"></p>
         </div>
         <div class="page-heading">
-          <h2 id="agenda-page-title">予定</h2>
-          <p>シフトと個人予定を表示</p>
+          <div class="page-heading-copy">
+            <h2 id="agenda-page-title">個人予定</h2>
+            <p>シフトと個人予定を表示</p>
+          </div>
+          <button class="action-button home-return-button" id="back-to-home-from-calendar" type="button">← ホームに戻る</button>
         </div>
         <div class="layout-two">
           <article class="card calendar-card">
@@ -163,8 +259,11 @@
 
       <section class="page-panel" id="page-group" aria-labelledby="group-page-title" hidden>
         <div class="page-heading">
-          <h2 id="group-page-title">共有</h2>
-          <p>メンバーと共有予定</p>
+          <div class="page-heading-copy">
+            <h2 id="group-page-title">共有</h2>
+            <p>メンバーと共有予定</p>
+          </div>
+          <button class="action-button home-return-button" id="back-to-home-from-group" type="button">← ホームに戻る</button>
         </div>
         <div id="group-home" class="group-home">
           <div class="group-home-toolbar">
@@ -463,8 +562,11 @@
         </nav>
       <section class="money-panel" id="page-budget" role="tabpanel" aria-labelledby="money-tab-budget">
         <div class="page-heading">
-          <h2 id="budget-page-title">家計簿</h2>
-          <p>支出と予算の状況</p>
+          <div class="page-heading-copy">
+            <h2 id="budget-page-title">家計簿</h2>
+            <p>支出と予算の状況</p>
+          </div>
+          <button class="action-button home-return-button" id="back-to-home-from-budget" type="button">← ホームに戻る</button>
         </div>
         <div class="metrics" aria-label="今月の家計簿集計">
           <article class="metric"><div class="metric-label">今月あと使える金額</div><p class="metric-value"><span id="remaining">—</span><small>円</small></p></article>
@@ -582,11 +684,18 @@
 
       <section class="money-panel" id="page-shift" role="tabpanel" aria-labelledby="money-tab-shift" hidden>
         <div class="page-heading">
-          <h2 id="shift-page-title">シフト・給与</h2>
-          <p>勤務予定と予想給料</p>
+          <div class="page-heading-copy">
+            <h2 id="shift-page-title">シフト</h2>
+            <p id="shift-page-subtitle">勤務予定とシフト管理</p>
+          </div>
+          <button class="action-button home-return-button" id="back-to-home-from-shift" type="button">← ホームに戻る</button>
         </div>
+        <nav class="segmented shift-focus-tabs" id="shift-focus-tabs" role="tablist" aria-label="シフト管理と給与確認の切り替え">
+          <button id="shift-mode-tab-shift" type="button" role="tab" aria-selected="true" data-shift-focus="shift">シフト管理</button>
+          <button id="shift-mode-tab-salary" type="button" role="tab" aria-selected="false" data-shift-focus="salary">給与確認</button>
+        </nav>
         <div class="layout-two">
-          <article class="card calendar-card">
+          <article class="card calendar-card" id="shift-calendar-card">
             <div class="month-bar">
               <h3 class="month-title" id="shift-month-label"></h3>
               <nav class="month-nav" aria-label="シフトの月移動">
@@ -601,18 +710,55 @@
           </article>
 
           <div class="side-stack">
-            <article class="card">
-              <h3>今月の勤務と給料</h3>
-              <dl class="summary-list">
-                <div class="summary-row"><dt>合計実働時間</dt><dd id="shift-hours">0時間</dd></div>
-                <div class="summary-row emphasis"><dt>月の予想給料</dt><dd id="shift-month-wage">—</dd></div>
-                <div class="summary-row"><dt id="shift-day-label">選択日の給料</dt><dd id="shift-day-wage">—</dd></div>
+            <article class="card salary-summary-card" id="salary-summary-card" aria-labelledby="salary-summary-title" hidden>
+              <div class="month-bar salary-month-bar" id="salary-month-bar">
+                <div class="salary-month-heading">
+                  <h3 id="salary-summary-title">今月の予想給料</h3>
+                  <p class="salary-month-subtitle" id="salary-month-label"></p>
+                </div>
+                <nav class="month-nav" aria-label="給与の対象月移動">
+                  <button class="icon-button" id="salary-previous" type="button" aria-label="前月">‹</button>
+                  <button class="icon-button" id="salary-next" type="button" aria-label="次月">›</button>
+                </nav>
+              </div>
+              <div class="salary-hero-amount">
+                <span class="salary-hero-label">予想給料</span>
+                <strong class="salary-hero-value" id="shift-month-wage">—</strong>
+              </div>
+              <dl class="salary-submetrics" aria-label="今月の勤務集計">
+                <div class="salary-submetric">
+                  <dt>今月の勤務時間</dt>
+                  <dd id="shift-hours">0時間</dd>
+                </div>
+                <div class="salary-submetric">
+                  <dt>設定時給</dt>
+                  <dd id="salary-hourly-value">未設定</dd>
+                </div>
+                <div class="salary-submetric">
+                  <dt>登録シフト件数</dt>
+                  <dd id="salary-shift-count">0件</dd>
+                </div>
               </dl>
             </article>
 
-            <article class="card">
+            <article class="card salary-shift-list-card" id="salary-shift-list-card" aria-labelledby="salary-shift-list-title" hidden>
+              <div class="salary-section-header">
+                <h3 id="salary-shift-list-title">シフト別の予想給料</h3>
+                <span class="salary-section-caption" id="salary-shift-list-caption">日付・勤務時間・概算金額</span>
+              </div>
+              <p class="empty-state" id="salary-shift-empty">この月に登録されたシフトはありません。シフト画面から勤務予定を登録すると、日別の勤務時間と予想給料が表示されます。</p>
+              <ul class="expense-list salary-shift-list" id="salary-shift-list" aria-label="シフト別の予想給料"></ul>
+            </article>
+
+            <article class="card" id="shift-entry-card">
               <h3>シフト登録</h3>
               <p class="card-description" id="shift-date"></p>
+              <dl class="summary-list shift-day-summary" id="shift-day-summary" aria-label="選択日の勤務時間と予想給料">
+                <div class="summary-row">
+                  <dt id="shift-day-label">選択日の給料</dt>
+                  <dd id="shift-day-wage">—</dd>
+                </div>
+              </dl>
               <form id="shift-form">
                 <div class="form-stack">
                   <div class="time-pair">
@@ -629,9 +775,9 @@
               </form>
             </article>
 
-            <article class="card">
-              <h3>時給</h3>
-              <p class="card-description">時給を設定すると月の予想給料を計算します。</p>
+            <article class="card salary-hourly-card" id="salary-hourly-card" aria-labelledby="salary-hourly-title" hidden>
+              <h3 id="salary-hourly-title">時給設定</h3>
+              <p class="card-description">時給を設定すると、登録済みシフトから月の予想給料を自動計算します。</p>
               <label>時給<span class="input-with-unit"><input id="hourly" type="number" min="0" step="1" inputmode="numeric" placeholder="例：1200" /><span class="unit">円</span></span></label>
               <div class="status" id="wage-status" aria-live="polite"><strong>時給を入力してください</strong><p>勤務時間はシフトカレンダーから集計します。</p></div>
             </article>
@@ -641,25 +787,14 @@
       </section>
 
       <section class="page-panel" id="page-profile" aria-labelledby="profile-page-title" hidden>
-        <div class="page-heading"><h2 id="profile-page-title">プロフィール</h2><p>アカウントと通知の設定</p></div>
+        <div class="page-heading">
+          <div class="page-heading-copy">
+            <h2 id="profile-page-title">プロフィール</h2>
+            <p>ユーザー情報とアカウント管理</p>
+          </div>
+          <button class="action-button home-return-button" id="back-to-home-from-profile" type="button">← ホームに戻る</button>
+        </div>
         <div class="profile-layout">
-          <details class="card profile-data-management" id="profile-data-management">
-            <summary id="profile-data-management-summary">データ管理</summary>
-            <p class="card-description">個人予定の同期、バックアップの保存・復元を行います。</p>
-            <article class="personal-sync-management" id="personal-sync-management" aria-labelledby="personal-sync-management-title" hidden>
-              <h3 id="personal-sync-management-title">個人予定の管理</h3>
-              <div class="actions personal-sync-controls" id="personal-sync-controls" hidden>
-                <button class="action-button" id="personal-sync-retry" type="button">同期</button>
-                <button class="action-button" id="personal-backup-export" type="button">個人予定のバックアップを保存</button>
-                <button class="action-button" id="personal-backup-import-trigger" type="button">バックアップから予定を復元</button>
-                <input id="personal-backup-import-file" type="file" accept="application/json,.json" hidden>
-              </div>
-              <label class="personal-backup-help" id="personal-backup-archive-option" hidden><input id="personal-backup-import-archive" type="checkbox"> バックアップ内の「切替前の旧予定」を復元する</label>
-              <p class="personal-backup-help" id="personal-backup-help" hidden>バックアップを選んだ後、復元内容を確認してから追加します。元データは削除されません。個人予定の詳細はグループに公開されず、時間帯と「予定あり」のみ表示されます。</p>
-              <p id="personal-backup-import-status" class="status" role="status" aria-live="polite" hidden></p>
-              <div id="personal-sync-conflicts"></div>
-            </article>
-          </details>
           <article class="card profile-card">
             <div class="profile-avatar" id="profile-icon" aria-hidden="true">🌿</div>
             <h3 id="profile-name"></h3>
@@ -690,19 +825,72 @@
             <button class="action-button danger" id="logout-button" type="button">ログアウト</button>
           </article>
           <article class="card">
-            <h3>表示設定</h3>
+            <h3>通知</h3>
+            <p class="card-description">この端末へのグループ予定・参加通知を設定します。</p>
+            <button class="action-button" id="push-toggle" type="button">通知を受け取る</button>
+            <p class="status" id="push-status" hidden role="status"></p>
+          </article>
+        </div>
+      </section>
+
+      <section class="page-panel" id="page-settings" aria-labelledby="settings-page-title" hidden>
+        <div class="page-heading">
+          <div class="page-heading-copy">
+            <h2 id="settings-page-title">設定</h2>
+            <p>データ同期・バックアップ・表示設定</p>
+          </div>
+          <button class="action-button home-return-button" id="back-to-home-from-settings" type="button">← ホームに戻る</button>
+        </div>
+        <div class="profile-layout settings-layout">
+          <article class="card settings-card" id="settings-sync-card" aria-labelledby="settings-sync-title">
+            <h3 id="settings-sync-title">データ同期</h3>
+            <p class="card-description">個人予定をクラウドと同期し、PC・スマートフォン間で最新の状態を保ちます。</p>
+            <p class="status" id="settings-sync-state" role="status" aria-live="polite">同期未開始：個人予定のクラウド同期はまだ開始していません（端末内に保存されています）。</p>
+            <div class="personal-sync-consent" id="personal-sync-consent" hidden>
+              <h4>新しいカレンダー同期を始めますか？</h4>
+              <p>同意すると、これから登録する個人予定がこのアカウントの新しいカレンダーに保存され、PC・スマホ間で同期されます。</p>
+              <p>この端末や以前のURLにある旧個人予定は自動では引き継がれません。旧予定は端末内に保管し、グループの既存ミラーも同意するまでは変更しません。復元したい予定は同期開始後に、バックアップから明示的に選べます。</p>
+              <p id="personal-sync-choice-status" class="status" role="status" aria-live="polite" hidden></p>
+              <div class="actions">
+                <button class="action-button primary" id="personal-sync-start" type="button">同意して新しい同期を始める</button>
+                <button class="action-button" id="personal-sync-later" type="button">今はしない</button>
+              </div>
+            </div>
+            <div class="personal-sync-consent" id="personal-sync-deferred" hidden>
+              <p>個人予定の同期は開始していません。端末内の旧予定とグループ表示はそのままです。</p>
+              <div class="actions">
+                <button class="action-button primary" id="personal-sync-start-deferred" type="button">同意して新しい同期を始める</button>
+              </div>
+            </div>
+            <div class="personal-sync-management" id="personal-sync-management" hidden>
+              <div class="actions personal-sync-controls" id="personal-sync-controls" hidden>
+                <button class="action-button" id="personal-sync-retry" type="button">同期</button>
+              </div>
+              <div id="personal-sync-conflicts"></div>
+            </div>
+          </article>
+
+          <article class="card settings-card" id="settings-backup-card" aria-labelledby="settings-backup-title">
+            <h3 id="settings-backup-title">バックアップ・復元</h3>
+            <p class="card-description">個人予定のJSONバックアップ保存と、バックアップからの復元を行います。</p>
+            <div class="actions personal-sync-controls" id="personal-backup-controls">
+              <button class="action-button" id="personal-backup-export" type="button">個人予定のバックアップを保存</button>
+              <button class="action-button" id="personal-backup-import-trigger" type="button">バックアップから予定を復元</button>
+              <input id="personal-backup-import-file" type="file" accept="application/json,.json" hidden>
+            </div>
+            <label class="personal-backup-help" id="personal-backup-archive-option" hidden><input id="personal-backup-import-archive" type="checkbox"> バックアップ内の「切替前の旧予定」を復元する</label>
+            <p class="personal-backup-help" id="personal-backup-help" hidden>バックアップを選んだ後、復元内容を確認してから追加します。元データは削除されません。個人予定の詳細はグループに公開されず、時間帯と「予定あり」のみ表示されます。</p>
+            <p id="personal-backup-import-status" class="status" role="status" aria-live="polite" hidden></p>
+          </article>
+
+          <article class="card settings-card" id="settings-display-card" aria-labelledby="settings-display-title">
+            <h3 id="settings-display-title">表示設定</h3>
             <p class="card-description" id="theme-label">テーマ</p>
             <div class="segmented theme-choices" role="group" aria-labelledby="theme-label">
               <button type="button" data-theme-choice="light" aria-pressed="false">ライト</button>
               <button type="button" data-theme-choice="dark" aria-pressed="false">ダーク</button>
               <button type="button" data-theme-choice="system" aria-pressed="true">端末設定</button>
             </div>
-          </article>
-          <article class="card">
-            <h3>通知</h3>
-            <p class="card-description">この端末へのグループ予定・参加通知を設定します。</p>
-            <button class="action-button" id="push-toggle" type="button">通知を受け取る</button>
-            <p class="status" id="push-status" hidden role="status"></p>
           </article>
         </div>
       </section>

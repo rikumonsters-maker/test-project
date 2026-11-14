@@ -36,7 +36,8 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
         groupName:body.name,inviteCode:'MP-CREATED',memberCount:1}};
       else if(path==='/api/groups/join') data={membership:{groupId:'synthetic-joined-group',memberId:'joined-member',memberName:body.memberName,
         groupName:'招待参加グループ',inviteCode:body.inviteCode,memberCount:2}};
-      else if(path==='/api/personal/events/status') data={active:personalSyncActive};
+      else if(path==='/api/personal/events/status') data={active:state.personalSyncActive};
+      else if(path==='/api/personal/events/activate') {state.personalSyncActive=true;data={ok:true,active:true};}
       else if(path==='/api/personal/events/sync'&&state.syncFailuresRemaining>0) {
         state.syncFailuresRemaining-=1;status=503;data={error:'合成テストの一時的な同期エラーです。'};
       }
@@ -96,6 +97,11 @@ export function syntheticApi({legacyEnabled=false,acknowledged=false,includeExpi
           data={days:[{date,unconfirmedUserIds:[],slots:timelineSlots.filter(slot=>slot.meetsMinimum),timelineSlots}],
             recommendations:chosen?[{...chosen}]:[]};
         }
+      }
+      else if(path==='/api/wage') data={wage:Number(body.hourly||0)*Number(body.hours||0)};
+      else if(path==='/api/budget') {
+        const remaining=Number(body.income||0)-Number(body.fixed||0)-Number(body.saving||0)-Number(body.spent||0);
+        data={remaining,daily:Math.round(remaining/30),status:'safe',message:'このペースなら目標貯金を達成できます'};
       }
       else {status=501;data={error:`Synthetic API has no fixture for ${path}`};}
       try { await route.fulfill({status,contentType:'application/json',headers:{'Access-Control-Allow-Origin':frontendOrigin,'Access-Control-Allow-Credentials':'true'},body:JSON.stringify(data)}); }

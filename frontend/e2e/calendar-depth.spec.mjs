@@ -386,6 +386,7 @@ test('date selection animations respect reduced motion and all target widths rem
       }] } }));
     }, { key:localStorageKey, date:reducedApi.date });
     await reducedPage.goto('/');
+    await reducedPage.locator('#home-card-personal').click();
     const reducedCell = reducedPage.locator('#agenda-calendar .calendar-day.today');
     const reducedLabel = reducedCell.locator('.calendar-event').first();
     const labelBox = await reducedLabel.boundingBox();

@@ -14,6 +14,7 @@ import { initTheme, normalizeTheme, setTheme } from "./theme.mjs";
 import { initNotificationCenter } from "./notifications.mjs";
 import { initCardTilt } from "./card-tilt.mjs";
 import { renderPersonalSyncStatus } from "./personal-sync-status.mjs";
+import { initHomeCards } from "./home-cards.mjs";
 
 const CATEGORIES = ["食費", "交通", "娯楽", "買い物", "交際費", "固定費", "その他"];
 const money = new Intl.NumberFormat("ja-JP", { maximumFractionDigits:0 });
@@ -27,12 +28,50 @@ let activeStorageKey = null;
 let currentUser = null;
 let syncStorageWarning = "";
 let syncStatusMessage = "";
+let syncChoiceActive = false;
+function renderSettingsSyncState() {
+  const el = $("settings-sync-state");
+  if (!el) return;
+  const active = syncChoiceActive || Boolean(personalSync?.isActive?.());
+  if (!active) {
+    el.className = "status";
+    el.setAttribute("role", "status");
+    el.textContent = "同期未開始：個人予定のクラウド同期はまだ開始していません（端末内に保存されています）。";
+    return;
+  }
+  const raw = syncStorageWarning && syncStatusMessage && syncStatusMessage !== "同期完了" && syncStatusMessage !== "同期中…"
+    ? `${syncStorageWarning} ${syncStatusMessage}`
+    : syncStorageWarning || syncStatusMessage;
+  const text = String(raw || "").trim();
+  if (text === "同期中…") {
+    el.className = "status";
+    el.setAttribute("role", "status");
+    el.textContent = "同期中… クラウドと個人予定を同期しています。";
+    return;
+  }
+  if (/失敗|オフライン|不足|確認できません/.test(text)) {
+    el.className = "status error";
+    el.setAttribute("role", "alert");
+    el.textContent = text;
+    return;
+  }
+  if (/未同期の変更|競合|復元予定は両方保管しました/.test(text)) {
+    el.className = "status caution";
+    el.setAttribute("role", "status");
+    el.textContent = text;
+    return;
+  }
+  el.className = "status safe";
+  el.setAttribute("role", "status");
+  el.textContent = "同期有効：クラウドと自動同期しています（同期完了）。";
+}
 function updatePersonalSyncStatus(message) {
   syncStatusMessage = message || "";
   const important = syncStorageWarning && syncStatusMessage && syncStatusMessage !== "同期完了" && syncStatusMessage !== "同期中…"
     ? `${syncStorageWarning} ${syncStatusMessage}`
     : syncStorageWarning || syncStatusMessage;
   renderPersonalSyncStatus($("personal-sync-card"), $("personal-sync-status"), important);
+  renderSettingsSyncState();
 }
 function emptyState() {
   return { shifts:{}, events:{}, expenses:{}, hourly:"", manualIncome:"", incomeMode:"auto", theme:"system", budget:{ ...emptyBudget }, groups:[], pendingGroupMonths:{}, pendingGroupShiftMonths:{} };
@@ -220,7 +259,7 @@ function renderMonthCalendar({ calendarId, month, selectedDate, mode, onSelect, 
     if (Array.isArray(value)) {
       for (const entry of value.slice(0, maxEntries)) {
         const detail = document.createElement("span");
-        detail.className = `day-value ${entry.type === "busy" ? "calendar-busy" : entry.type === "wish" ? "calendar-wish" : entry.type === "tentative" ? "calendar-tentative" : entry.type === "shift" ? "calendar-shift" : "calendar-event"}`;
+        detail.className = `day-value ${entry.type === "busy" ? "calendar-busy" : entry.type === "wish" ? "calendar-wish" : entry.type === "tentative" ? "calendar-tentative" : entry.type === "shift" ? "calendar-shift" : entry.type === "shift-time" ? "calendar-shift-time" : entry.type === "shift-wage" ? "calendar-shift-wage" : "calendar-event"}`;
         detail.textContent = entry.label;
         if (entry.ariaLabel) detail.title = entry.ariaLabel;
         cell.append(detail);
@@ -295,22 +334,113 @@ let personalSync = null;
 app.scheduleBudget = budget.schedule;
 let profile = null;
 let notificationCenter = null;
+let homeCards = null;
 
 let activeMoneyView = "budget";
+let currentShiftFocusMode = "shift";
+let isRestoringHistory = false;
 
-function setMoneyView(viewName) {
-  if (!activateMoneyView(document,viewName,{onBudget:()=>budget.refresh(),onShift:()=>{shift.renderCalendar();shift.renderSummary();}})) return;
+function setMoneyView(viewName, { focusMode = currentShiftFocusMode } = {}) {
+  if (!activateMoneyView(document,viewName,{onBudget:()=>budget.refresh(),onShift:()=>{shift.renderCalendar();shift.renderForm();shift.renderSummary();}})) return;
   activeMoneyView = viewName;
+  const shiftPage = $("page-shift");
+  if (shiftPage && viewName === "shift") {
+    currentShiftFocusMode = focusMode || "shift";
+    shiftPage.dataset.focusMode = currentShiftFocusMode;
+    const isSalaryOnly = currentShiftFocusMode === "salary";
+    const shiftCalendarCard = $("shift-calendar-card");
+    const shiftEntryCard = $("shift-entry-card");
+    const salarySummaryCard = $("salary-summary-card");
+    const salaryShiftListCard = $("salary-shift-list-card");
+    const salaryHourlyCard = $("salary-hourly-card");
+    if (shiftCalendarCard) shiftCalendarCard.hidden = isSalaryOnly;
+    if (shiftEntryCard) shiftEntryCard.hidden = isSalaryOnly;
+    if (salarySummaryCard) salarySummaryCard.hidden = !isSalaryOnly;
+    if (salaryShiftListCard) salaryShiftListCard.hidden = !isSalaryOnly;
+    if (salaryHourlyCard) salaryHourlyCard.hidden = !isSalaryOnly;
+    document.querySelectorAll("[data-shift-focus]").forEach((button) => {
+      const selected = button.dataset.shiftFocus === currentShiftFocusMode;
+      button.setAttribute("aria-selected", String(selected));
+      button.tabIndex = selected ? 0 : -1;
+    });
+    $("shift-page-title").textContent = isSalaryOnly ? "給与" : "シフト";
+    $("shift-page-subtitle").textContent = isSalaryOnly
+      ? "シフトと時給から予想給料を自動計算"
+      : "勤務予定とシフト管理";
+  }
 }
 
-function setActivePage(pageName) {
+function pushViewHistory(stateObj, { replace = false } = {}) {
+  if (isRestoringHistory) return;
+  try {
+    if (replace) {
+      window.history.replaceState(stateObj, "", window.location.href);
+    } else {
+      window.history.pushState(stateObj, "", window.location.href);
+    }
+  } catch { /* Ignore history errors in restricted environments */ }
+}
+
+function setActivePage(pageName, { hideHomeStage = false, focusMode = currentShiftFocusMode, recordHistory = true, replaceHistory = false } = {}) {
+  const isHomeView = pageName === "my" && !hideHomeStage;
   if (!activateMainPage(document,pageName,{
-    onPlan:()=>{calendar.render();void personalSync?.sync();},
-    onMoney:()=>setMoneyView(activeMoneyView),
+    onPlan:()=>{
+      if (!isHomeView) {
+        calendar.render();
+        void personalSync?.sync();
+      }
+    },
+    onMoney:()=>setMoneyView(activeMoneyView, { focusMode }),
     onProfile:()=>void profile?.refresh(),
+    onSettings:()=>renderSettingsSyncState(),
   })) return;
+  const homeSection = $("home-four-card-section");
+  const calendarSection = $("page-calendar");
+  const backFromCalendar = $("back-to-home-from-calendar");
+  if (isHomeView) {
+    if (homeSection) homeSection.hidden = false;
+    if (calendarSection) calendarSection.hidden = true;
+    if (backFromCalendar) backFromCalendar.hidden = true;
+    document.body.dataset.homeActive = "true";
+    homeCards?.start({ resetLocks: true });
+  } else {
+    if (homeSection) homeSection.hidden = true;
+    if (calendarSection) calendarSection.hidden = pageName !== "my";
+    if (backFromCalendar) backFromCalendar.hidden = pageName !== "my";
+    document.body.dataset.homeActive = "false";
+    homeCards?.stop();
+  }
   updateNavIndicator(document);
+  if (recordHistory) {
+    pushViewHistory(
+      { daysyncView: isHomeView ? "home" : pageName, moneyView: activeMoneyView, focusMode: currentShiftFocusMode },
+      { replace: replaceHistory }
+    );
+  }
   window.scrollTo({ top:0, behavior:"instant" });
+}
+
+function handleHomeCardSelect(cardId) {
+  homeCards?.stop();
+  if (cardId === "personal") {
+    setActivePage("my", { hideHomeStage: true });
+    return;
+  }
+  if (cardId === "shared") {
+    setActivePage("group");
+    return;
+  }
+  if (cardId === "shift") {
+    activeMoneyView = "shift";
+    currentShiftFocusMode = "shift";
+    setActivePage("money", { focusMode: "shift" });
+    return;
+  }
+  if (cardId === "salary") {
+    activeMoneyView = "shift";
+    currentShiftFocusMode = "salary";
+    setActivePage("money", { focusMode: "salary" });
+  }
 }
 
 function authError(message = "") {
@@ -437,23 +567,101 @@ async function startApp(user) {
   $("app-root").hidden = false;
   document.querySelector(".page-nav").hidden = false;
   observeNavIndicator(document);
+  const pageNav = document.querySelector(".page-nav");
+  pageNav?.addEventListener("pointerenter", () => homeCards?.stop(), { passive: true });
+  pageNav?.addEventListener("mousemove", () => homeCards?.stop(), { passive: true });
+  pageNav?.addEventListener("pointerleave", () => {
+    if (document.body.dataset.homeActive === "true") homeCards?.start();
+  }, { passive: true });
   document.querySelectorAll(".nav-button").forEach((button) => {
-    button.addEventListener("click", () => setActivePage(button.dataset.page));
+    button.addEventListener("pointerdown", () => homeCards?.stop(), { passive: true });
+    button.addEventListener("mousedown", () => homeCards?.stop(), { passive: true });
+    button.addEventListener("touchstart", () => homeCards?.stop(), { passive: true });
+    button.addEventListener("click", () => {
+      if (button.dataset.page === "my") {
+        setActivePage("my", { hideHomeStage: true });
+      } else {
+        setActivePage(button.dataset.page);
+      }
+    });
   });
+  document.querySelector(".site-title")?.addEventListener("click", () => setActivePage("my"));
   document.querySelectorAll("[data-money-view]").forEach((button) => {
-    button.addEventListener("click", () => setMoneyView(button.dataset.moneyView));
+    button.addEventListener("click", () => {
+      const nextView = button.dataset.moneyView;
+      const changed = activeMoneyView !== nextView;
+      setMoneyView(nextView);
+      if (changed) {
+        pushViewHistory({ daysyncView: "money", moneyView: activeMoneyView, focusMode: currentShiftFocusMode });
+      }
+    });
     button.addEventListener("keydown", (event) => {
       if (!["ArrowLeft","ArrowRight","Home","End"].includes(event.key)) return;
       event.preventDefault();
       const next = event.key === "Home" ? "budget" : event.key === "End" ? "shift" : activeMoneyView === "budget" ? "shift" : "budget";
+      const changed = activeMoneyView !== next;
       setMoneyView(next);
+      if (changed) {
+        pushViewHistory({ daysyncView: "money", moneyView: activeMoneyView, focusMode: currentShiftFocusMode });
+      }
       $(next === "budget" ? "money-tab-budget" : "money-tab-shift").focus();
+    });
+  });
+  document.querySelectorAll("[data-shift-focus]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextFocus = button.dataset.shiftFocus;
+      const changed = currentShiftFocusMode !== nextFocus || activeMoneyView !== "shift";
+      setMoneyView("shift", { focusMode: nextFocus });
+      if (changed) {
+        pushViewHistory({ daysyncView: "money", moneyView: "shift", focusMode: currentShiftFocusMode });
+      }
+    });
+    button.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const nextFocus = event.key === "Home" ? "shift" : event.key === "End" ? "salary" : currentShiftFocusMode === "shift" ? "salary" : "shift";
+      const changed = currentShiftFocusMode !== nextFocus;
+      setMoneyView("shift", { focusMode: nextFocus });
+      if (changed) {
+        pushViewHistory({ daysyncView: "money", moneyView: "shift", focusMode: currentShiftFocusMode });
+      }
+      $(nextFocus === "shift" ? "shift-mode-tab-shift" : "shift-mode-tab-salary")?.focus();
     });
   });
   shift.init();
   budget.init();
   shared.init();
   calendar.init();
+  if (!homeCards) {
+    homeCards = initHomeCards({ document, window, onSelectCard: handleHomeCardSelect });
+    $("back-to-home-from-calendar").addEventListener("click", () => setActivePage("my"));
+    $("back-to-home-from-group").addEventListener("click", () => setActivePage("my"));
+    $("back-to-home-from-shift").addEventListener("click", () => setActivePage("my"));
+    $("back-to-home-from-budget").addEventListener("click", () => setActivePage("my"));
+    $("back-to-home-from-profile").addEventListener("click", () => setActivePage("my"));
+    $("back-to-home-from-settings").addEventListener("click", () => setActivePage("my"));
+    window.addEventListener("popstate", (event) => {
+      const stateData = event.state;
+      isRestoringHistory = true;
+      try {
+        if (!stateData || stateData.daysyncView === "home") {
+          setActivePage("my", { hideHomeStage: false, recordHistory: false });
+        } else if (stateData.daysyncView === "my") {
+          setActivePage("my", { hideHomeStage: true, recordHistory: false });
+        } else if (stateData.daysyncView === "money") {
+          activeMoneyView = stateData.moneyView || "budget";
+          currentShiftFocusMode = stateData.focusMode || "shift";
+          setActivePage("money", { focusMode: currentShiftFocusMode, recordHistory: false });
+        } else if (["group", "profile", "settings"].includes(stateData.daysyncView)) {
+          setActivePage(stateData.daysyncView, { recordHistory: false });
+        } else {
+          setActivePage("my", { hideHomeStage: false, recordHistory: false });
+        }
+      } finally {
+        isRestoringHistory = false;
+      }
+    });
+  }
   if (!notificationCenter) notificationCenter = initNotificationCenter({ requestJson });
   notificationCenter.start();
   if(syncState.active) void personalSync?.sync();
@@ -484,7 +692,7 @@ async function startApp(user) {
   $("legacy-import").hidden = !canTransferLegacy || !localStorage.getItem(LEGACY_STORAGE_KEY) || localStorage.getItem(dismissKey) === "1";
   $("import-legacy").addEventListener("click", () => void importLegacy());
   $("dismiss-legacy").addEventListener("click", () => { localStorage.setItem(dismissKey, "1"); $("legacy-import").hidden = true; });
-  setActivePage("my");
+  setActivePage("my", { replaceHistory: true });
   const inviteFromUrl = new URLSearchParams(window.location.search).get("invite");
   const notificationParams = new URLSearchParams(window.location.search);
   const reminderKind = notificationParams.get("reminder");
@@ -504,7 +712,7 @@ async function startApp(user) {
     view.agendaDate = reminderDate;
     view.agendaMonth = new Date(Number(reminderDate.slice(0, 4)), Number(reminderDate.slice(5, 7)) - 1, 1);
     view.reminderEventId = reminderEventId;
-    setActivePage("my");
+    setActivePage("my", { hideHomeStage: true });
     calendar.render();
     const cleanUrl = new URL(window.location.href);
     for (const key of ["reminder", "date", "eventId"]) cleanUrl.searchParams.delete(key);
@@ -529,6 +737,7 @@ async function startApp(user) {
 }
 
 function updatePersonalSyncChoice(userId, active) {
+  syncChoiceActive = Boolean(active);
   const gate = $("personal-sync-consent");
   const deferred = $("personal-sync-deferred");
   const management = $("personal-sync-management");
@@ -537,6 +746,7 @@ function updatePersonalSyncChoice(userId, active) {
     gate.hidden = true; deferred.hidden = true; management.hidden = false; controls.hidden = false;
     $("personal-backup-archive-option").hidden = false;
     $("personal-backup-help").hidden = false;
+    renderSettingsSyncState();
     return;
   }
   management.hidden = true;
@@ -545,9 +755,11 @@ function updatePersonalSyncChoice(userId, active) {
   $("personal-backup-help").hidden = true;
   const declined = localStorage.getItem("daysync-personal-sync-deferred-" + userId) === "1";
   gate.hidden = declined; deferred.hidden = !declined;
+  renderSettingsSyncState();
 }
 
 $("account-open").addEventListener("click", () => setActivePage("profile"));
+$("settings-open").addEventListener("click", () => setActivePage("settings"));
 async function beginPersonalSync(button) {
   if (!personalSync) return;
   $("personal-sync-consent").hidden = false;

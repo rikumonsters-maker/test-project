@@ -8,12 +8,12 @@ const screenshotDir = 'test-results/release-screenshots';
 test('OCR removal keeps manual entry and profile backup without loading OCR resources', async ({page})=>{
   const api=syntheticApi({personalSyncActive:true});await api.attach(page.context());
   const resources=[];page.on('request',request=>{if(/tesseract|screenshot-calendar|calendar-card-regions/.test(request.url()))resources.push(request.url());});
-  await page.goto('/');await page.locator('#open-event-dialog').click();
+  await page.goto('/');await page.locator('#home-card-personal').click();await page.locator('#open-event-dialog').click();
   await expect(page.locator('#event-title')).toBeVisible();
   await expect(page.locator('#event-screenshot-import-open')).toHaveCount(0);
   await page.locator('#close-event-dialog').click();
-  await page.locator('#account-open').click();
-  await page.locator('#profile-data-management').evaluate(el=>{el.open=true;});
+  await page.locator('#settings-open').click();
+  await expect(page.locator('#page-settings')).toBeVisible();
   await expect(page.locator('#personal-backup-export')).toBeVisible();
   await expect(page.locator('#screenshot-import-open')).toHaveCount(0);
   await expect(page.locator('#screenshot-import-dialog')).toHaveCount(0);
@@ -45,6 +45,7 @@ async function boot(page, { event = null, expense = null, failStorage = false } 
   }, { key:accountKey, date:api.date, event, expense, fail:failStorage });
   await page.goto('/');
   await expect(page.locator('#app-root')).toBeVisible();
+  await page.locator('#home-card-personal').click();
   return api;
 }
 
@@ -363,6 +364,7 @@ test('dialogs stay usable at mobile and desktop widths, in dark mode, touch and 
     await touchApi.attach(touch);
     const touchPage = await touch.newPage();
     await touchPage.goto('/');
+    await touchPage.locator('#home-card-personal').tap();
     await touchPage.locator('#open-event-dialog').tap();
     await expect(touchPage.locator('#event-dialog')).toBeVisible();
     await touchPage.locator('#close-event-dialog').tap();
@@ -377,7 +379,7 @@ test('existing group add dialog remains isolated and functional', async ({ page 
   const api = syntheticApi();
   await api.attach(page.context());
   await page.goto('/');
-  await page.locator('.nav-button[data-page="group"]').click();
+  await page.locator('#home-card-shared').click();
   await page.locator('#open-group-add').click();
   await expect(page.locator('#group-add-dialog')).toBeVisible();
   await expect(page.locator('#create-group-form')).toBeVisible();

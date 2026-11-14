@@ -59,16 +59,18 @@ test('money subtab switches panels and keeps DOM state',()=>{
   assert.equal(activateMoneyView(document,'unknown',callbacks),false);
 });
 test('startup chooses planned calendar and later switches preserve money panel input',()=>{
-  const panels=['my','group','money','profile'].map(name=>({id:'page-'+name,hidden:true}));
+  const panels=['my','group','money','profile','settings'].map(name=>({id:'page-'+name,hidden:true}));
   const buttons=['my','group','money'].map(page=>({dataset:{page},setAttribute(name,value){this[name]=value;},removeAttribute(name){delete this[name];}}));
-  let planRenders=0,moneyOpens=0;
+  let planRenders=0,moneyOpens=0,settingsOpens=0;
   const document={querySelectorAll:selector=>selector==='.page-panel'?panels:buttons};
-  const callbacks={onPlan:()=>planRenders++,onMoney:()=>moneyOpens++};
+  const callbacks={onPlan:()=>planRenders++,onMoney:()=>moneyOpens++,onSettings:()=>settingsOpens++};
   assert.equal(activateMainPage(document,'my',callbacks),true);
   assert.equal(panels[0].hidden,false);assert.equal(buttons[0]['aria-current'],'page');
   activateMainPage(document,'money',callbacks);
   assert.equal(panels[2].hidden,false);assert.equal(panels[0].hidden,true);assert.equal(moneyOpens,1);
   activateMainPage(document,'group',callbacks);
   assert.equal(panels[1].hidden,false);assert.equal(planRenders,1);
+  activateMainPage(document,'settings',callbacks);
+  assert.equal(panels[4].hidden,false);assert.equal(panels[1].hidden,true);assert.equal(settingsOpens,1);
   assert.equal(activateMainPage(document,'invalid',callbacks),false);
 });

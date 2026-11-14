@@ -18,7 +18,7 @@ async function openGroupHome(page,viewport={width:390,height:844}) {
   await page.setViewportSize(viewport);
   await page.goto('/');
   await expect(page.locator('#app-root')).toBeVisible();
-  await page.locator('.nav-button[data-page="group"]').click();
+  await page.locator('#home-card-shared').click();
   await expect(page.locator('#group-home')).toBeVisible();
   await expect(page.locator('#group-list .group-card')).toHaveCount(groups.length);
   await expect(page.locator('#open-group-add')).toBeVisible();
@@ -80,7 +80,7 @@ test('group cards retain calendar and management actions without showing an unkn
   await api.attach(page.context());
   await page.goto('/');
   await expect(page.locator('#app-root')).toBeVisible();
-  await page.locator('.nav-button[data-page="group"]').click();
+  await page.locator('#home-card-shared').click();
   const card=page.locator('#group-list .group-card');
   await expect(card).toContainText('人数未取得');
   await card.getByRole('button',{name:'家族の管理'}).click();
@@ -232,7 +232,7 @@ test('touch input suppresses hover motion and still opens the selected group',as
     const page=await context.newPage();
     await page.goto('http://127.0.0.1:5517/');
     await expect(page.locator('#app-root')).toBeVisible();
-    await page.locator('.nav-button[data-page="group"]').click();
+    await page.locator('#home-card-shared').click();
     const card=page.locator('#group-list .group-card').first();
     expect(await page.evaluate(()=>matchMedia('(hover:hover) and (pointer:fine)').matches)).toBe(false);
     const box=await card.boundingBox();
@@ -349,7 +349,7 @@ test('group add validation and API errors remain visible inside the dialog',asyn
   const api=syntheticApi({groups,groupErrorPath:'/api/groups/create'});
   await api.attach(page.context());
   await page.goto('/');
-  await page.locator('.nav-button[data-page="group"]').click();
+  await page.locator('#home-card-shared').click();
   await page.locator('#open-group-add').click();
   const create=page.locator('#create-group-form');
   await create.locator('button[type="submit"]').click();
@@ -389,7 +389,7 @@ test('closing group add while camera permission is pending releases the late str
     }});
   });
   await page.goto('/');
-  await page.locator('.nav-button[data-page="group"]').click();
+  await page.locator('#home-card-shared').click();
   await page.locator('#open-group-add').click();
   await page.locator('#group-add-join-tab').click();
   await page.locator('#open-invite-qr-scanner').click();

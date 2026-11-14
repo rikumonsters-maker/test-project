@@ -11,8 +11,8 @@ export function activateMoneyView(document,viewName,{onBudget=()=>{},onShift=()=
   return true;
 }
 
-export function activateMainPage(document,pageName,{onPlan=()=>{},onMoney=()=>{},onProfile=()=>{}}={}) {
-  if(!['my','group','money','profile'].includes(pageName))return false;
+export function activateMainPage(document,pageName,{onPlan=()=>{},onMoney=()=>{},onProfile=()=>{},onSettings=()=>{}}={}) {
+  if(!['my','group','money','profile','settings'].includes(pageName))return false;
   for(const panel of document.querySelectorAll('.page-panel'))panel.hidden=panel.id!==`page-${pageName}`;
   for(const button of document.querySelectorAll('.nav-button')){
     if(button.dataset.page===pageName)button.setAttribute('aria-current','page');
@@ -21,6 +21,7 @@ export function activateMainPage(document,pageName,{onPlan=()=>{},onMoney=()=>{}
   if(pageName==='my')onPlan();
   if(pageName==='money')onMoney();
   if(pageName==='profile')onProfile();
+  if(pageName==='settings')onSettings();
   return true;
 }
 
