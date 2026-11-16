@@ -19,8 +19,8 @@ test("home loop duration is strictly 7.0 seconds and four pastel cards are defin
     [
       ["personal", "個人予定", "mint"],
       ["shared", "共有予定", "blue"],
-      ["shift", "シフト", "orange"],
-      ["salary", "給与", "purple"],
+      ["shift", "シフト・給与", "orange"],
+      ["budget", "家計簿", "purple"],
     ]
   );
 });
@@ -109,7 +109,7 @@ test("index.html includes the four home cards, completed simple salary elements,
     "home-card-personal",
     "home-card-shared",
     "home-card-shift",
-    "home-card-salary",
+    "home-card-budget",
     "home-stack-expand",
     "shift-focus-tabs",
     "shift-mode-tab-shift",

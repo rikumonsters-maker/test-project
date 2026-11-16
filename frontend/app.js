@@ -436,10 +436,9 @@ function handleHomeCardSelect(cardId) {
     setActivePage("money", { focusMode: "shift" });
     return;
   }
-  if (cardId === "salary") {
-    activeMoneyView = "shift";
-    currentShiftFocusMode = "salary";
-    setActivePage("money", { focusMode: "salary" });
+  if (cardId === "budget") {
+    activeMoneyView = "budget";
+    setActivePage("money");
   }
 }
 
