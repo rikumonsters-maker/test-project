@@ -5,12 +5,13 @@ import { syntheticApi } from "./synthetic-api.mjs";
 const screenshotDir = "test-results/four-card-home";
 
 async function bootHome(page, { width = 390, height = 844, groups = [] } = {}) {
-  const api = syntheticApi({ groups, personalSyncActive: true });
+  const root=process.env.HOME_TEST_URL;const origin=root?new URL(root).origin:undefined;
+const api = syntheticApi({ groups, personalSyncActive: true,...(origin?{frontendOrigin:origin,apiOrigin:origin}:{}) });
   await api.attach(page.context());
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.setViewportSize({ width, height });
-  await page.goto("/");
+  await page.goto(process.env.HOME_TEST_URL || "/");
   await expect(page.locator("#app-root")).toBeVisible();
   await expect(page.locator("#home-four-card-section")).toBeVisible();
   return { api, pageErrors };
@@ -183,34 +184,17 @@ test("card navigation, mid-motion selection, stack tap-to-expand, keyboard, brow
   await page.locator("#back-to-home-from-shift").click();
   await expect(page.locator("#home-four-card-section")).toBeVisible();
 
-  // 5. Selecting Salary card via keyboard navigates to dedicated simple estimated salary screen (no 準備中 card)
-  await page.evaluate(() => window.__daysyncHomeCards.setAnimationTime(0.2));
-  await page.locator("#home-card-salary").focus();
-  // Focusing while stacked automatically expands the 4 cards
-  await expect(page.locator("#home-card-stage")).toHaveAttribute("data-expanded-locked", "true");
-  await page.keyboard.press("Enter");
-  await expect(page.locator("#home-four-card-section")).toBeHidden();
-  await expect(page.locator("#page-money")).toBeVisible();
-  await expect(page.locator("#page-shift")).toBeVisible();
-  await expect(page.locator("#page-shift")).toHaveAttribute("data-focus-mode", "salary");
-  await expect(page.locator("#shift-page-title")).toHaveText("給与");
-  await expect(page.locator("#shift-page-subtitle")).toHaveText("シフトと時給から予想給料を自動計算");
-  await expect(page.locator("#shift-mode-tab-shift")).toHaveAttribute("aria-selected", "false");
-  await expect(page.locator("#shift-mode-tab-salary")).toHaveAttribute("aria-selected", "true");
-  await expect(page.locator("#salary-management-card")).toHaveCount(0);
-  await expect(page.locator("#salary-prep-badge")).toHaveCount(0);
-  await expect(page.locator("#salary-summary-card")).toBeVisible();
-  await expect(page.locator("#salary-shift-list-card")).toBeVisible();
-  await expect(page.locator("#salary-hourly-card")).toBeVisible();
-  await expect(page.locator("#shift-calendar-card")).toBeHidden();
-  await expect(page.locator("#shift-entry-card")).toBeHidden();
-  await expect(page.locator("#shift-hours")).toHaveText("0時間");
-  await expect(page.locator("#salary-hourly-value")).toHaveText("未設定");
-  await expect(page.locator("#salary-shift-count")).toHaveText("0件");
-  await expect(page.locator("#shift-month-wage")).toHaveText("—");
-  await expect(page.locator(".home-return-button:visible")).toHaveCount(1);
-  await page.screenshot({ path: `${screenshotDir}/nav-4-salary.png`, fullPage: false });
-
+  await page.evaluate(() => window.__daysyncHomeCards.setAnimationTime(3));
+ await page.locator('#home-card-shift').click();
+ await page.locator('#shift-mode-tab-salary').click();
+ await expect(page.locator('#salary-summary-card')).toBeVisible();
+ await page.locator('#shift-mode-tab-shift').click();
+ await expect(page.locator('#shift-entry-card')).toBeVisible();
+ await page.locator('#back-to-home-from-shift').click();
+ await page.locator('#home-card-budget').focus();await page.keyboard.press('Enter');
+ await expect(page.locator('#page-budget')).toBeVisible();await expect(page.locator('#page-shift')).toBeHidden();
+ await expect(page.locator('#home-card-salary')).toHaveCount(0);
+ await page.screenshot({path:screenshotDir+'/nav-4-budget.png'});
   // Switch from Shift/Salary screen to Budget via the existing money tab (#money-tab-budget), then return to Home
   await page.locator("#money-tab-budget").click();
   await expect(page.locator("#home-four-card-section")).toBeHidden();

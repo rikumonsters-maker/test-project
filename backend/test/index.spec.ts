@@ -64,7 +64,9 @@ describe('in-app notification center', () => {
     await api('/api/groups/join',{inviteCode:group.inviteCode},member.cookie);
     await api('/api/notifications/read-all',{},owner.cookie);
 
-    const created=await api('/api/groups/wishes/create',{groupId:group.groupId,wishDate:'2026-11-15',
+    // UTC arithmetic plus an explicit JST offset avoids host-timezone and year-boundary dependence.
+    const futureWishDate=new Date(Date.now()+30*24*60*60*1000+9*60*60*1000).toISOString().slice(0,10);
+    const created=await api('/api/groups/wishes/create',{groupId:group.groupId,wishDate:futureWishDate,
       isAllDay:true,message:'PRIVATE_WISH_MESSAGE'},owner.cookie);
     expect(created.status).toBe(201);
     const memberList=await api('/api/notifications',undefined,member.cookie);
